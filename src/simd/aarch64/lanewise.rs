@@ -19,9 +19,9 @@ pub(crate) fn add_ru(x: F64X2, y: F64X2) -> F64X2 {
     // exactly where the larger exponent is 1023 (it is 1024 for ±∞ and NaN).
     let slow = max_exponent_eq(x, y, 1023);
     // `generic::add1_ru_fast` also requires x and y to be finite, which e > 0
-    // implies: if x or y is ±∞ or NaN, s is ±∞ or NaN, and then s - y or s - a is
-    // NaN or ∞ - ∞, so e is NaN. If s overflows, e is NaN as well, and the lane is
-    // slow.
+    // implies: if x or y is ±∞ or NaN, s is ±∞ or NaN, and then one of the
+    // differences s - y and s - (s - y) of `two_sum_err` is NaN or ∞ - ∞, so e is
+    // NaN. If s overflows, e is NaN as well, and the lane is slow.
     let up = gt(e, zero());
     // Where the lane is not slow and e > 0, s is finite, and it is not ±0: x + y is
     // inexact, and a sum below 2^-1022 in magnitude is a multiple of 2^-1074, so

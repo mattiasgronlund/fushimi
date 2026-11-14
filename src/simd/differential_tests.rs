@@ -638,10 +638,10 @@ fn regressions() -> Vec<(&'static str, Vec<f64>)> {
         // a6650cb removed it, as the FMA alone gives c there. Not known to have
         // failed. With its negation. Both paths of the generic backend return
         // `mul_add1_special` for these cases, so `regressions_generic` cannot see
-        // a mistake in it. `differential` can, under `fma` and `avx512f`, which
-        // take the result from the FMA alone, and on aarch64 with
-        // `mul_add_ru/fpcr`, but not under `sse42` and `wasm32` if their
-        // `special_r` shares the mistake.
+        // a mistake in it. `differential` can, under `fma`, `avx512f` and
+        // `aarch64`, which take the result from the FMA alone (and on aarch64
+        // with `mul_add_ru/fpcr` too), but not under `sse42` and `wasm32` if
+        // their `special_r` shares the mistake.
         ("mul_add_ru", vec![f64::MAX, 2.0, f64::NEG_INFINITY]),
         ("mul_add_ru", vec![-f64::MAX, 2.0, f64::INFINITY]),
         // `mul_ru_tie`: rs / 2^128 is a tie, -2^-1075, and rounds to the result,
