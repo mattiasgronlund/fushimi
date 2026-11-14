@@ -41,16 +41,30 @@ pub(crate) fn div_ru(x: F64X2, y: F64X2) -> F64X2 {
     // The remainder is representable where the check passes, so the FMA computes
     // it exactly.
     let r = fnmadd(q, y, x);
+    // The check of `generic::div1_ru_fast`, -1022 <= exponent(q) <= 1023 and
+    // exponent(x) >= -967, as comparisons of absolute values that share the +∞
+    // of `is_finite`: 2^-1022 <= |q| < +∞ and |x| >= 2^-967. They differ only
+    // where x is NaN, which is special.
     let ok = or(
         special,
-        and(exponent_in(q, -1022, 1023), exponent_gt(x, -968)),
+        and(
+            and(abs_ge(q, splat_pow2(-1022)), is_finite(q)),
+            abs_ge(x, splat_pow2(-967)),
+        ),
     );
-    // x / y > q ⟺ r / y > 0. y is nonzero and r is not NaN unless special.
-    let up = or(
-        and(gt(r, zero()), gt(y, zero())),
-        and(lt(r, zero()), lt(y, zero())),
-    );
-    let res = select(andnot(up, special), step_up(q), q);
+    // x / y > q ⟺ r / y > 0, that is, r < 0 where y < 0, and r > 0 where y > 0.
+    // y is nonzero and not NaN unless special, so its sign bit gives its sign.
+    // Special lanes need no mask, as r is NaN or +0 in all of them, so both
+    // comparisons with zero are false there and q, which is exact, is kept:
+    // - x or y is NaN, or both are ±0 or both ±∞: q is NaN, and so is r.
+    // - x is ±∞ and y finite and nonzero: q = ±∞, and q * y is ∞ with the sign
+    //   of x, so r = x - q * y is ∞ - ∞ = NaN.
+    // - One of x and y is ±0 and the other ±∞, or y is ±0 or ±∞ and x finite
+    //   and nonzero: q * y is ∞ * 0 = NaN.
+    // - x is ±0 and y finite and nonzero: q = ±0 and q * y = ±0 with the sign
+    //   of x, both exact, so r = x - q * y = +0.
+    let up = select(sign_bit_set(y), lt_zero(r), gt_zero(r));
+    let res = select(up, step_up(q), q);
     or_generic(ok, res, || generic::div_ru(extract(x), extract(y)))
 }
 
@@ -102,21 +116,24 @@ pub(crate) fn mul_ru(x: F64X2, y: F64X2) -> F64X2 {
     let ok = or(special, two_prod_is_exact(p));
     // Each branch rounds by itself, as in `x86_64/fma.rs`.
     if all(ok) {
-        mul_ru_fast(x, y, p, special)
+        mul_ru_fast(x, y, p)
     } else {
-        mul_ru_tiny(x, y, p, ok, special)
+        mul_ru_tiny(x, y, p, ok)
     }
 }
 
-/// Returns RU(x * y) from p = RN(x * y), in the lanes that are `special` or
-/// where `two_prod_is_exact(p)`.
-fn mul_ru_fast(x: F64X2, y: F64X2, p: F64X2, special: F64X2) -> F64X2 {
+/// Returns RU(x * y) from p = RN(x * y), in the lanes where x or y is ±0, ±∞
+/// or NaN, or where `two_prod_is_exact(p)`.
+fn mul_ru_fast(x: F64X2, y: F64X2, p: F64X2) -> F64X2 {
     // NEON's fused operations add to or subtract from an accumulator, so
     // -e = p - x * y takes one instruction and e = x * y - p two. Rounding to
     // nearest is symmetric, so the computed -e is the negation of the computed e,
     // and e > 0 ⟺ -e < 0 (a zero of either sign is neither).
     let neg_e = two_prod_err_neg(x, y, p);
-    let up = andnot(lt(neg_e, zero()), special);
+    // Where x or y is ±0, ±∞ or NaN, p is exact and needs no mask: if x or y is
+    // ±∞ or NaN, p is ±∞ or NaN and so is x * y, so -e is ∞ - ∞ or NaN, which is
+    // NaN; otherwise x * y is exactly ±0, p is the same zero, and -e = +0.
+    let up = lt_zero(neg_e);
     select(up, step_up(p), p)
 }
 
@@ -125,7 +142,7 @@ fn mul_ru_fast(x: F64X2, y: F64X2, p: F64X2, special: F64X2) -> F64X2 {
 ///
 /// The algorithm, and the reason products below 2^-968 are rounded here rather
 /// than by the generic backend, are those of `x86_64/fma.rs`'s `mul_ru_tiny`.
-fn mul_ru_tiny(x: F64X2, y: F64X2, p: F64X2, ok: F64X2, special: F64X2) -> F64X2 {
+fn mul_ru_tiny(x: F64X2, y: F64X2, p: F64X2, ok: F64X2) -> F64X2 {
     // Powers of two, so that scaling by them is exact unless it overflows or
     // underflows.
     const TWO_POW_64: f64 = 18446744073709551616.0;
@@ -138,8 +155,10 @@ fn mul_ru_tiny(x: F64X2, y: F64X2, p: F64X2, ok: F64X2, special: F64X2) -> F64X2
     let ps = mul_rn(xs, y);
     // One TwoProduct for both kinds of lane: r = RU(z) in the lanes that pass
     // `ok`, as in `mul_ru`, and r = rs = RU(z * S) in the others where
-    // `two_prod_is_exact(ps)`.
-    let r = mul_ru_fast(select(ok, x, xs), y, select(ok, p, ps), special);
+    // `two_prod_is_exact(ps)`. The lanes that fail `ok` are not special, and
+    // those that pass it pass x and p unchanged, so this meets the precondition
+    // of `mul_ru_fast`.
+    let r = mul_ru_fast(select(ok, x, xs), y, select(ok, p, ps));
     // There, RU(z) = RU(rs / S): see `x86_64/fma.rs`. RU(rs / S) is
     // q = RN(rs / S) if q >= rs / S, and the successor of q otherwise. q * S is
     // exact, as |q| <= 2^-968, so comparing it with rs compares q with rs / S.
@@ -210,8 +229,36 @@ fn two_prod_err_neg(x: F64X2, y: F64X2, p: F64X2) -> F64X2 {
     fnmadd(x, y, p)
 }
 
+// The lanes where x < 0, without a zero constant (`fcmlt #0.0`); false for NaN.
+fn lt_zero(x: F64X2) -> F64X2 {
+    unsafe { vreinterpretq_f64_u64(vcltzq_f64(x)) }
+}
+
+// The lanes where x > 0 (`fcmgt #0.0`); false for NaN.
+fn gt_zero(x: F64X2) -> F64X2 {
+    unsafe { vreinterpretq_f64_u64(vcgtzq_f64(x)) }
+}
+
+// The lanes where the sign bit of x is set, from the bits as an integer
+// (`cmlt #0`): x < 0 or x = -0, or a NaN with the sign bit set.
+fn sign_bit_set(x: F64X2) -> F64X2 {
+    unsafe { vreinterpretq_f64_u64(vcltzq_s64(vreinterpretq_s64_f64(x))) }
+}
+
+// The lanes where |x| >= |y| (`facge`); false if x or y is NaN.
+fn abs_ge(x: F64X2, y: F64X2) -> F64X2 {
+    unsafe { vreinterpretq_f64_u64(vcageq_f64(x, y)) }
+}
+
+// `splat_pow2(e) = [2^e, 2^e]`, for -1022 <= e <= 1023.
+fn splat_pow2(e: i64) -> F64X2 {
+    splat_i64((e + 1023) << 52)
+}
+
 // The lanes where `two_prod_err(x, y, x * y)` is exact, which with an FMA depends
-// on the product alone. See `generic::two_prod_is_exact`.
+// on the product alone. See `generic::two_prod_is_exact`: -968 <= exponent(p)
+// <= 1023, that is, 2^-968 <= |p| < +∞, which shares the +∞ of `is_finite`
+// with the other checks. Both forms are false for NaN.
 fn two_prod_is_exact(p: F64X2) -> F64X2 {
-    exponent_in(p, -968, 1023)
+    and(abs_ge(p, splat_pow2(-968)), is_finite(p))
 }
