@@ -42,12 +42,15 @@ pub(crate) fn div_ru(x: F64X2, y: F64X2) -> F64X2 {
     let r = fnmadd(q, y, x);
     // The check of `generic::div1_ru_fast`, -1022 <= exponent(q) <= 1023 and
     // exponent(x) >= -967, as comparisons of absolute values that share the +∞
-    // of `is_finite`: 2^-1022 <= |q| < +∞ and |x| >= 2^-967. They differ only
-    // where x is NaN, which is special.
+    // of `is_finite`: 2^-1022 <= |q| < +∞ and |x| >= 2^-967, except that |q| is
+    // compared with b = 2^-1022 (1 + 2^-32) from `splat_tiny_bound`, which is
+    // stricter but sound (see there). They differ where x is NaN, which is
+    // special, and where 2^-1022 <= |q| < b, which the generic backend
+    // recomputes.
     let ok = or(
         special,
         and(
-            and(abs_ge(q, splat_pow2(-1022)), is_finite(q)),
+            and(abs_ge(q, splat_tiny_bound(-1022)), is_finite(q)),
             abs_ge(x, splat_pow2(-967)),
         ),
     );
@@ -64,7 +67,8 @@ pub(crate) fn div_ru(x: F64X2, y: F64X2) -> F64X2 {
     //   of x, both exact, so r = x - q * y = +0.
     let up = select(sign_bit_set(y), lt_zero(r), gt_zero(r));
     // `step_up_where` needs q finite and not -0 where up is set. Up is false in
-    // the special lanes, and the others that pass `ok` have 2^-1022 <= |q| < +∞.
+    // the special lanes, and the others that pass `ok` have 2^-1022 < b <= |q|
+    // < +∞.
     // If a lane fails `ok`, the generic backend recomputes both, and the integer
     // operations of `step_up_where` cannot trap.
     let res = step_up_where(up, q);
@@ -88,13 +92,18 @@ pub(crate) fn mul_add_ru(a: F64X2, b: F64X2, c: F64X2) -> F64X2 {
 
     let special = or(not(is_finite(c)), is_special(a, b));
     // The underflow hypotheses of `generic::mul_add1_ru_fast`, x = 0 or
-    // exponent(x) >= e_min, compared as |x| >= 2^e_min, one `facge` with no
-    // mask. That is false for NaN, where the exponent form is true, which can
-    // only send more lanes to the generic backend. For r1, the exponent form
-    // (the exponent bits are not all zero) needs no constant, but LLVM 22 merges
-    // it with r1 = 0 into an integer test for subnormals, 9 instructions against
-    // 5 for this form.
-    let not_tiny = |x: F64X2, e_min: i64| or(eq(x, zero()), abs_ge(x, splat_pow2(e_min)));
+    // exponent(x) >= e_min, compared as |x| >= b with one `facge` and no mask,
+    // where b = 2^e_min (1 + (e_min + 1023) 2^-32) from `splat_tiny_bound`:
+    // 2^-1022 (1 + 2^-32), 2^-1021 (1 + 2^-31) and 2^-1020 (1 + 3 * 2^-32)
+    // below. That test is stricter than |x| >= 2^e_min, but sound (see
+    // `splat_tiny_bound`), and |x| >= 2^e_min is the exponent form for every x
+    // but NaN, where the exponent form is true and `facge` false. Both
+    // differences can only send more lanes to the generic backend. For r1, the
+    // exponent form (the exponent bits are not all zero) needs no constant, but
+    // LLVM 22 merges it with r1 = 0 into an integer test for subnormals, 9
+    // instructions against 5 for this form (`fcmeq`, `facge` and the `bif` that
+    // LLVM makes of the `or`, and a `movi` each for the bound and the `bif`).
+    let not_tiny = |x: F64X2, e_min: i64| or(eq(x, zero()), abs_ge(x, splat_tiny_bound(e_min)));
     // `two_prod_is_exact(u1)` and exponent(u1) <= 1021 are -968 <= exponent(u1)
     // <= 1021, that is, 2^-968 <= |u1| < 2^1022, which is false for NaN.
     let u1_in_range = and(abs_ge(u1, splat_pow2(-968)), abs_gt(splat_pow2(1022), u1));
@@ -301,6 +310,24 @@ fn abs_gt(x: F64X2, y: F64X2) -> F64X2 {
 // `splat_pow2(e) = [2^e, 2^e]`, for -1022 <= e <= 1023.
 fn splat_pow2(e: i64) -> F64X2 {
     splat_i64((e + 1023) << 52)
+}
+
+// `splat_tiny_bound(e) = [b, b]` with b = 2^e (1 + (e + 1023) 2^-32), for
+// -1022 <= e <= -1008, the bound of the underflow checks. With k = e + 1023,
+// the bits of b are the exponent field k and the fraction field k * 2^20, so
+// both 32-bit halves are k << 20, which for k <= 15 one `movi .4s` (an 8-bit
+// immediate shifted left by 16) makes. The halves of 2^e differ (k << 20 and
+// 0), and LLVM builds it with a `mov` and a `dup`.
+//
+// A check |x| >= b in place of the fast path's |x| >= 2^e is stricter, and
+// still sound: b > 2^e, so a lane that passes it passes the fast path's check.
+// Only the lanes with 2^e <= |x| < b fail it in addition, and the generic
+// backend recomputes them. The fast path gave them the generic backend's
+// result too (the differential tests check that bit for bit), so no result
+// changes, only which path computes some of them.
+fn splat_tiny_bound(e: i64) -> F64X2 {
+    let k = e + 1023;
+    splat_i64((k << 52) | (k << 20))
 }
 
 // The lanes where `two_prod_err(x, y, x * y)` is exact, which with an FMA depends
