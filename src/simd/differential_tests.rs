@@ -1,8 +1,8 @@
 // Compares the rounding functions of the generic backend bit for bit with the
 // backend of the target: on x86-64 with AVX-512F, the hardware backend
-// (`avx512f`), which rounds with embedded rounding; otherwise (`fma`, `sse42`
-// and, on wasm32, `wasm32`), the backend that vectorizes the fast paths of the
-// generic one, and is compared with it.
+// (`avx512f`), which rounds with embedded rounding; otherwise (`fma`, `sse42`,
+// and the `aarch64` and `wasm32` backends), the backend that vectorizes the fast
+// paths of the generic one, and is compared with it.
 // Both the FMA and the Dekker (no FMA) variants of the generic backend are tested.
 // On wasm32, `f64::mul_add` is a software routine, but still correctly rounded.
 // NaNs compare equal regardless of their sign and payload, which inari does not
@@ -21,6 +21,10 @@ cfg_if::cfg_if! {
         use super::{sqrt1_rd as hw_sqrt1_rd, sqrt1_ru as hw_sqrt1_ru};
     } else if #[cfg(target_arch = "x86_64")] {
         use super::{sqrt1_rd_mxcsr as hw_sqrt1_rd, sqrt1_ru_mxcsr as hw_sqrt1_ru};
+    } else if #[cfg(target_arch = "aarch64")] {
+        // `aarch64` takes its scalar square root from the generic backend too, so it
+        // is compared with the one that switches the rounding mode in FPCR.
+        use super::{sqrt1_rd_fpcr as hw_sqrt1_rd, sqrt1_ru_fpcr as hw_sqrt1_ru};
     }
 }
 
@@ -156,7 +160,7 @@ impl Report {
     }
 
     // As `check`, with the oracle as expected: on `avx512f`, the target backend,
-    // which rounds with embedded rounding; on `fma`, `sse42` and `wasm32`, the
+    // which rounds with embedded rounding; on `fma`, `sse42`, `aarch64` and `wasm32`, the
     // generic backend, whose fast paths they port and whose functions in
     // `binary_ops` and `ternary_ops` are proved correct in `rocq/`.
     fn check_target(&mut self, name: &str, args: &[f64], target: f64, generic: f64) {
@@ -228,9 +232,9 @@ fn unary_ops() -> Vec<(&'static str, HwUnary, Unary)> {
 // A reference for `sqrt_rd_ru`: on x86-64, the square root that the hardware
 // rounds, with the rounding mode switched under `fma` and `sse42`, and with
 // embedded rounding under `avx512f`, whose `sqrt_rd_ru` calls the same two
-// functions; on wasm32, the generic backend, whose fast paths the `wasm32` one
-// vectorizes.
-#[cfg(target_arch = "x86_64")]
+// functions; on aarch64, the square root with the rounding mode switched in FPCR;
+// on wasm32, the generic backend, whose fast paths the `wasm32` one vectorizes.
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 fn sqrt_rd_ru_reference(x: generic::F64X2) -> generic::F64X2 {
     [hw_sqrt1_rd(x[0]), hw_sqrt1_ru(x[1])]
 }
@@ -247,7 +251,7 @@ fn unary1_ops() -> Vec<(&'static str, Unary1, Unary1)> {
     vec![]
 }
 
-#[cfg(target_arch = "x86_64")]
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 fn unary1_ops() -> Vec<(&'static str, Unary1, Unary1)> {
     vec![
         ("sqrt1_ru/fma", hw_sqrt1_ru, generic::sqrt1_ru_impl::<true>),
