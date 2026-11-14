@@ -13,16 +13,20 @@ pub(crate) fn add_ru(x: F64X2, y: F64X2) -> F64X2 {
     // See `generic::add1_ru_fast`.
     let s = add_rn(x, y);
     let e = two_sum_err(x, y, s);
-    let finite = and(is_finite(x), is_finite(y));
-    let ok = or(
-        not(finite),
-        and(
-            and(exponent_le(x, 1022), exponent_le(y, 1022)),
-            is_finite(s),
-        ),
-    );
-    let up = and(finite, gt(e, zero()));
-    or_generic(ok, select(up, step_up(s), s), || {
+    // `generic::add1_ru_fast`'s check is: x or y is not finite, or both have
+    // exponents <= 1022 and s is finite. The last part is implied: |x|, |y| <=
+    // 2^1023 - 2^970 gives |x + y| <= 2^1024 - 2^971 = MAX. So the check fails
+    // exactly where the larger exponent is 1023 (it is 1024 for ±∞ and NaN).
+    let slow = max_exponent_eq(x, y, 1023);
+    // `generic::add1_ru_fast` also requires x and y to be finite, which e > 0
+    // implies: if x or y is ±∞ or NaN, s is ±∞ or NaN, and then s - y or s - a is
+    // NaN or ∞ - ∞, so e is NaN. If s overflows, e is NaN as well, and the lane is
+    // slow.
+    let up = gt(e, zero());
+    // Where the lane is not slow and e > 0, s is finite, and it is not ±0: x + y is
+    // inexact, and a sum below 2^-1022 in magnitude is a multiple of 2^-1074, so
+    // exact. The slow lanes are recomputed.
+    or_generic_slow(slow, step_up_where(up, s), || {
         generic::add_ru(extract(x), extract(y))
     })
 }
@@ -162,6 +166,16 @@ pub(super) fn not(x: F64X2) -> F64X2 {
     unsafe { vreinterpretq_f64_u32(vmvnq_u32(vreinterpretq_u32_f64(x))) }
 }
 
+/// `xor(x, y) = x ^ y`.
+pub(super) fn xor(x: F64X2, y: F64X2) -> F64X2 {
+    unsafe {
+        vreinterpretq_f64_u64(veorq_u64(
+            vreinterpretq_u64_f64(x),
+            vreinterpretq_u64_f64(y),
+        ))
+    }
+}
+
 // Operations on the lanes as 64-bit integers.
 
 pub(super) fn splat_i64(x: i64) -> F64X2 {
@@ -206,6 +220,28 @@ pub(super) fn or_generic(ok: F64X2, r: F64X2, generic: impl FnOnce() -> [f64; 2]
     }
 }
 
+// Returns `r` unless the fast path is invalid in a lane (`slow`, with a 32-bit
+// lane per lane of r, as `vmovn_u64` of a mask has), and otherwise the result of
+// the generic backend. Testing the complement of `ok` saves the comparison with
+// all ones that `all` needs.
+pub(super) fn or_generic_slow(
+    slow: uint32x2_t,
+    r: F64X2,
+    generic: impl FnOnce() -> [f64; 2],
+) -> F64X2 {
+    if unsafe { transmute::<uint32x2_t, u64>(slow) } != 0 {
+        cold_generic(generic)
+    } else {
+        r
+    }
+}
+
+#[cold]
+fn cold_generic(generic: impl FnOnce() -> [f64; 2]) -> F64X2 {
+    let [r0, r1] = generic();
+    constant(r0, r1)
+}
+
 // The biased exponents of the lanes of x as u64 lanes: the unbiased exponent
 // plus 1023, that is, floor(log2(|x|)) + 1023 if x is normal, 0 if x is zero or
 // subnormal, and 2047 if x is infinite or NaN. The comparisons below add 1023 to
@@ -239,6 +275,27 @@ pub(super) fn exponent_in(x: F64X2, lo: i64, hi: i64) -> F64X2 {
     }
 }
 
+// The lanes where the larger of the unbiased exponents of x and y is e, taking
+// 1024 as the exponent of ±∞ and NaN, as `biased_exponent` does. The mask has a
+// 32-bit lane per lane of x, as `vmovn_u64` of a mask has, for `or_generic_slow`.
+pub(super) fn max_exponent_eq(x: F64X2, y: F64X2, e: i64) -> uint32x2_t {
+    unsafe {
+        // After shifting out the sign bit, the upper 32 bits of a lane are the 11
+        // bits of the biased exponent followed by 21 bits of the significand, so
+        // the larger of two upper words as u32 has the larger exponent (NEON has no
+        // 64-bit integer maximum). The lower words are dropped.
+        let a = vreinterpretq_u32_u64(vshlq_n_u64::<1>(vreinterpretq_u64_f64(x)));
+        let b = vreinterpretq_u32_u64(vshlq_n_u64::<1>(vreinterpretq_u64_f64(y)));
+        let m = vmaxq_u32(a, b);
+        // The exponent field is compared in place: in 32-bit lanes, both constants
+        // take one `mvni` for e = 1023, whereas in 64-bit lanes each takes a `mov`
+        // and a `dup` (LLVM turns a shift and a comparison into this form anyway).
+        let field = vandq_u32(m, vdupq_n_u32(!0 << 21));
+        let c = vceqq_u32(field, vdupq_n_u32(((e + 1023) as u32) << 21));
+        vshrn_n_u64::<32>(vreinterpretq_u64_u32(c))
+    }
+}
+
 pub(super) fn is_finite(x: F64X2) -> F64X2 {
     // |x| < +∞, one comparison of absolute values (`facgt`); false for NaN.
     unsafe { vreinterpretq_f64_u64(vcaltq_f64(x, vdupq_n_f64(f64::INFINITY))) }
@@ -259,6 +316,21 @@ pub(super) fn step_up(x: F64X2) -> F64X2 {
     // bit pattern, and adding that of x < 0 decrements it.
     let b = add_i64(sub_i64(x, gt(x, zero())), lt(x, zero()));
     select(eq(x, zero()), splat_i64(1), b)
+}
+
+/// Returns the successors of the lanes of x where m is set, and the other lanes of
+/// x as they are. The lanes where m is set must be finite and must not be -0.
+/// Shorter than `select(m, step_up(x), x)`.
+pub(super) fn step_up_where(m: F64X2, x: F64X2) -> F64X2 {
+    // As integers, m and n = (x < 0) are -1 or 0, and b is the bit pattern of x.
+    // b - (m ^ n) + n is b where m = 0. Where m = -1, it is b + 1 if x >= +0 (+0
+    // goes to 2^-1074, MAX to +∞), and b - 1 if x < 0 (-2^-1074 goes to -0): in
+    // both cases the next float up. At -0 it would be b + 1, -2^-1074, which the
+    // precondition excludes. n is a float comparison rather than the sign bit
+    // (`vcltzq_s64`), because LLVM turns b + (b >> 63) into `ssra`, which
+    // overwrites its operand and costs a copy of b.
+    let n = lt(x, zero());
+    add_i64(sub_i64(x, xor(m, n)), n)
 }
 
 /// Returns the error e = (x + y) - s, where s = RN(x + y). See `generic::two_sum_err`.
