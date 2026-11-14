@@ -230,11 +230,16 @@ pub(super) fn or_generic_slow(
     generic: impl FnOnce() -> [f64; 2],
 ) -> F64X2 {
     if unsafe { transmute::<uint32x2_t, u64>(slow) } != 0 {
-        let [r0, r1] = generic();
-        constant(r0, r1)
+        cold_generic(generic)
     } else {
         r
     }
+}
+
+#[cold]
+fn cold_generic(generic: impl FnOnce() -> [f64; 2]) -> F64X2 {
+    let [r0, r1] = generic();
+    constant(r0, r1)
 }
 
 // The biased exponents of the lanes of x as u64 lanes: the unbiased exponent
