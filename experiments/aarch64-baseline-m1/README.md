@@ -77,7 +77,7 @@ were dropped and moved to `dropped/`, as `loadavg.log` records:
   aarch64 rounds'.
 
 So the tables use `aarch64-r1`, `-r2` and `-r4`, and `generic-r2`, `-r3` and
-`-r4`. The aarch64 rounds agree to within 2% on every row. Five generic rows
+`-r4`. The aarch64 rounds agree to within 0.5% on every row. Five generic rows
 spread by 3–5%: `div/PP`, `div/PN`, `sqrt/M`, `mul_add_ru/throughput` and the
 3×3 determinant. The slow round is a different one from row to row, and none
 of them started under load, so this looks like the per-process variation
