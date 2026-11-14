@@ -312,14 +312,6 @@ pub(super) fn is_special(x: F64X2, y: F64X2) -> F64X2 {
     )
 }
 
-/// Returns the successors of the lanes of x that are finite. See `generic::step_up`.
-pub(super) fn step_up(x: F64X2) -> F64X2 {
-    // The masks are -1 as integers: subtracting the mask of x > 0 increments the
-    // bit pattern, and adding that of x < 0 decrements it.
-    let b = add_i64(sub_i64(x, gt(x, zero())), lt(x, zero()));
-    select(eq(x, zero()), splat_i64(1), b)
-}
-
 /// Returns the successors of the lanes of x where m is set, and the other lanes of
 /// x as they are. The lanes where m is set must be finite and must not be -0.
 /// Shorter than `select(m, step_up(x), x)`.

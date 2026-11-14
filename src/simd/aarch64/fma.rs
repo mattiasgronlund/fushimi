@@ -19,8 +19,8 @@
 
 use super::lanewise::{
     add_i64, andnot, div_rn, exponent_gt, exponent_in, exponent_le, gt_i64, is_finite, is_special,
-    lane0, mul_rn, not, or_generic, select, splat_i64, sqrt_rn, step_up, sub_i64, two_sum_err,
-    zero,
+    lane0, mul_rn, not, or_generic, select, splat_i64, sqrt_rn, step_up_where, sub_i64,
+    two_sum_err, zero,
 };
 use super::{add_rn, all, and, eq, extract, gt, lt, or, splat, sub_rn, F64X2};
 use crate::simd::generic;
@@ -64,7 +64,11 @@ pub(crate) fn div_ru(x: F64X2, y: F64X2) -> F64X2 {
     // - x is ±0 and y finite and nonzero: q = ±0 and q * y = ±0 with the sign
     //   of x, both exact, so r = x - q * y = +0.
     let up = select(sign_bit_set(y), lt_zero(r), gt_zero(r));
-    let res = select(up, step_up(q), q);
+    // `step_up_where` needs q finite and not -0 where up is set. Up is false in
+    // the special lanes, and the others that pass `ok` have 2^-1022 <= |q| < +∞.
+    // If a lane fails `ok`, the generic backend recomputes both, and the integer
+    // operations of `step_up_where` cannot trap.
+    let res = step_up_where(up, q);
     or_generic(ok, res, move || generic::div_ru(extract(x), extract(y)))
 }
 
@@ -106,7 +110,6 @@ pub(crate) fn mul_add_ru(a: F64X2, b: F64X2, c: F64X2) -> F64X2 {
     );
     // As in `x86_64/fma.rs`, in every special case a * b + c is exactly
     // representable, so the FMA returns it and `r1` is already the answer.
-    // If err > 0, then r1 is inexact and thus nonzero.
     // Special lanes need no mask, as err is NaN or ±0 in all of them:
     // - c is ±∞ or NaN: so is alpha1 = RN(c + u2), and then alpha2 is NaN, as
     //   `two_sum_err` computes alpha1 - (alpha1 - u2) for finite u2, which is
@@ -118,7 +121,15 @@ pub(crate) fn mul_add_ru(a: F64X2, b: F64X2, c: F64X2) -> F64X2 {
     //   Then beta1 = RN(0 + alpha1) and r1 = RN(a * b + c) are both c, up to
     //   the signs of zeros, so gamma = 0 and err = 0.
     let up = gt_zero(err);
-    let r = select(up, step_up(r1), r1);
+    // `step_up_where` needs r1 finite and not -0 where err > 0. Up is false in
+    // the special lanes, and in the others that pass `ok`, r1 is finite and
+    // a * b + c = r1 + gamma + alpha2 exactly [BM11, Theorem 2], so err > 0
+    // means a * b + c > r1: r1 is inexact, so a * b + c is nonzero. It is a
+    // multiple of 2^-1074, so |r1| >= 2^-1074: c is one, as every float is, and
+    // so is a * b, as a = A * 2^i and b = B * 2^j with integers |A|, |B| < 2^53
+    // and |a * b| > 2^-969 (from |u1| >= 2^-968) give i + j > -1075. If a lane
+    // fails `ok`, the generic backend recomputes both.
+    let r = step_up_where(up, r1);
     or_generic(ok, r, move || {
         generic::mul_add_ru(extract(a), extract(b), extract(c))
     })
@@ -150,7 +161,12 @@ fn mul_ru_fast(x: F64X2, y: F64X2, p: F64X2) -> F64X2 {
     // ±∞ or NaN, p is ±∞ or NaN and so is x * y, so -e is ∞ - ∞ or NaN, which is
     // NaN; otherwise x * y is exactly ±0, p is the same zero, and -e = +0.
     let up = lt_zero(neg_e);
-    select(up, step_up(p), p)
+    // `step_up_where` needs p finite and not -0 where -e < 0, in the lanes named
+    // above (the others are not used, and integer operations cannot trap). Where
+    // x or y is ±0, ±∞ or NaN, -e is NaN or +0. Where `two_prod_is_exact(p)`, x,
+    // y and p are finite, so -e = RN(p - x * y) < 0 means x * y > p, and p is not
+    // -0, as a product that rounds to -0 is <= 0.
+    step_up_where(up, p)
 }
 
 /// `mul_ru` where some lane fails `ok`: there, x and y are finite and nonzero,
@@ -179,7 +195,11 @@ fn mul_ru_tiny(x: F64X2, y: F64X2, p: F64X2, ok: F64X2) -> F64X2 {
     // q = RN(rs / S) if q >= rs / S, and the successor of q otherwise. q * S is
     // exact, as |q| <= 2^-968, so comparing it with rs compares q with rs / S.
     let q = mul_rn(r, splat(TWO_POW_M128));
-    let q = select(lt(mul_rn(q, splat(TWO_POW_128)), r), step_up(q), q);
+    // `step_up_where` needs q finite and not -0 where q * S < r. There r is not
+    // NaN and is finite: no float is below -∞, and r = +∞ gives q * S = +∞. So
+    // q is finite, and it is not -0, which would need r > -0 * S = -0, whereas a
+    // positive r * 2^-128 rounds to +0 or more.
+    let q = step_up_where(lt(mul_rn(q, splat(TWO_POW_128)), r), q);
     // If p = ±0, then |z| <= 2^-1075, and RU(z) is 2^-1074 for z > 0 and -0 for
     // z < 0. p has the sign of z, and as integers, -0 < 0 and 2^-1074 = 1.
     // Otherwise |z| > 2^-1075, so |z * S| > 2^-947, and `two_prod_is_exact(ps)`
