@@ -65,7 +65,7 @@ pub(crate) fn div_ru(x: F64X2, y: F64X2) -> F64X2 {
     //   of x, both exact, so r = x - q * y = +0.
     let up = select(sign_bit_set(y), lt_zero(r), gt_zero(r));
     let res = select(up, step_up(q), q);
-    or_generic(ok, res, || generic::div_ru(extract(x), extract(y)))
+    or_generic(ok, res, move || generic::div_ru(extract(x), extract(y)))
 }
 
 /// `mul_add_ru([x0, x1], [y0, y1], [z0, z1]) = [x0 * y0 + z0, x1 * y1 + z1]`
@@ -119,7 +119,7 @@ pub(crate) fn mul_add_ru(a: F64X2, b: F64X2, c: F64X2) -> F64X2 {
     //   the signs of zeros, so gamma = 0 and err = 0.
     let up = gt_zero(err);
     let r = select(up, step_up(r1), r1);
-    or_generic(ok, r, || {
+    or_generic(ok, r, move || {
         generic::mul_add_ru(extract(a), extract(b), extract(c))
     })
 }
@@ -189,7 +189,7 @@ fn mul_ru_tiny(x: F64X2, y: F64X2, p: F64X2, ok: F64X2) -> F64X2 {
     let zero_rule = select(gt_i64(zero(), p), p, splat_i64(1));
     let res = select(ok, r, select(p_zero, zero_rule, q));
     let ok = or(ok, or(p_zero, two_prod_is_exact(ps)));
-    or_generic(ok, res, || generic::mul_ru(extract(x), extract(y)))
+    or_generic(ok, res, move || generic::mul_ru(extract(x), extract(y)))
 }
 
 /// `sqrt_rd_ru([x0, x1]) = [√x0, √x1]`, the first rounded toward -∞ and the
@@ -211,7 +211,7 @@ pub(crate) fn sqrt_rd_ru(x: F64X2) -> F64X2 {
     let down = and(lt(r, zero()), lane0());
     let up = andnot(gt(r, zero()), lane0());
     let stepped = sub_i64(add_i64(s, down), up);
-    or_generic(ok, stepped, || generic::sqrt_rd_ru(extract(x)))
+    or_generic(ok, stepped, move || generic::sqrt_rd_ru(extract(x)))
 }
 
 /// `sqrt1_rd(x) = √x` rounded toward -∞.
