@@ -215,8 +215,7 @@ pub(super) fn or_generic(ok: F64X2, r: F64X2, generic: impl FnOnce() -> [f64; 2]
     if all(ok) {
         r
     } else {
-        let [r0, r1] = generic();
-        constant(r0, r1)
+        cold_generic(generic)
     }
 }
 
@@ -236,6 +235,9 @@ pub(super) fn or_generic_slow(
     }
 }
 
+// The fallback of `or_generic` and `or_generic_slow`. Marking it cold keeps the
+// calls of the generic backend, and the registers they need saved, off the fast
+// path of the callers into which LLVM then inlines the fast path.
 #[cold]
 fn cold_generic(generic: impl FnOnce() -> [f64; 2]) -> F64X2 {
     let [r0, r1] = generic();
