@@ -257,12 +257,6 @@ fn splat_u64(x: i64) -> uint64x2_t {
     unsafe { vdupq_n_u64(x as u64) }
 }
 
-// The lanes where the unbiased exponent of x is <= hi. NEON has 64-bit
-// comparisons, so unlike on x86-64, no `hi + 1 >` is needed.
-pub(super) fn exponent_le(x: F64X2, hi: i64) -> F64X2 {
-    unsafe { vreinterpretq_f64_u64(vcleq_u64(biased_exponent(x), splat_u64(hi + 1023))) }
-}
-
 // The lanes where lo <= the unbiased exponent of x <= hi, with one unsigned
 // comparison: below lo, the subtraction wraps around to more than hi - lo.
 pub(super) fn exponent_in(x: F64X2, lo: i64, hi: i64) -> F64X2 {
@@ -309,7 +303,9 @@ pub(super) fn is_special(x: F64X2, y: F64X2) -> F64X2 {
 
 /// Returns the successors of the lanes of x where m is set, and the other lanes of
 /// x as they are. The lanes where m is set must be finite and must not be -0.
-/// Shorter than `select(m, step_up(x), x)`.
+/// Shorter than `select(m, step_up(x), x)` with the `step_up` of
+/// `x86_64/lanewise.rs`, which also steps ±0 up: one comparison and no select,
+/// against three comparisons and two selects.
 pub(super) fn step_up_where(m: F64X2, x: F64X2) -> F64X2 {
     // As integers, m and n = (x < 0) are -1 or 0, and b is the bit pattern of x.
     // b - (m ^ n) + n is b where m = 0. Where m = -1, it is b + 1 if x >= +0 (+0

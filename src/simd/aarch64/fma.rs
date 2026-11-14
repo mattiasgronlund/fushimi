@@ -18,8 +18,8 @@
 // here as well.
 
 use super::lanewise::{
-    add_i64, andnot, div_rn, exponent_in, exponent_le, gt_i64, is_finite, is_special, lane0,
-    mul_rn, not, or_generic, select, splat_i64, sqrt_rn, step_up_where, sub_i64, two_sum_err, zero,
+    add_i64, andnot, div_rn, exponent_in, gt_i64, is_finite, is_special, lane0, mul_rn, not,
+    or_generic, select, splat_i64, sqrt_rn, step_up_where, sub_i64, two_sum_err, zero,
 };
 use super::{add_rn, all, and, eq, extract, gt, lt, or, splat, sub_rn, F64X2};
 use crate::simd::generic;
@@ -98,10 +98,17 @@ pub(crate) fn mul_add_ru(a: F64X2, b: F64X2, c: F64X2) -> F64X2 {
     // `two_prod_is_exact(u1)` and exponent(u1) <= 1021 are -968 <= exponent(u1)
     // <= 1021, that is, 2^-968 <= |u1| < 2^1022, which is false for NaN.
     let u1_in_range = and(abs_ge(u1, splat_pow2(-968)), abs_gt(splat_pow2(1022), u1));
+    // exponent(c) <= 1021 is |c| < 2^1022 for every c, one `facgt` that shares
+    // the 2^1022 of `u1_in_range`: a normal c with exponent e has 2^e <= |c| <
+    // 2^(e + 1), so e <= 1021 if and only if |c| < 2^1022; ±0 and subnormals
+    // pass both, as their exponent bits are zero and |c| < 2^-1022; and ±∞ and
+    // NaN fail both: their exponent bits are all ones, |±∞| > 2^1022, and
+    // `facgt` is false for NaN.
+    let c_in_range = abs_gt(splat_pow2(1022), c);
     let ok = or(
         special,
         and(
-            and(u1_in_range, and(exponent_le(c, 1021), is_finite(r1))),
+            and(u1_in_range, and(c_in_range, is_finite(r1))),
             and(
                 not_tiny(r1, -1022),
                 and(not_tiny(alpha1, -1021), not_tiny(beta1, -1020)),
