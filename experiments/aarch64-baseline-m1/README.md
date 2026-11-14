@@ -35,11 +35,11 @@ Both pass: per build, 340 unit tests (5 ignored), 210 in `itf1788`, 2 in
 
 The tests link MPFR through `rug` and `gmp-mpfr-sys` 1.7.1 with no workaround.
 `cargo +1.99.1 test --release`, the toolchain of solidcore's session, also links
-and passes (`logs/test-aarch64-rustc-1.99.1.log`). `gmp-mpfr-sys` reused its
-cache in `~/Library/Caches/gmp-mpfr-sys/1.7` here, so these builds did not
-compile GMP and MPFR from scratch. solidcore's failing link ("builds GMP and
-MPFR for macOS 26.0, and the link targets 11.0") came from a fresh build of
-them, with `lto = "fat"` and `codegen-units = 1`.
+and passes (`logs/test-aarch64-rustc-1.99.1.log`). The failing link that solidcore's session reported in issue #2 ("builds GMP
+and MPFR for macOS 26.0, and the link targets 11.0") was not this link: it was
+`Undefined symbols: _sincos` in its own `accuracy` program, which declares
+glibc's `sincos`, and Apple's libm has none. The macOS 26.0 lines were only
+warnings.
 
 ## Step 2: benchmarks
 
