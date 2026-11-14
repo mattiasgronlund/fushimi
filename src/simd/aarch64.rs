@@ -32,9 +32,24 @@ pub(crate) fn any(x: F64X2) -> bool {
     unsafe { transmute::<uint32x2_t, u64>(vmovn_u64(transmute::<F64X2, uint64x2_t>(x))) != 0u64 }
 }
 
+/// `bitmask([x0, x1]) = b0 | b1 << 1`, where bi is 1 if xi has all bits set and 0 if it
+/// has none. Each xi must be one or the other, as the comparisons return.
 pub(crate) fn bitmask(x: F64X2) -> u32 {
-    let [a, b] = unsafe { transmute::<F64X2, [u64; 2]>(x) };
-    (b as u32) & 0x2 | (a as u32) & 0x1
+    // `vmovn_u64` keeps the low 32 bits of each lane, so n = x1[31:0] << 32 | x0[31:0] on
+    // little-endian targets. Bit 31 of n is a bit of x0 and bit 32 a bit of x1. Reading
+    // both lanes as `u64`s instead, LLVM took 29 instructions in `Interval::mul` (apple-m1)
+    // to turn the four comparisons of `classify2` into its class. This takes 17, or 18 with
+    // 16 codegen units: an `xtn` and an `fmov` per comparison, then shifts, masks and `orr`s.
+    let n = unsafe { transmute::<uint32x2_t, u64>(vmovn_u64(transmute::<F64X2, uint64x2_t>(x))) };
+    // The cast to `u64` reads the lanes in their order in memory, lane 0 first, so on the
+    // big-endian targets (aarch64_be, tier 3, which no CI job builds) it gives
+    // x0[31:0] << 32 | x1[31:0], and the halves are swapped back.
+    let n = if cfg!(target_endian = "big") {
+        n.rotate_left(32)
+    } else {
+        n
+    };
+    (n >> 31) as u32 & 0x3
 }
 
 pub(crate) fn ceil(x: F64X2) -> F64X2 {

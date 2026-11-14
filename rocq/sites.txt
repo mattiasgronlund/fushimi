@@ -36,7 +36,7 @@ com-unchecked src/interval/dec_interval.rs: // `d()`, and makes a `DecInterval` 
 com-unchecked src/interval/dec_interval.rs: // interval is common, for each place that makes one: the callers of `new_unchecked`
 com-unchecked src/interval/dec_interval.rs: pub(crate) const fn new_unchecked(x: Interval, d: Decoration) -> Self {
 com-unchecked src/set_op.rs: Self::new_unchecked(self.x().$f(rhs.x()), Decoration::Trv)
-com-unchecked src/simd/aarch64.rs: let [a, b] = unsafe { transmute::<F64X2, [u64; 2]>(x) };
+com-unchecked src/simd/aarch64.rs: let n = unsafe { transmute::<uint32x2_t, u64>(vmovn_u64(transmute::<F64X2, uint64x2_t>(x))) };
 com-unchecked src/simd/aarch64.rs: mem::transmute,
 com-unchecked src/simd/aarch64.rs: transmute(vandq_u64(
 com-unchecked src/simd/aarch64.rs: transmute(vorrq_u64(
