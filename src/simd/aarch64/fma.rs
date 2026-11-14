@@ -84,16 +84,22 @@ pub(crate) fn mul_add_ru(a: F64X2, b: F64X2, c: F64X2) -> F64X2 {
     let err = add_rn(gamma, alpha2);
 
     let special = or(not(is_finite(c)), is_special(a, b));
-    let not_tiny = |x: F64X2, e_min: i64| or(eq(x, zero()), exponent_gt(x, e_min - 1));
+    // The underflow hypotheses of `generic::mul_add1_ru_fast`, x = 0 or
+    // exponent(x) >= e_min. For alpha1 and beta1, they are compared as
+    // |x| >= 2^e_min, one `facge` with no mask. That is false for NaN, where the
+    // exponent form is true, which can only send more lanes to the generic
+    // backend. For r1, e_min = -1022, and the exponent form tests the exponent
+    // bits for zero, with no constant.
+    let not_tiny = |x: F64X2, e_min: i64| or(eq(x, zero()), abs_ge(x, splat_pow2(e_min)));
+    // `two_prod_is_exact(u1)` and exponent(u1) <= 1021 are -968 <= exponent(u1)
+    // <= 1021, that is, 2^-968 <= |u1| < 2^1022, which is false for NaN.
+    let u1_in_range = and(abs_ge(u1, splat_pow2(-968)), abs_gt(splat_pow2(1022), u1));
     let ok = or(
         special,
         and(
+            and(u1_in_range, and(exponent_le(c, 1021), is_finite(r1))),
             and(
-                and(two_prod_is_exact(u1), exponent_le(u1, 1021)),
-                and(exponent_le(c, 1021), is_finite(r1)),
-            ),
-            and(
-                not_tiny(r1, -1022),
+                or(eq(r1, zero()), exponent_gt(r1, -1023)),
                 and(not_tiny(alpha1, -1021), not_tiny(beta1, -1020)),
             ),
         ),
@@ -101,7 +107,17 @@ pub(crate) fn mul_add_ru(a: F64X2, b: F64X2, c: F64X2) -> F64X2 {
     // As in `x86_64/fma.rs`, in every special case a * b + c is exactly
     // representable, so the FMA returns it and `r1` is already the answer.
     // If err > 0, then r1 is inexact and thus nonzero.
-    let up = andnot(gt(err, zero()), special);
+    // Special lanes need no mask, as err is NaN or ±0 in all of them:
+    // - c is ±∞ or NaN: so is alpha1 = RN(c + u2), and then alpha2 is NaN, as
+    //   `two_sum_err` computes alpha1 - (alpha1 - u2) for finite u2, which is
+    //   ∞ - ∞, and NaN otherwise.
+    // - a or b is ±∞ or NaN: so is u1, and a * b is the same ∞ or NaN, so
+    //   u2 = a * b - u1 is NaN.
+    // - a or b is ±0, and the others are finite: u1 = a * b exactly, so u2 = 0,
+    //   and no sum overflows, so `two_sum_err` is exact and alpha2 = beta2 = 0.
+    //   Then beta1 = RN(0 + alpha1) and r1 = RN(a * b + c) are both c, up to
+    //   the signs of zeros, so gamma = 0 and err = 0.
+    let up = gt_zero(err);
     let r = select(up, step_up(r1), r1);
     or_generic(ok, r, || {
         generic::mul_add_ru(extract(a), extract(b), extract(c))
@@ -248,6 +264,11 @@ fn sign_bit_set(x: F64X2) -> F64X2 {
 // The lanes where |x| >= |y| (`facge`); false if x or y is NaN.
 fn abs_ge(x: F64X2, y: F64X2) -> F64X2 {
     unsafe { vreinterpretq_f64_u64(vcageq_f64(x, y)) }
+}
+
+// The lanes where |x| > |y| (`facgt`); false if x or y is NaN.
+fn abs_gt(x: F64X2, y: F64X2) -> F64X2 {
+    unsafe { vreinterpretq_f64_u64(vcagtq_f64(x, y)) }
 }
 
 // `splat_pow2(e) = [2^e, 2^e]`, for -1022 <= e <= 1023.
