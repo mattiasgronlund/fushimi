@@ -18,9 +18,8 @@ crate-wide `#[allow]`s. Local allows need a comment explaining why.
 
 ## Code style: match the neighbouring files
 - New SIMD backends mirror the existing ones in `src/simd/`: same function order
-  and names as `unimplemented.rs`, `pub(crate)` visibility, small `#[inline]`-free
-  functions, and a `macro_rules!` where the existing backends use one
-  (`impl_op_round!`).
+  and names as `unimplemented.rs`, `pub(crate)` visibility, small functions, and a
+  `macro_rules!` where the existing backends use one (`impl_op_round!`).
 - Document semantics in the existing notation, e.g.
   `/// \`add_rn([x0, x1], [y0, y1]) = [x0 + y0, x1 + y1]\` rounded to nearest.`
   and keep the lane-layout comment convention from `src/simd.rs`.
