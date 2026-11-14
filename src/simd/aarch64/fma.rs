@@ -18,9 +18,8 @@
 // here as well.
 
 use super::lanewise::{
-    add_i64, andnot, div_rn, exponent_gt, exponent_in, exponent_le, gt_i64, is_finite, is_special,
-    lane0, mul_rn, not, or_generic, select, splat_i64, sqrt_rn, step_up_where, sub_i64,
-    two_sum_err, zero,
+    add_i64, andnot, div_rn, exponent_in, exponent_le, gt_i64, is_finite, is_special, lane0,
+    mul_rn, not, or_generic, select, splat_i64, sqrt_rn, step_up_where, sub_i64, two_sum_err, zero,
 };
 use super::{add_rn, all, and, eq, extract, gt, lt, or, splat, sub_rn, F64X2};
 use crate::simd::generic;
@@ -89,11 +88,12 @@ pub(crate) fn mul_add_ru(a: F64X2, b: F64X2, c: F64X2) -> F64X2 {
 
     let special = or(not(is_finite(c)), is_special(a, b));
     // The underflow hypotheses of `generic::mul_add1_ru_fast`, x = 0 or
-    // exponent(x) >= e_min. For alpha1 and beta1, they are compared as
-    // |x| >= 2^e_min, one `facge` with no mask. That is false for NaN, where the
-    // exponent form is true, which can only send more lanes to the generic
-    // backend. For r1, e_min = -1022, and the exponent form tests the exponent
-    // bits for zero, with no constant.
+    // exponent(x) >= e_min, compared as |x| >= 2^e_min, one `facge` with no
+    // mask. That is false for NaN, where the exponent form is true, which can
+    // only send more lanes to the generic backend. For r1, the exponent form
+    // (the exponent bits are not all zero) needs no constant, but LLVM 22 merges
+    // it with r1 = 0 into an integer test for subnormals, 9 instructions against
+    // 5 for this form.
     let not_tiny = |x: F64X2, e_min: i64| or(eq(x, zero()), abs_ge(x, splat_pow2(e_min)));
     // `two_prod_is_exact(u1)` and exponent(u1) <= 1021 are -968 <= exponent(u1)
     // <= 1021, that is, 2^-968 <= |u1| < 2^1022, which is false for NaN.
@@ -103,7 +103,7 @@ pub(crate) fn mul_add_ru(a: F64X2, b: F64X2, c: F64X2) -> F64X2 {
         and(
             and(u1_in_range, and(exponent_le(c, 1021), is_finite(r1))),
             and(
-                or(eq(r1, zero()), exponent_gt(r1, -1023)),
+                not_tiny(r1, -1022),
                 and(not_tiny(alpha1, -1021), not_tiny(beta1, -1020)),
             ),
         ),

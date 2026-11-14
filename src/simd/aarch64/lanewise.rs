@@ -263,11 +263,6 @@ pub(super) fn exponent_le(x: F64X2, hi: i64) -> F64X2 {
     unsafe { vreinterpretq_f64_u64(vcleq_u64(biased_exponent(x), splat_u64(hi + 1023))) }
 }
 
-// The lanes where the unbiased exponent of x is > hi.
-pub(super) fn exponent_gt(x: F64X2, hi: i64) -> F64X2 {
-    unsafe { vreinterpretq_f64_u64(vcgtq_u64(biased_exponent(x), splat_u64(hi + 1023))) }
-}
-
 // The lanes where lo <= the unbiased exponent of x <= hi, with one unsigned
 // comparison: below lo, the subtraction wraps around to more than hi - lo.
 pub(super) fn exponent_in(x: F64X2, lo: i64, hi: i64) -> F64X2 {
