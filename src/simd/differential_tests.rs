@@ -5,9 +5,9 @@
 // paths of the generic one, and is compared with it.
 // Both the FMA and the Dekker (no FMA) variants of the generic backend are tested.
 // On aarch64, the generic backend is also compared with the hardware's rounding,
-// with the rounding mode switched in FPCR (the `_fpcr` functions of `aarch64`,
-// the entries named `<op>/fpcr` below), a reference that shares no rounding code
-// with either backend.
+// with the rounding mode switched in FPCR (the `_fpcr` functions of `aarch64`:
+// the entries named `<op>/fpcr` below, and the references of the square roots),
+// a reference that shares no rounding code with either backend.
 // On wasm32, `f64::mul_add` is a software routine, but still correctly rounded.
 // NaNs compare equal regardless of their sign and payload, which inari does not
 // depend on (x86 returns a negative default NaN, the generic backend does not).
@@ -120,8 +120,8 @@ const SPECIAL: [f64; 9] = [
 ];
 
 // Exponents around the thresholds of the fast paths and of the format. Below
-// 2^-1075, a product rounds to ±0, which `mul_ru_tiny` in the `fma`, `sse42` and
-// `wasm32` backends and `generic::mul1_ru_tiny` handle separately.
+// 2^-1075, a product rounds to ±0, which `mul_ru_tiny` in the `fma`, `sse42`,
+// `aarch64` and `wasm32` backends and `generic::mul1_ru_tiny` handle separately.
 const BOUNDARY_EXPONENTS: [i32; 15] = [
     -1075, -1074, -1022, -1021, -1020, -970, -968, -967, -966, 0, 995, 996, 1021, 1022, 1023,
 ];
@@ -164,10 +164,10 @@ impl Report {
     }
 
     // As `check`, with the oracle as expected: on `avx512f`, the target backend,
-    // which rounds with embedded rounding; on `fma`, `sse42`, `aarch64` and `wasm32`, the
-    // generic backend, whose fast paths they port and whose functions in
-    // `binary_ops` and `ternary_ops` are proved correct in `rocq/`. On aarch64,
-    // `target` is the FPCR reference in the `/fpcr` entries.
+    // which rounds with embedded rounding; on `fma`, `sse42`, `aarch64` and
+    // `wasm32`, the generic backend, whose fast paths they port and whose
+    // functions in `binary_ops` and `ternary_ops` are proved correct in `rocq/`.
+    // On aarch64, `target` is the FPCR reference in the `/fpcr` entries.
     fn check_target(&mut self, name: &str, args: &[f64], target: f64, generic: f64) {
         if cfg!(target_feature = "avx512f") {
             self.check(name, args, target, generic);
@@ -1018,10 +1018,10 @@ fn regression_variants(name: &str, arity: usize) -> Vec<Vec<f64>> {
 // does for `mul_ru`. Except under AVX-512F, `differential` compares the generic
 // backend with backends that mostly compute with its algorithm, so a mistake
 // that they share would go unnoticed there, except on aarch64 by the `/fpcr`
-// entries. The slow paths are the oracle, so
-// this test does not see a mistake in what the generic backend runs on a case as
-// they do: a slow path that its fast path hands the case to, or a function that
-// both paths call (see the cases of `add_ru` and `mul_add_ru` in `regressions`).
+// entries. The slow paths are the oracle, so this test does not see a mistake in
+// what the generic backend runs on a case as they do: a slow path that its fast
+// path hands the case to, or a function that both paths call (see the cases of
+// `add_ru` and `mul_add_ru` in `regressions`).
 // This test has no `cfg` of its own, so it runs wherever `differential` does.
 #[test]
 fn regressions_generic() {

@@ -257,8 +257,9 @@ fn splat_u64(x: i64) -> uint64x2_t {
     unsafe { vdupq_n_u64(x as u64) }
 }
 
-// The lanes where lo <= the unbiased exponent of x <= hi, with one unsigned
-// comparison: below lo, the subtraction wraps around to more than hi - lo.
+// The lanes where lo <= the unbiased exponent of x <= hi, for -1023 <= lo <= hi,
+// with one unsigned comparison: below lo, the subtraction wraps around to more
+// than hi - lo.
 pub(super) fn exponent_in(x: F64X2, lo: i64, hi: i64) -> F64X2 {
     unsafe {
         let d = vsubq_u64(biased_exponent(x), splat_u64(lo + 1023));

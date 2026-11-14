@@ -37,6 +37,14 @@ pub(crate) fn bitmask(x: F64X2) -> u32 {
     // and one `ubfx`, where reading both lanes into general registers made LLVM build the
     // masks of `classify2` with about 30 instructions.
     let n = unsafe { transmute::<uint32x2_t, u64>(vmovn_u64(transmute::<F64X2, uint64x2_t>(x))) };
+    // The cast reads the lanes in their order in memory, lane 0 first, so on the
+    // big-endian targets (aarch64_be, tier 3, which no CI job builds) it gives
+    // x0[31:0] << 32 | x1[31:0], and the halves are swapped back.
+    let n = if cfg!(target_endian = "big") {
+        n.rotate_left(32)
+    } else {
+        n
+    };
     (n >> 31) as u32 & 0x3
 }
 

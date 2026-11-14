@@ -1,18 +1,22 @@
 // The operations of the aarch64 backend that round toward +∞, the port of
-// `x86_64/fma.rs` to NEON, which every aarch64 processor has, as it has the FMA.
+// `x86_64/fma.rs` to NEON (Advanced SIMD, which Rust enables on its aarch64
+// targets except the softfloat ones), whose fused operations `fmla` and `fmls`
+// are the FMA.
 //
 // They compute the fast paths of the generic backend on both lanes at once, and
 // the few inputs that fail their checks in either lane are recomputed by the
-// generic backend (see `lanewise.rs`). The FMA makes TwoProduct and the
-// remainders of division and of the square root one instruction each. As on
-// x86-64, `mul_ru` computes RU(x * y) itself where x and y are nonzero and
-// |RN(x * y)| < 2^-968 (see `mul_ru_tiny`).
+// generic backend (see `lanewise.rs`). The FMA makes the remainders of division
+// and of the square root one instruction each, and the error of TwoProduct one
+// instruction in `mul_ru`, which uses its negation, and two in `mul_add_ru` (see
+// `two_prod_err`). As on x86-64, `mul_ru` computes RU(x * y) itself where x and
+// y are nonzero and |RN(x * y)| < 2^-968 (see `mul_ru_tiny`).
 //
 // The obvious alternative is to let the hardware round: `fadd` and friends with
-// FPCR.RMode set to round toward +∞. That is what this backend replaced, and it
-// is slower, because FPCR has to be saved, set and restored around every
-// operation: on an Apple M1 Pro, the dot product of two 3-vectors of intervals
-// took 141.0 ns that way, and 44.1 ns with the generic backend (inari issue #2).
+// FPCR.RMode set to round toward +∞. That is what this backend replaced: every
+// directed operation saved FPCR, set the rounding mode and restored it. On an
+// Apple M1 Pro, a dot product of two 3-vectors of intervals, building the
+// intervals included, took 141.0 ns that way and 44.1 ns with the generic
+// backend, a cost that fits those FPCR writes (inari issue #2).
 //
 // The scalar operations are those of the generic backend, which uses the FMA
 // here as well.
