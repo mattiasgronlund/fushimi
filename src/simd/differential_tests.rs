@@ -6,8 +6,8 @@
 // Both the FMA and the Dekker (no FMA) variants of the generic backend are tested.
 // On aarch64, the generic backend is also compared with the hardware's rounding,
 // with the rounding mode switched in FPCR (the `_fpcr` functions of `aarch64`,
-// the entries named `<op>/fpcr` below), a reference that shares no code with
-// either backend.
+// the entries named `<op>/fpcr` below), a reference that shares no rounding code
+// with either backend.
 // On wasm32, `f64::mul_add` is a software routine, but still correctly rounded.
 // NaNs compare equal regardless of their sign and payload, which inari does not
 // depend on (x86 returns a negative default NaN, the generic backend does not).

@@ -12,6 +12,8 @@ env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: -Dwarnings
   CARGO_TARGET_WASM32_WASIP1_RUNNER: wasmtime
+  CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+  CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUNNER: qemu-aarch64 -L /usr/aarch64-linux-gnu
 
 jobs:
   build:
@@ -71,3 +73,56 @@ jobs:
       # with MPFR are compiled under the same `cfg`, so this step runs the others.
       - name: Test (i686-unknown-linux-gnu)
         run: cargo test --release --lib --tests --target i686-unknown-linux-gnu
+
+  # The `aarch64` backend on Linux, under QEMU's user-mode emulation, which
+  # honours the rounding mode in FPCR, as the FPCR references of the tests need.
+  # ci-aarch64 tests it natively, but on a macOS runner, which sometimes does not
+  # start.
+  aarch64-qemu:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # The cache of ci-x86-64 under another key: a key that exists is not saved
+      # again, and that cache has no aarch64 build of GMP and MPFR.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/gmp-mpfr-sys
+          key: ${{ runner.os }}-aarch64-${{ secrets.CACHE_VERSION }}-${{ hashFiles('Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-aarch64-${{ secrets.CACHE_VERSION }}-
+
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          override: true
+          profile: minimal
+          components: clippy
+
+      - name: Add targets
+        run: rustup target add aarch64-unknown-linux-gnu
+
+      # QEMU, and the cross gcc and C library, which linking and the builds of GMP
+      # and MPFR need. gmp-mpfr-sys passes `--host aarch64-unknown-linux-gnu` to
+      # their configure scripts, which then look for the tools under that prefix
+      # (and otherwise fall back to the host's gcc); Ubuntu names them
+      # aarch64-linux-gnu-*.
+      - name: Install QEMU and gcc-aarch64-linux-gnu
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes qemu-user gcc-aarch64-linux-gnu libc6-dev-arm64-cross
+          for t in gcc g++ cpp ar as ld nm objdump ranlib readelf strip; do
+            sudo ln -s /usr/bin/aarch64-linux-gnu-$t /usr/local/bin/aarch64-unknown-linux-gnu-$t
+          done
+
+      - uses: Swatinem/rust-cache@v2
+
+      # gmp-mpfr-sys refuses to cross-compile without its `force-cross` feature,
+      # which the command line enables for the tests' dev-dependency.
+      - name: Clippy (aarch64-unknown-linux-gnu)
+        run: cargo clippy --all-targets --target aarch64-unknown-linux-gnu --features gmp-mpfr-sys/force-cross
+
+      - name: Test (aarch64-unknown-linux-gnu)
+        run: cargo test --release --lib --target aarch64-unknown-linux-gnu --features gmp-mpfr-sys/force-cross
