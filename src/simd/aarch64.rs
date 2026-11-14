@@ -29,9 +29,15 @@ pub(crate) fn any(x: F64X2) -> bool {
     unsafe { transmute::<uint32x2_t, u64>(vmovn_u64(transmute::<F64X2, uint64x2_t>(x))) != 0u64 }
 }
 
+// `bitmask(x) = b0 | b1 << 1`, where bi is 1 if lane xi has all bits set and 0 if it
+// has none. Each lane of x must be one or the other, as the comparisons return.
 pub(crate) fn bitmask(x: F64X2) -> u32 {
-    let [a, b] = unsafe { transmute::<F64X2, [u64; 2]>(x) };
-    (b as u32) & 0x2 | (a as u32) & 0x1
+    // `vmovn_u64` keeps the low 32 bits of each lane, so n = x1[31:0] << 32 | x0[31:0].
+    // Bit 31 of n is a bit of x0 and bit 32 a bit of x1. That gives one `xtn`, one `fmov`
+    // and one `ubfx`, where reading both lanes into general registers made LLVM build the
+    // masks of `classify2` with about 30 instructions.
+    let n = unsafe { transmute::<uint32x2_t, u64>(vmovn_u64(transmute::<F64X2, uint64x2_t>(x))) };
+    (n >> 31) as u32 & 0x3
 }
 
 pub(crate) fn ceil(x: F64X2) -> F64X2 {
