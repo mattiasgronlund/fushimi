@@ -1,0 +1,6 @@
+ %CPU COMM
+ 25.7 /usr/libexec/opendirectoryd
+ 18.4 /System/Library/PrivateFrameworks/AssistantServices.framework/Versions/A/Support/assistantd
+  2.3 /usr/libexec/duetexpertd
+  1.6 /System/Library/PrivateFrameworks/AppPredictionFoundation.framework/Versions/A/XPCServices/AppPredictionIntentsHelperService.xpc/Contents/MacOS/AppPredictionIntentsHelperService
+  1.2 /Library/Application Support/Logitech.localized/LogiOptionsPlus/logioptionsplus_agent.app/Contents/MacOS/logioptionsplus_agent

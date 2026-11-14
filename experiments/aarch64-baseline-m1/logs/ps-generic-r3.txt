@@ -1,0 +1,6 @@
+ %CPU COMM
+  2.0 /usr/libexec/syspolicyd
+  1.7 /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/FSEvents.framework/Versions/A/Support/fseventsd
+  0.9 /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/Metadata.framework/Versions/A/Support/mds
+  0.8 /Applications/AlDente.app/Contents/MacOS/AlDente
+  0.5 /System/Library/ExtensionKit/Extensions/WallpaperAerialsExtension.appex/Contents/MacOS/WallpaperAerialsExtension

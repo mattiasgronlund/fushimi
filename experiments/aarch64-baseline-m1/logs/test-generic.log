@@ -1,0 +1,633 @@
+   Compiling inari v2.0.0 (/private/tmp/claude-501/-Users-mattias-git-mattiasgronlund-inari/6dfd1a8a-51da-4612-8790-27f35aced024/scratchpad/inari-7d80003)
+    Finished `release` profile [optimized] target(s) in 24.86s
+     Running unittests src/lib.rs (target/release/build/inari/f41f79163bb301e8/out/inari-f41f79163bb301e8)
+
+running 345 tests
+test absmax::tests::empty ... ok
+test absmax::tests::nai ... ok
+test arith::tests::add_assign ... ok
+test arith::tests::empty ... ok
+test arith::tests::div_assign ... ok
+test arith::tests::mul_assign ... ok
+test arith::tests::nai ... ok
+test arith::tests::ref_type_args ... ok
+test arith::tests::sub_assign ... ok
+test basic::tests::cancel_minus ... ok
+test basic::tests::empty ... ok
+test basic::tests::mul_rev_to_pair ... ok
+test basic::tests::nai ... ok
+test bytes::tests::dec_interval ... ok
+test bytes::tests::interval ... ok
+test classify::tests::classify ... ok
+test constants::tests::constants ... ok
+test constants::tests::constants_bits ... ok
+test cr::tests::mpfr::hard_cases::full_hard_cases ... ignored
+test cr::tests::midpoints ... ok
+test cr::tests::mpfr::hard_cases::random_levels ... ignored
+test cr::tests::mpfr::hard_cases::sample_hard_cases ... ignored
+test cr::tests::exact_zeros ... ok
+test cr::tests::mpfr::hypot_cut ... ok
+test cr::tests::mpfr::hypot_max ... ok
+test cr::tests::mpfr::hypot_midpoints ... ok
+test cr::tests::mpfr::cbrt_cubes_and_subnormals ... ok
+test cr::tests::mpfr::hypot_random ... ok
+test cr::tests::mpfr::hard_cases::hard_cases ... ok
+test cr::tests::mpfr::atan2_special_and_random ... ok
+test cr::tests::mpfr::hypot_subnormal ... ok
+test cr::tests::mpfr::sqrt_special_squares_and_subnormals ... ok
+test cr::tests::mpfr::powi_special_and_random ... ok
+test cr::tests::mpfr::unary_special ... ok
+test cr::tests::special_cases ... ok
+test cr::tests::mpfr::pow_special_and_random ... ok
+test dyadic::atan::tests::close_to_an_f64 ... ok
+test cr::tests::mpfr::oracle_rounds_once ... ok
+test dyadic::atan::tests::exact_div_cases::exact_div_constants ... ok
+test dyadic::atan::tests::exact_div_cases::exact_div_false_positives ... ok
+test dyadic::atan::tests::exact_div_cases::exact_div_midpoints ... ok
+test dyadic::atan::tests::exact_div_cases::exact_div_thresholds ... ok
+test dyadic::atan::tests::exact_enclosure ... ok
+test cr::tests::mpfr::hypot_special ... ok
+test dyadic::atan::tests::exact_div::exact_div_random ... ok
+test dyadic::atan::tests::exact_div::exact_div_same_map ... ok
+test dyadic::atan::tests::fast_stage2_agrees_with_kernel ... ok
+test dyadic::atan::tests::fast_path_agrees_with_kernel ... ok
+test dyadic::atan::tests::first_stage_pass_rates ... ok
+test dyadic::atan::tests::halving_at_its_threshold ... ok
+test dyadic::atan::tests::hard_cases ... ok
+test dyadic::atan::tests::fast_range_random ... ok
+test dyadic::atan::tests::fast_edges ... ok
+test dyadic::atan::tests::mpfr::fast_atan_table_and_constants ... ok
+test dyadic::atan::tests::mpfr::pi_bounds_are_roundings ... ok
+test dyadic::atan::tests::mpfr::pi_table ... ok
+test dyadic::atan::tests::mpfr_cases::mpfr_test_cases ... ok
+test dyadic::atan::tests::pi_times_constants ... ok
+test dyadic::atan::tests::quotient_rules_at_their_thresholds ... ok
+test dyadic::atan::tests::quotient_rules_same_map ... ok
+test dyadic::atan::tests::midpoint_quotients ... ok
+test dyadic::atan::tests::reductions_at_their_edges ... ok
+test dyadic::atan::tests::regressions_hold ... ok
+test dyadic::atan::tests::rules_at_their_thresholds ... ok
+test dyadic::atan::tests::special_and_exact ... ok
+test dyadic::atan::tests::widened ... ok
+test dyadic::atan::tests::widened1 ... ok
+test dyadic::exp::tests::close_to_an_f64 ... ok
+test dyadic::exp::tests::edge_points ... ok
+test dyadic::atan::tests::random_arguments ... ok
+test dyadic::exp::tests::edges_widened ... ok
+test cr::tests::mpfr::unary_random ... ok
+test dyadic::exp::tests::far_side_ties ... ok
+test dyadic::exp::tests::far_side_ties_constructed ... ok
+test dyadic::exp::tests::far_side_ties_random ... ok
+test dyadic::exp::tests::edges_random ... ok
+test dyadic::exp::tests::fast_hyp_range_random ... ok
+test dyadic::exp::tests::fast_path_agrees_with_kernel ... ok
+test dyadic::exp::tests::hyp_thresholds ... ok
+test dyadic::exp::tests::hyp_widened ... ok
+test dyadic::exp::tests::fast_range_random ... ok
+test dyadic::exp::tests::integers ... ok
+test dyadic::exp::tests::mpfr::dd_div_bound ... ok
+test dyadic::exp::tests::mpfr::fast_exp_bound ... ok
+test dyadic::exp::tests::mpfr::fast_exp_by_bound ... ok
+test dyadic::exp::tests::mpfr::fast_exp_edge_bound ... ok
+test dyadic::atan::tests::first_stage_random ... ok
+test dyadic::exp::tests::mpfr::fast_hyp_constants ... ok
+test dyadic::exp::tests::mpfr::fast_hyp_poly_bound ... ok
+test dyadic::exp::tests::mpfr::fast_tables_and_constants ... ok
+test dyadic::exp::tests::mpfr_test_cases ... ok
+test dyadic::exp::tests::near_exact_values ... ok
+test dyadic::exp::tests::near_rules_at_their_thresholds ... ok
+test dyadic::exp::tests::mpfr::fast_hyp_bound ... ok
+test dyadic::exp::tests::range_ends ... ok
+test dyadic::exp::tests::random_arguments ... ok
+test dyadic::exp::tests::regressions_hold ... ok
+test dyadic::exp::tests::rules_at_their_thresholds ... ok
+test dyadic::exp::tests::reductions_at_their_edges ... ok
+test dyadic::exp::tests::widened ... ok
+test dyadic::fast::tests::round_dir_by_sign_bit ... ok
+test dyadic::fast::tests::round_dir_sub_by_sign_bit ... ok
+test dyadic::exp::tests::exact_enclosures ... ok
+test dyadic::log::tests::ahyp_thresholds ... ok
+test dyadic::log::tests::ahyp_widened ... ok
+test dyadic::log::tests::ahyp_near_taken ... ok
+test dyadic::log::tests::close_to_an_f64 ... ok
+test dyadic::log::tests::fast_ahyp_range_random ... ok
+test dyadic::log::tests::fast_path_agrees_with_kernel ... ok
+test dyadic::log::tests::fast_range_random ... ok
+test dyadic::log::tests::hard_cases ... ok
+test dyadic::exp::tests::table_and_reduction_edges ... ok
+test dyadic::log::tests::mpfr::dd_sqrt_bound ... ok
+test dyadic::log::tests::mpfr::fast_ahyp_bound ... ok
+test dyadic::log::tests::mpfr::fast_ln_bound ... ok
+test dyadic::log::tests::mpfr::fast_log_table_and_constants ... ok
+test dyadic::log::tests::mpfr::ln_acc_bound ... ok
+test dyadic::log::tests::mpfr::ln_acc_constants ... ok
+test dyadic::log::tests::mpfr_cases::mpfr_test_cases ... ok
+test dyadic::log::tests::pow10_after_the_fast_path ... ok
+test dyadic::log::tests::random_arguments ... ok
+test dyadic::log::tests::reductions_at_their_edges ... ok
+test dyadic::log::tests::regressions_hold ... ok
+test dyadic::log::tests::rules_at_their_thresholds ... ok
+test dyadic::log::tests::special_and_exact ... ok
+test dyadic::log::tests::table_and_reduction_edges ... ok
+test dyadic::log::tests::widened ... ok
+test dyadic::pow::tests::exact::powers_of_odd_numbers ... ok
+test dyadic::pow::tests::exact::powers_of_two ... ok
+test dyadic::pow::tests::exact::pown_exact ... ok
+test dyadic::pow::tests::fast_path_agrees_with_kernel ... ok
+test dyadic::pow::tests::fast_path_edges ... ok
+test dyadic::pow::tests::fast_path_wide_edges ... ok
+test dyadic::pow::tests::fixed_cases ... ok
+test dyadic::exp::tests::levels::forced_levels ... ok
+test dyadic::pow::tests::levels::hard_cases ... ok
+test dyadic::pow::tests::mpfr::fast_pow_bound ... ok
+test dyadic::pow::tests::near::odd_powers ... ok
+test dyadic::pow::tests::near::subnormal_midpoints ... ok
+test dyadic::log::tests::exact_enclosures ... ok
+test dyadic::pow::tests::near_floats::square_roots ... ok
+test dyadic::pow::tests::random ... ok
+test dyadic::pow::tests::random_wide ... ok
+test dyadic::pow::tests::regressions_hold ... ok
+test dyadic::pow::tests::rules::integer_route ... ok
+test dyadic::pow::tests::rules::known_roundings ... ok
+test dyadic::pow::tests::rules::near_one ... ok
+test dyadic::pow::tests::near_floats::next_to_powers_of_two ... ok
+test dyadic::pow::tests::rules::three_to_the_34 ... ok
+test dyadic::pow::tests::special_and_exact ... ok
+test dyadic::pow::tests::special_values ... ok
+test dyadic::pow::tests::wide_random::constructed_ties ... ok
+test dyadic::pow::tests::wide_random::edge_counts ... ok
+test dyadic::pow::tests::rules::rules_at_thresholds ... ok
+test dyadic::pow::tests::wide_random::edges_widened ... ok
+test dyadic::pow::tests::wide_random::far_side_ties ... ok
+test dyadic::pow::tests::wide_signs::exact_subnormal_pown ... ok
+test dyadic::pow::tests::wide_signs::signed_pow_wide_edges ... ok
+test dyadic::pow::tests::wide_signs::signed_pown_wide_edges ... ok
+test dyadic::pow::tests::widened ... ok
+test dyadic::root::tests::cbrt_cubes ... ok
+test dyadic::root::tests::cbrt_every_binade ... ok
+test dyadic::root::tests::fast_cbrt_agrees_with_kernel ... ok
+test dyadic::root::tests::fast_cbrt_declines_cubes ... ok
+test dyadic::root::tests::fast_cbrt_near_two ... ok
+test dyadic::root::tests::fast_hypot_agrees_with_kernel ... ok
+test dyadic::root::tests::fast_hypot_declines_345 ... ok
+test dyadic::root::tests::fast_hypot_declines_triples ... ok
+test dyadic::pow::tests::wide_random::edges_random ... ok
+test dyadic::root::tests::fast_hypot_gap_rule ... ok
+test dyadic::root::tests::hypot_dd_range ... ok
+test dyadic::root::tests::hypot_overflow ... ok
+test dyadic::root::tests::hypot_triples ... ok
+test dyadic::root::tests::oracle ... ok
+test dyadic::root::tests::random ... ok
+test dyadic::root::tests::random_gaps ... ok
+test dyadic::root::tests::regressions_hold ... ok
+test dyadic::root::tests::smoke ... ok
+test dyadic::root::tests::special_values ... ok
+test dyadic::root::tests::hypot_cut ... ok
+test dyadic::root::tests::subnormals ... ok
+test dyadic::tests::f64_round_trip ... ok
+test dyadic::tests::from_f64_is_round ... ok
+test dyadic::tests::exact_identities ... ok
+test dyadic::tests::isqrt_at_the_top_of_the_seed ... ok
+test dyadic::tests::mpfr::regressions_against_mpfr ... ok
+test dyadic::tests::mpfr::sqrt_tops_against_mpfr ... ok
+test dyadic::tests::mpfr::width_halves ... ok
+test dyadic::tests::mpfr::ops_against_mpfr ... ok
+test dyadic::tests::mpfr::width_within_bounds ... ok
+test dyadic::tests::ziv_known_roundings ... ok
+test dyadic::tests::ziv_rounds ... ok
+test dyadic::tests::ziv_rounds_outward_at_the_cap ... ok
+test dyadic::tests::mpfr::ziv_against_mpfr ... ok
+test dyadic::trig::tests::band::km_argument ... ok
+test dyadic::trig::tests::band::band_big_random ... ok
+test dyadic::trig::tests::band::mpfr::km_distance ... ok
+test dyadic::trig::tests::band::mpfr::band_edges ... ok
+test dyadic::trig::tests::big_random ... ok
+test dyadic::trig::tests::close_to_an_f64 ... ok
+test dyadic::trig::tests::fast_path_agrees_with_kernel ... ok
+test dyadic::trig::tests::big_reduction_edges ... ok
+test dyadic::trig::tests::grid ... ok
+test dyadic::trig::tests::hard_cases ... ok
+test dyadic::trig::tests::fast_range_random ... ok
+test dyadic::trig::tests::mpfr::band_reductions ... ok
+test dyadic::trig::tests::mpfr::big_steps ... ok
+test dyadic::trig::tests::mpfr::every_index ... ok
+test dyadic::trig::tests::mpfr::fast_reduce_big_bound ... ok
+test dyadic::trig::tests::mpfr::fast_reduce_bound ... ok
+test dyadic::trig::tests::mpfr::fast_sc_bound ... ok
+test dyadic::atan::tests::levels::forced_levels ... ok
+test dyadic::trig::tests::mpfr::fast_tables_and_constants ... ok
+test dyadic::trig::tests::mpfr::fast_sin_cos_bound ... ok
+test dyadic::trig::tests::mpfr::hard_cases_fall_through ... ok
+test dyadic::trig::tests::mpfr::inv2pi_table ... ok
+test dyadic::trig::tests::mpfr::fast_tan_bound ... ok
+test dyadic::trig::tests::mpfr::sc_table_in_rocq ... ok
+test dyadic::trig::tests::mpfr::write_sc_tables ... ignored
+test dyadic::trig::tests::mpfr_cases::mpfr_pi_arguments ... ok
+test dyadic::trig::tests::mpfr_cases::mpfr_test_cases ... ok
+test dyadic::trig::tests::mpfr::nearest_to_multiples ... ok
+test dyadic::trig::tests::near_one_edge ... ok
+test dyadic::trig::tests::near_tiny_hyp ... ok
+test dyadic::trig::tests::nearest_to_a_multiple ... ok
+test dyadic::trig::tests::random_arguments ... ok
+test dyadic::trig::tests::reduction_edges ... ok
+test dyadic::trig::tests::regressions_hold ... ok
+test dyadic::trig::tests::rules_at_their_thresholds ... ok
+test dyadic::trig::tests::short_dyadics ... ok
+test dyadic::trig::tests::sin_and_tan_centres ... ok
+test dyadic::trig::tests::small_rules_near_their_centres ... ok
+test dyadic::trig::tests::special_and_exact ... ok
+test dyadic::trig::tests::widened ... ok
+test elementary::mpfr_tests::acosh_ok ... ok
+test elementary::mpfr_tests::asinh_ok ... ok
+test elementary::mpfr_tests::atan2_ok ... ok
+test elementary::mpfr_tests::atan_ok ... ok
+test elementary::mpfr_tests::atanh_ok ... ok
+test elementary::mpfr_tests::cbrt_ok ... ok
+test elementary::mpfr_tests::cosh_ok ... ok
+test elementary::mpfr_tests::exact ... ok
+test elementary::mpfr_tests::exp_ok ... ok
+test elementary::mpfr_tests::get_d_ok ... ok
+test elementary::mpfr_tests::hypot_ok ... ok
+test elementary::mpfr_tests::ln_ok ... ok
+test elementary::mpfr_tests::overflow ... ok
+test elementary::mpfr_tests::pow_ok ... ok
+test elementary::mpfr_tests::pown_ok ... ok
+test elementary::mpfr_tests::range_ok ... ok
+test elementary::mpfr_tests::range_per_thread ... ok
+test elementary::mpfr_tests::round_rational_oracle ... ok
+test elementary::mpfr_tests::sinh_ok ... ok
+test elementary::mpfr_tests::tanh_ok ... ok
+test elementary::mpfr_tests::with_val ... ok
+test elementary::tests::cbrt_dec ... ok
+test elementary::tests::cbrt_tightest ... ok
+test elementary::tests::hypot_dec ... ok
+test elementary::tests::hypot_tightest ... ok
+test elementary::tests::nai ... ok
+test elementary::tests::tan ... ok
+test elementary::tests::trig_tightest ... ok
+test dyadic::pow::tests::levels::forced_levels ... ok
+test format::diff_tests::exact_digit_at_precision_0 ... ok
+test format::diff_tests::hex_digits ... ok
+test format::diff_tests::huge_precision ... ok
+test format::diff_tests::integers ... ok
+test format::diff_tests::intervals_against_mpfr ... ok
+test format::diff_tests::near_carries ... ok
+test format::diff_tests::parse_back ... ok
+test format::diff_tests::random_bits ... ok
+test format::diff_tests::regressions_against_mpfr ... ok
+test format::tests::format ... ok
+test integer::tests::empty ... ok
+test integer::tests::nai ... ok
+test interval::tests::decoration_order ... ok
+test interval::tests::macros ... ok
+test limbs::tests::div_rem_add_back ... ok
+test limbs::tests::div_rem_bit_by_bit ... ok
+test limbs::tests::div_rem_by_zero - should panic ... ok
+test limbs::tests::shl_into_bit_by_bit ... ok
+test mpfr_calls::tests::intervals_binary ... ok
+test mpfr_calls::tests::intervals_unary ... ok
+test mpfr_calls::tests::seam_random_binary ... ok
+test mpfr_calls::tests::seam_random_unary ... ok
+test format::diff_tests::edges ... ok
+test mpfr_calls::tests::soak ... ignored
+test mpfr_calls::tests::switch_reaches_mpfr ... ok
+test mpfr_calls::tests::ziv_levels_recorded ... ok
+test nat::rug_tests::bits_of_powers_of_two ... ok
+test nat::rug_tests::dec_around_powers_of_ten ... ok
+test nat::rug_tests::dec_around_powers_of_two ... ok
+test nat::rug_tests::dec_of_patterns ... ok
+test nat::rug_tests::dec_random_digit_runs ... ok
+test nat::rug_tests::dec_zero_chunks ... ok
+test nat::rug_tests::div_rem_add_back ... ok
+test nat::rug_tests::div_rem_low_zero_limbs ... ok
+test nat::rug_tests::from_digits ... ok
+test nat::rug_tests::ops_on_patterns ... ok
+test nat::rug_tests::pow5 ... ok
+test mpfr_calls::tests::seam_structured ... ok
+test nat::rug_tests::small ... ok
+test nat::rug_tests::zero_operands ... ok
+test nat::tests::div_by_zero - should panic ... ok
+test nat::tests::divisor_longer_than_dividend ... ok
+test nat::tests::low_u128 ... ok
+test nat::tests::ord_by_value ... ok
+test nat::tests::sub_below_zero - should panic ... ok
+test numeric::tests::inf ... ok
+test numeric::tests::mag ... ok
+test numeric::tests::mid ... ok
+test numeric::tests::mig ... ok
+test numeric::tests::rad ... ok
+test numeric::tests::sup ... ok
+test numeric::tests::wid ... ok
+test overlap::tests::nai ... ok
+test overlap::tests::pattern ... ok
+test parse::diff_tests::edges ... ok
+test parse::diff_tests::huge_exponents ... ok
+test parse::diff_tests::literals ... ok
+test parse::diff_tests::near_floats ... ok
+test parse::diff_tests::random_rationals ... ok
+test parse::diff_tests::regressions_against_mpfr ... ok
+test parse::diff_tests::signs_of_zero ... ok
+test nat::rug_tests::random ... ok
+test parse::diff_tests::uncertain_examples_end_to_end ... ok
+test parse::diff_tests::subnormals ... ok
+test parse::diff_tests::uncertain_oracle_examples ... ok
+test parse::diff_tests::zeros ... ok
+test parse::diff_tests::uncertain_literals ... ok
+test parse::rat::mpfr_tests::log2_5_constants ... ok
+test parse::rat::mpfr_tests::random_against_exact ... ok
+test parse::rat::mpfr_tests::random_huge_against_mpfr ... ok
+test parse::rat::mpfr_tests::zeros_and_signs ... ok
+test parse::rat::tests::literal_verdicts ... ok
+test parse::tests::decorated_literal_decorations ... ok
+test parse::tests::huge_exponents_end_to_end ... ok
+test parse::tests::parse ... ok
+test parse::tests::try_from_str_exact ... ok
+test set_op::tests::empty ... ok
+test set_op::tests::nai ... ok
+test parse::rat::mpfr_tests::dec_against_hex ... ok
+test dyadic::log::tests::levels::forced_levels ... ok
+test dyadic::trig::tests::near_multiples ... ok
+test dyadic::trig::tests::levels::forced_levels ... ok
+
+test result: ok. 340 passed; 0 failed; 5 ignored; 0 measured; 0 filtered out; finished in 31.37s
+
+     Running tests/itf1788.rs (target/release/build/inari/bb7cfbe20a0306d1/out/itf1788-bb7cfbe20a0306d1)
+
+running 210 tests
+test itf1788_tests::c_xsc::cxsc_intervaladdsub ... ok
+test itf1788_tests::c_xsc::cxsc_intervalscalarsetcompops ... ok
+test itf1788_tests::c_xsc::cxsc_intervalmuldiv ... ok
+test itf1788_tests::c_xsc::cxsc_intervalmixsetops ... ok
+test itf1788_tests::atan2::minimal_atan2_test ... ok
+test itf1788_tests::c_xsc::cxsc_intervalsetcompops ... ok
+test itf1788_tests::c_xsc::cxsc_intervalsetops ... ok
+test itf1788_tests::c_xsc::cxsc_intervalstdfunc ... ok
+test itf1788_tests::c_xsc::cxsc_intervalstdfunc_gmp ... ok
+test itf1788_tests::c_xsc::cxsc_scalarmixsetops ... ok
+test itf1788_tests::fi_lib::fi_lib_addii ... ok
+test itf1788_tests::fi_lib::fi_lib_divii ... ok
+test itf1788_tests::fi_lib::fi_lib_mulii ... ok
+test itf1788_tests::fi_lib::fi_lib_subii ... ok
+test itf1788_tests::fi_lib::fi_lib_unary_functions ... ok
+test itf1788_tests::ieee1788_constructors::ieee1788_a ... ok
+test itf1788_tests::ieee1788_constructors::ieee1788_b ... ok
+test itf1788_tests::ieee1788_constructors::ieee1788_c ... ok
+test itf1788_tests::ieee1788_constructors::ieee1788_d ... ok
+test itf1788_tests::ieee1788_constructors::ieee1788_e ... ok
+test itf1788_tests::fi_lib::fi_lib_unary_functions_gmp ... ok
+test itf1788_tests::ieee1788_constructors::ieee1788_e2 ... ok
+test itf1788_tests::ieee1788_constructors::ieee1788_f ... ok
+test itf1788_tests::ieee1788_exceptions::exceptions ... ok
+test itf1788_tests::libieeep1788_bool::minimal_disjoint_dec_test ... ok
+test itf1788_tests::libieeep1788_bool::minimal_disjoint_test ... ok
+test itf1788_tests::libieeep1788_bool::minimal_equal_dec_test ... ok
+test itf1788_tests::libieeep1788_bool::minimal_equal_test ... ok
+test itf1788_tests::libieeep1788_bool::minimal_interior_dec_test ... ok
+test itf1788_tests::libieeep1788_bool::minimal_interior_test ... ok
+test itf1788_tests::libieeep1788_bool::minimal_is_empty_dec_test ... ok
+test itf1788_tests::libieeep1788_bool::minimal_is_empty_test ... ok
+test itf1788_tests::libieeep1788_bool::minimal_is_entire_dec_test ... ok
+test itf1788_tests::libieeep1788_bool::minimal_is_entire_test ... ok
+test itf1788_tests::libieeep1788_bool::minimal_is_nai_dec_test ... ok
+test itf1788_tests::libieeep1788_bool::minimal_less_dec_test ... ok
+test itf1788_tests::libieeep1788_bool::minimal_less_test ... ok
+test itf1788_tests::libieeep1788_bool::minimal_precedes_dec_test ... ok
+test itf1788_tests::libieeep1788_bool::minimal_precedes_test ... ok
+test itf1788_tests::libieeep1788_bool::minimal_strictly_less_dec_test ... ok
+test itf1788_tests::libieeep1788_bool::minimal_strictly_less_test ... ok
+test itf1788_tests::libieeep1788_bool::minimal_strictly_precedes_dec_test ... ok
+test itf1788_tests::libieeep1788_bool::minimal_strictly_precedes_test ... ok
+test itf1788_tests::libieeep1788_bool::minimal_subset_dec_test ... ok
+test itf1788_tests::libieeep1788_bool::minimal_subset_test ... ok
+test itf1788_tests::libieeep1788_cancel::minimal_cancel_minus_dec_test ... ok
+test itf1788_tests::libieeep1788_cancel::minimal_cancel_minus_test ... ok
+test itf1788_tests::libieeep1788_cancel::minimal_cancel_plus_dec_test ... ok
+test itf1788_tests::libieeep1788_cancel::minimal_cancel_plus_test ... ok
+test itf1788_tests::libieeep1788_class::minimal_decoration_part_test ... ok
+test itf1788_tests::libieeep1788_class::minimal_interval_part_test ... ok
+test itf1788_tests::libieeep1788_class::minimal_new_dec_test ... ok
+test itf1788_tests::libieeep1788_class::minimal_nums_to_decorated_interval_test ... ok
+test itf1788_tests::libieeep1788_class::minimal_nums_to_interval_test ... ok
+test itf1788_tests::libieeep1788_class::minimal_set_dec_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_abs_dec_test ... ok
+test itf1788_tests::libieeep1788_class::minimal_text_to_decorated_interval_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_abs_test ... ok
+test itf1788_tests::libieeep1788_class::minimal_text_to_interval_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_add_dec_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_add_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_acosh_dec_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_acos_dec_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_acos_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_acosh_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_asin_dec_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_asin_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_asinh_dec_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_asinh_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_atan2_dec_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_atan2_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_atan_dec_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_atan_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_atanh_dec_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_atanh_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_ceil_dec_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_ceil_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_cos_dec_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_cos_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_cosh_dec_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_cosh_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_div_dec_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_div_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_exp10_dec_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_exp10_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_exp2_dec_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_exp2_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_exp_dec_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_exp_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_floor_dec_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_floor_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_fma_dec_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_log10_dec_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_log10_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_fma_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_log_dec_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_log2_dec_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_log2_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_log_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_max_dec_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_max_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_min_dec_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_min_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_mul_dec_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_neg_dec_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_mul_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_neg_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_pow_dec_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_pown_dec_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_recip_dec_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_recip_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_pown_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_round_ties_even_dec_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_round_ties_even_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_round_ties_to_away_dec_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_round_ties_to_away_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_sign_dec_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_pow_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_sign_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_sin_dec_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_sin_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_sinh_dec_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_sinh_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_sqr_dec_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_sqr_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_sqrt_dec_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_sqrt_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_sub_dec_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_sub_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_tan_dec_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_tan_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_tanh_dec_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_tanh_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_trunc_dec_test ... ok
+test itf1788_tests::libieeep1788_elem::minimal_trunc_test ... ok
+test itf1788_tests::libieeep1788_num::minimal_inf_dec_test ... ok
+test itf1788_tests::libieeep1788_num::minimal_inf_test ... ok
+test itf1788_tests::libieeep1788_num::minimal_mag_dec_test ... ok
+test itf1788_tests::libieeep1788_mul_rev::minimal_mulrevtopair_test ... ok
+test itf1788_tests::libieeep1788_num::minimal_mag_test ... ok
+test itf1788_tests::libieeep1788_mul_rev::minimal_mulrevtopair_dec_test ... ok
+test itf1788_tests::libieeep1788_num::minimal_mid_dec_test ... ok
+test itf1788_tests::libieeep1788_num::minimal_mid_test ... ok
+test itf1788_tests::libieeep1788_num::minimal_mig_dec_test ... ok
+test itf1788_tests::libieeep1788_num::minimal_mig_test ... ok
+test itf1788_tests::libieeep1788_num::minimal_rad_dec_test ... ok
+test itf1788_tests::libieeep1788_num::minimal_rad_test ... ok
+test itf1788_tests::libieeep1788_num::minimal_sup_dec_test ... ok
+test itf1788_tests::libieeep1788_num::minimal_sup_test ... ok
+test itf1788_tests::libieeep1788_num::minimal_wid_dec_test ... ok
+test itf1788_tests::libieeep1788_num::minimal_wid_test ... ok
+test itf1788_tests::libieeep1788_overlap::minimal_overlap_dec_test ... ok
+test itf1788_tests::libieeep1788_overlap::minimal_overlap_test ... ok
+test itf1788_tests::libieeep1788_rec_bool::minimal_is_common_interval_dec_test ... ok
+test itf1788_tests::libieeep1788_rec_bool::minimal_is_common_interval_test ... ok
+test itf1788_tests::libieeep1788_rec_bool::minimal_is_member_dec_test ... ok
+test itf1788_tests::libieeep1788_rec_bool::minimal_is_member_test ... ok
+test itf1788_tests::libieeep1788_rec_bool::minimal_is_singleton_dec_test ... ok
+test itf1788_tests::libieeep1788_rec_bool::minimal_is_singleton_test ... ok
+test itf1788_tests::libieeep1788_set::minimal_convex_hull_dec_test ... ok
+test itf1788_tests::libieeep1788_set::minimal_convex_hull_test ... ok
+test itf1788_tests::libieeep1788_set::minimal_intersection_dec_test ... ok
+test itf1788_tests::libieeep1788_set::minimal_intersection_test ... ok
+test itf1788_tests::mpfi::mpfi_abs ... ok
+test itf1788_tests::mpfi::mpfi_acos ... ok
+test itf1788_tests::mpfi::mpfi_acosh ... ok
+test itf1788_tests::mpfi::mpfi_add ... ok
+test itf1788_tests::mpfi::mpfi_add_d ... ok
+test itf1788_tests::mpfi::mpfi_asin ... ok
+test itf1788_tests::mpfi::mpfi_asinh ... ok
+test itf1788_tests::mpfi::mpfi_atan ... ok
+test itf1788_tests::mpfi::mpfi_atan2 ... ok
+test itf1788_tests::mpfi::mpfi_atanh ... ok
+test itf1788_tests::mpfi::mpfi_bounded_p ... ok
+test itf1788_tests::mpfi::mpfi_cos ... ok
+test itf1788_tests::mpfi::mpfi_cosh ... ok
+test itf1788_tests::mpfi::mpfi_d_div ... ok
+test itf1788_tests::mpfi::mpfi_d_sub ... ok
+test itf1788_tests::mpfi::mpfi_diam_abs ... ok
+test itf1788_tests::mpfi::mpfi_div ... ok
+test itf1788_tests::mpfi::mpfi_div_d ... ok
+test itf1788_tests::mpfi::mpfi_exp2 ... ok
+test itf1788_tests::mpfi::mpfi_intersect ... ok
+test itf1788_tests::mpfi::mpfi_inv ... ok
+test itf1788_tests::mpfi::mpfi_is_neg ... ok
+test itf1788_tests::mpfi::mpfi_exp ... ok
+test itf1788_tests::mpfi::mpfi_is_nonneg ... ok
+test itf1788_tests::mpfi::mpfi_is_nonpos ... ok
+test itf1788_tests::mpfi::mpfi_is_pos ... ok
+test itf1788_tests::mpfi::mpfi_is_strictly_neg ... ok
+test itf1788_tests::mpfi::mpfi_is_strictly_pos ... ok
+test itf1788_tests::mpfi::mpfi_log ... ok
+test itf1788_tests::mpfi::mpfi_log10 ... ok
+test itf1788_tests::mpfi::mpfi_log2 ... ok
+test itf1788_tests::mpfi::mpfi_mag ... ok
+test itf1788_tests::mpfi::mpfi_mid ... ok
+test itf1788_tests::mpfi::mpfi_mig ... ok
+test itf1788_tests::mpfi::mpfi_mul ... ok
+test itf1788_tests::mpfi::mpfi_mul_d ... ok
+test itf1788_tests::mpfi::mpfi_neg ... ok
+test itf1788_tests::mpfi::mpfi_put_d ... ok
+test itf1788_tests::mpfi::mpfi_sin ... ok
+test itf1788_tests::mpfi::mpfi_sinh ... ok
+test itf1788_tests::mpfi::mpfi_sqr ... ok
+test itf1788_tests::mpfi::mpfi_sqrt ... ok
+test itf1788_tests::mpfi::mpfi_sub ... ok
+test itf1788_tests::mpfi::mpfi_sub_d ... ok
+test itf1788_tests::mpfi::mpfi_tanh ... ok
+test itf1788_tests::mpfi::mpfi_tan ... ok
+test itf1788_tests::mpfi::mpfi_union ... ok
+
+test result: ok. 210 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/macros.rs (target/release/build/inari/b091f7649642bbd4/out/macros-b091f7649642bbd4)
+
+running 2 tests
+test macros ... ok
+test macros_strings ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/model_constants.rs (target/release/build/inari/02da0714b0fbd3de/out/model_constants-02da0714b0fbd3de)
+
+running 1 test
+test model_constants ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests inari
+
+running 42 tests
+test src/_docs.rs - _docs::intro (line 189) ... ignored
+test src/_docs.rs - _docs::intro (line 206) ... ignored
+test src/_docs.rs - _docs::intro (line 16) ... ok
+test src/_docs.rs - _docs::intro (line 84) ... ok
+test src/_docs.rs - _docs::intro (line 143) ... ok
+test src/basic.rs - basic::Interval::cancel_minus (line 258) ... ok
+test src/basic.rs - basic::Interval::cancel_minus (line 271) ... ok
+test src/basic.rs - basic::Interval::cancel_minus (line 282) ... ok
+test src/basic.rs - basic::Interval::cancel_minus (line 293) ... ok
+test src/basic.rs - basic::Interval::cancel_minus (line 305) ... ok
+test src/basic.rs - basic::Interval::mul_rev_to_pair (line 175) ... ok
+test src/boolean.rs - boolean::Interval::contains (line 12) ... ok
+test src/boolean.rs - boolean::Interval::contains (line 21) ... ok
+test src/boolean.rs - boolean::Interval::disjoint (line 59) ... ok
+test src/boolean.rs - boolean::Interval::interior (line 99) ... ok
+test src/boolean.rs - boolean::Interval::is_common_interval (line 128) ... ok
+test src/boolean.rs - boolean::Interval::is_empty (line 160) ... ok
+test src/boolean.rs - boolean::Interval::is_entire (line 190) ... ok
+test src/boolean.rs - boolean::Interval::is_singleton (line 210) ... ok
+test src/boolean.rs - boolean::Interval::is_singleton (line 220) ... ok
+test src/boolean.rs - boolean::Interval::less (line 250) ... ok
+test src/boolean.rs - boolean::Interval::precedes (line 283) ... ok
+test src/boolean.rs - boolean::Interval::strict_less (line 319) ... ok
+test src/boolean.rs - boolean::Interval::subset (line 380) ... ok
+test src/cr.rs - cr (line 33) ... ok
+test src/integer.rs - integer::Interval::ceil (line 14) ... ok
+test src/integer.rs - integer::Interval::floor (line 47) ... ok
+test src/integer.rs - integer::Interval::round (line 79) ... ok
+test src/integer.rs - integer::Interval::round_ties_even (line 112) ... ok
+test src/integer.rs - integer::Interval::sign (line 149) ... ok
+test src/integer.rs - integer::Interval::trunc (line 188) ... ok
+test src/interval.rs - interval::interval_exact (line 398) ... ok
+test src/interval.rs - interval::interval_exact (line 403) ... ok
+test src/interval.rs - interval::interval_exact (line 412) ... ok
+test src/interval/dec_interval.rs - interval::dec_interval::DecInterval (line 15) ... ok
+test src/numeric.rs - numeric::Interval::inf (line 19) ... ok
+test src/numeric.rs - numeric::Interval::mag (line 54) ... ok
+test src/numeric.rs - numeric::Interval::mid (line 84) ... ok
+test src/numeric.rs - numeric::Interval::mig (line 134) ... ok
+test src/numeric.rs - numeric::Interval::rad (line 167) ... ok
+test src/numeric.rs - numeric::Interval::sup (line 203) ... ok
+test src/numeric.rs - numeric::Interval::wid (line 235) ... ok
+
+test result: ok. 40 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 9.99s
+
+exit 0

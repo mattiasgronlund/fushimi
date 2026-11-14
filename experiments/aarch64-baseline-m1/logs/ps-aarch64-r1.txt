@@ -1,0 +1,6 @@
+ %CPU COMM
+  8.7 claude
+  3.8 /Library/Application Support/Logitech.localized/LogiOptionsPlus/logioptionsplus_agent.app/Contents/MacOS/logioptionsplus_agent
+  3.4 /System/Library/CoreServices/launchservicesd
+  3.2 /System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU
+  2.6 target/release/solidcraft

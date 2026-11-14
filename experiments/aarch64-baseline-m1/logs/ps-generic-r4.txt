@@ -1,0 +1,6 @@
+ %CPU COMM
+ 24.5 /usr/sbin/systemstats
+  2.3 /usr/libexec/syspolicyd
+  1.9 /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/FSEvents.framework/Versions/A/Support/fseventsd
+  1.4 /System/Library/CoreServices/Finder.app/Contents/MacOS/Finder
+  1.2 /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/Metadata.framework/Versions/A/Support/mds
