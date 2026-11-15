@@ -29,6 +29,8 @@ const ADD_CLASSES: [&str; 3] = ["PP", "PM", "MM"];
 const ALL_CLASSES: [&str; 9] = ["PP", "PN", "PM", "NP", "NN", "NM", "MP", "MN", "MM"];
 // x / y for y ∌ 0; division by an interval containing zero is also included.
 const DIV_CLASSES: [&str; 5] = ["PP", "PN", "MP", "NN", "PM"];
+// The classes of x, y and z of `x.mul_add(y, z)`.
+const MUL_ADD_CLASSES: [&str; 3] = ["PPP", "PNM", "MMM"];
 
 // Deterministic values in [1, 2).
 fn values(seed: u64, n: usize) -> Vec<f64> {
@@ -69,6 +71,16 @@ fn binary_operands(cl: &str, x_scale: f64) -> (Vec<Interval>, Vec<Interval>) {
     let x = intervals(it.next().unwrap(), 1, x_scale);
     let y = intervals(it.next().unwrap(), 2, 1.0);
     (x, y)
+}
+
+// The operands of the class `cl` of a ternary series: those of `binary_operands`, and a
+// third operand with seed 3, which is not scaled.
+fn ternary_operands(cl: &str, x_scale: f64) -> (Vec<Interval>, Vec<Interval>, Vec<Interval>) {
+    let mut it = cl.chars();
+    let x = intervals(it.next().unwrap(), 1, x_scale);
+    let y = intervals(it.next().unwrap(), 2, 1.0);
+    let z = intervals(it.next().unwrap(), 3, 1.0);
+    (x, y, z)
 }
 
 // The operands of the unary series: those in P and those in M.
@@ -114,6 +126,30 @@ fn bench_binary(
     g.finish();
 }
 
+fn bench_ternary(
+    c: &mut Criterion,
+    name: &str,
+    f: fn(Interval, Interval, Interval) -> Interval,
+    classes: &[&str],
+    x_scale: f64,
+) {
+    let mut g = c.benchmark_group(name);
+    g.throughput(Throughput::Elements(N as u64));
+    for cl in classes {
+        let (x, y, z) = ternary_operands(cl, x_scale);
+        g.bench_function(BenchmarkId::from_parameter(cl), |b| {
+            let mut out = vec![Interval::EMPTY; N];
+            b.iter(|| {
+                for i in 0..N {
+                    out[i] = f(black_box(x[i]), black_box(y[i]), black_box(z[i]));
+                }
+                black_box(&out);
+            })
+        });
+    }
+    g.finish();
+}
+
 // An arbitrary polynomial of degree 8 with point coefficients.
 const HORNER: [f64; 9] = [1.0, -0.5, 0.25, -0.125, 0.0625, 0.75, -1.5, 3.0, -2.0];
 
@@ -147,6 +183,11 @@ fn intervals_bench(c: &mut Criterion) {
     // operations recorded from rcad, a CAD kernel, were below 2^-968 too.
     bench_binary(c, "mul_tiny", |x, y| x * y, &ALL_CLASSES, TINY);
     bench_binary(c, "div", |x, y| x / y, &DIV_CLASSES, 1.0);
+    bench_ternary(c, "mul_add", Interval::mul_add, &MUL_ADD_CLASSES, 1.0);
+    // The products of the endpoints of x and y are those of `mul_tiny`, below 2^-968,
+    // where `mul_add_ru` leaves its fast path in the backends that compute it with
+    // error-free transformations.
+    bench_ternary(c, "mul_add_tiny", Interval::mul_add, &MUL_ADD_CLASSES, TINY);
 
     let mut g = c.benchmark_group("unary");
     g.throughput(Throughput::Elements(N as u64));

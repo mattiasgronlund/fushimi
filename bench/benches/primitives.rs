@@ -79,6 +79,12 @@ fn primitives(c: &mut Criterion) {
             black_box(&out);
         })
     });
+    // Both lanes converge to l / (1 - k) = 4, a float: the 125th result of lane 0
+    // and the 76th of lane 1 are 4, and every later step is exact (0.75 * 4 + 1 =
+    // 0.625 * 4 + 1.5 = 4). Both lanes are exact in 930 of the 1024 steps, and
+    // round up (RU > RN) in only 33 and 32. Each call starts again at [1, 1.5], so
+    // a backend that branches on the rounding error sees the same outcomes in
+    // every call, nearly all of them the same way.
     g.bench_function(BenchmarkId::new("latency", N), |b| {
         let (k, l) = (constant(0.75, 0.625), constant(1.0, 1.5));
         b.iter(|| {
@@ -87,6 +93,36 @@ fn primitives(c: &mut Criterion) {
                 acc = mul_add_ru(acc, black_box(k), black_box(l));
             }
             black_box(acc)
+        })
+    });
+    // acc = acc² + c rounded up, with c = -1.9 in both lanes, a chaotic map: the
+    // mean of ln |2 acc| along the orbit, its Lyapunov exponent, is about 0.55.
+    // acc is carried from one call to the next, so the calls follow one orbit,
+    // which enters a cycle of 37964025 steps after about 1.7e7 steps (lane 0) and
+    // 5.7e7 (lane 1). Along it |acc| stays in [3e-8, 1.9], so every step takes
+    // the fast path, and only one step in each pass of the cycle is exact. About
+    // half of the steps round up, and the last 16 outcomes do not help to predict
+    // the next. The result is negative in about 63 % of the steps, and its
+    // history predicts its sign little better than that bias. So where a backend
+    // branches on the rounding error or on the sign of the result, as generic's
+    // `mul_add1_ru_fast` and `step_up` do in their source, the branch is
+    // mispredicted often. The steps square acc (a = b), and a compiler may merge
+    // the checks of a and b, so a step can take fewer instructions than with
+    // three distinct inputs. The start is not a short dyadic: from 0.5 the first
+    // step would be exact, as 0.5² - 1.9 is a float.
+    g.bench_function(BenchmarkId::new("latency_inexact", N), |b| {
+        let c = constant(-1.9, -1.9);
+        let mut acc = constant(0.3, -0.7);
+        b.iter(|| {
+            // The loop runs on a copy whose address is never taken, so that the
+            // chain needs no store or load of it. black_box(x) at each step would
+            // add both.
+            let mut x = acc;
+            for _ in 0..N {
+                x = mul_add_ru(x, x, black_box(c));
+            }
+            acc = x;
+            black_box(x)
         })
     });
     g.finish();
