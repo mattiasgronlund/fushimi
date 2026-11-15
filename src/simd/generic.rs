@@ -309,8 +309,6 @@ pub(crate) fn minimum(x: F64X2, y: F64X2) -> F64X2 {
 
 /// `mul_add_ru([x0, x1], [y0, y1], [z0, z1]) = [x0 * y0 + z0, x1 * y1 + z1]`
 /// rounded toward +∞ (with a single rounding).
-// Inlined into its one caller as the build's backend (see `Baseline` in `src/simd/token.rs`).
-#[cfg_attr(inari_generic_backend, inline(always))]
 pub(crate) fn mul_add_ru(x: F64X2, y: F64X2, z: F64X2) -> F64X2 {
     // Proved correct in `rocq/theories/MulAddRu.v`. `rocq/theories/Model.v` transcribes
     // this function for that proof and those of `(Dec)Interval::mul_add`, so it has to

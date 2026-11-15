@@ -1260,7 +1260,7 @@ mod tokens {
     // returned `Some`, and std caches what it detects.
     trait Token: Simd {
         // The name of the token's `sqrt1_ru` in `ops`, with the variant of the
-        // generic backend that it runs.
+        // generic backend that it runs, or whose fast path it vectorizes.
         const SQRT1_RU: &'static str;
 
         fn token() -> Self;
@@ -1277,11 +1277,16 @@ mod tokens {
         }
     }
 
-    // `V3` also takes the `sqrt1_ru` of `Baseline` (`src/simd/token.rs`), which in
-    // the builds of these tests is the generic one without the FMA: they lack `fma`,
-    // as `fma` enables `avx`.
+    // `V3` has a copy of `fma::sqrt1_ru` (`src/simd/token.rs`): the method of
+    // `fma::sqrt_rd_ru`, which computes the remainder with the FMA as the generic
+    // `sqrt1_ru` with the FMA does, rounding up in both lanes of a splat. Unless
+    // 2^-966 <= |x| < 2^1024, it falls back to the generic `sqrt1_ru`, which in the
+    // builds of these tests is the one without the FMA: they lack `fma`, as `fma`
+    // enables `avx`. A negative x in that range takes the fast path, which returns
+    // NaN, as `fma::sqrt_rd_ru` does. `adversarial(true)` has both sides of both
+    // bounds, 2^-966 and its predecessor, and MAX and +∞, and their negations.
     impl Token for V3 {
-        const SQRT1_RU: &'static str = "sqrt1_ru/dekker";
+        const SQRT1_RU: &'static str = "sqrt1_ru/fma";
 
         fn token() -> Self {
             V3::try_new().unwrap()

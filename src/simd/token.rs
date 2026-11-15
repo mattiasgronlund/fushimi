@@ -272,19 +272,30 @@ pub fn dispatch<W: WithLevel>(w: W) -> W::Output {
 // `Baseline` (`x + y` is `x.add_with(Baseline, y)`).
 //
 // A function that a user's crate can inline or instantiate, such as `add_with`, can call only
-// functions that the crate exports, and Rust passes the vector arguments of an exported function
-// in memory. Inside the crate, LLVM passes them in registers. So `add_ru`, `div_ru` and `mul_ru`,
-// which the crate's operations call out of line (on aarch64 only `mul_ru`, see below), are called
-// here from methods without `#[inline]`, which the crate exports in their place. LLVM inlines
-// these small methods into the crate's operations, which then call the backend functions as
-// before. The backend functions are `#[inline(never)]`, as otherwise LLVM would inline each into
-// its only caller, the method. On aarch64 only `mul_ru` is: there LLVM inlines `add_ru` and
-// `div_ru` into the methods and into the crate's operations, which then take fewer instructions
-// (counted under QEMU), whereas inlining `mul_ru` gives `Interval::mul` a stack frame and more
-// instructions. `mul_add_ru` and `sqrt_rd_ru` have one caller each in the crate's operations,
-// which inlines them, and are `#[inline(always)]`, except `mul_add_ru` where `sse42` is the
-// backend, which the crate calls out of line, as `add_ru`. (`src/__bench.rs`, compiled only with
-// the feature `__bench`, for the benchmarks, also calls `mul_add_ru`.)
+// functions that the crate exports, and Rust's ABI passes the vector arguments and result of an
+// exported function by pointer (the copies of `V2` and `V3` below that are out of line pass them
+// in registers). Inside the crate, LLVM can pass them in registers instead. So `add_ru`, `div_ru`
+// and `mul_ru`, which the crate's operations call out of line (on aarch64 only `mul_ru`, see
+// below), are called here from methods without `#[inline]`, which the crate exports in their
+// place. LLVM inlines these small methods into the crate's operations, which then call the
+// backend functions as before. Where the portable, `sse42` or `fma` backend is the build's, the
+// backend functions are `#[inline(never)]`, as otherwise LLVM would inline each into its only
+// caller, the method. Making the methods `#[inline(always)]` there, so that a user's crate calls
+// the backend functions without them, made the crate export the backend functions, and its own
+// operations then passed them their vectors by pointer, at up to 9 more instructions per call
+// (21 with one codegen unit; cachegrind, row 136). On aarch64 only `mul_ru` is
+// `#[inline(never)]`: there LLVM inlines `add_ru` and `div_ru` into the methods and into the
+// crate's operations, which then take fewer instructions (counted under QEMU), whereas inlining
+// `mul_ru` gives `Interval::mul` a stack frame and more instructions. `sqrt_rd_ru` has one caller
+// in the crate's operations, which inlines it, and is `#[inline(always)]` where the portable,
+// `sse42`, `fma` or `aarch64` backend is the build's, as is `mul_add_ru` where `fma` or
+// `aarch64` is. Where `sse42` is the backend, the crate calls `mul_add_ru` out of line, as
+// `add_ru`. The portable `mul_add_ru`, which is also the slow path of those of `fma`, `sse42` and
+// `aarch64`, has no `#[inline]`: where it is the build's backend, `#[inline(always)]` cost
+// `Interval::mul_add` 1 to 3 more instructions per call in a build for `x86-64` in Cargo's
+// default release profile, and none with one codegen unit (cachegrind, row 136).
+// (`src/__bench.rs`, compiled only with the feature `__bench`, for the benchmarks, also calls
+// `mul_add_ru`.)
 //
 // The other functions that a `*_with` method reaches, and that rustc would not by itself inline
 // into a user's crate on some target, are marked for it, apart from the backend functions that
@@ -440,13 +451,38 @@ macro_rules! baseline_backend {
 // build's. The list of target features is written once, so that the features that `try_new`
 // detects are those that `vectorize` and the copies enable. Only string literals are passed as
 // `$f`, but `is_x86_feature_detected!` matches them as tokens, which a `literal` is not. `$ma`
-// are the attributes of the copy of `mul_add_ru`.
+// are the attributes of the copy of `mul_add_ru`, and `$abi` its ABI.
 #[cfg(target_arch = "x86_64")]
 macro_rules! level {
+    // `sqrt1_ru copy`: the level has a copy of its backend's `sqrt1_ru`, which is out of line.
+    // Inlined into the region of `sqrt_with`, it ran 4 to 6 fewer instructions per call on an
+    // interval containing zero, but 1 to 5 more on a positive one, whose path does not call it
+    // (cachegrind, row 136).
+    (@sqrt1_ru_copy copy, $backend:ident, [$($f:tt),*]) => {
+        $(#[target_feature(enable = $f)])*
+        pub(super) fn sqrt1_ru(x: f64) -> f64 {
+            $backend::sqrt1_ru(x)
+        }
+    };
+    (@sqrt1_ru copy, $m:ident) => {
+        #[inline(always)]
+        fn sqrt1_ru(self, x: f64) -> f64 {
+            // SAFETY: as in `vectorize`, for the target features of the copy.
+            unsafe { $m::sqrt1_ru(x) }
+        }
+    };
+    // `sqrt1_ru baseline`: the level takes the `sqrt1_ru` of `Baseline`.
+    (@sqrt1_ru_copy baseline, $backend:ident, [$($f:tt),*]) => {};
+    (@sqrt1_ru baseline, $m:ident) => {
+        #[inline(always)]
+        fn sqrt1_ru(self, x: f64) -> f64 {
+            sealed::Backend::sqrt1_ru(Baseline, x)
+        }
+    };
     (
         $(#[$attr:meta])*
         $t:ident, copies $m:ident in $copies:meta, backend $backend:ident, features [$($f:tt),*],
-        mul_add_ru [$($ma:meta),*]
+        mul_add_ru [$($ma:meta),*] extern $abi:literal, sqrt1_ru $sq:ident
     ) => {
         $(#[$attr])*
         #[derive(Clone, Copy, Debug)]
@@ -502,30 +538,49 @@ macro_rules! level {
         // level, whose backend is the level's (see `Baseline`): `add_ru`, `div_ru` and `mul_ru`
         // are out of line, `sqrt_rd_ru` is inlined, and `mul_add_ru` is inlined at `V3` and out
         // of line at `V2`. A function with `#[target_feature]` cannot be `#[inline(always)]`,
-        // so the copies that are inlined are `#[inline]`.
+        // so the copies that are inlined are `#[inline]`. The copy of `sqrt1_ru` that `V3` has
+        // is out of line (see `@sqrt1_ru_copy`).
+        //
+        // The copies of vector functions that are out of line take the ABI `sysv64`, which
+        // passes and returns an `__m128d` in an `xmm` register on every x86-64 target, where
+        // Rust's ABI passes each by pointer. The copy of `mul_add_ru` takes `$abi`: `sysv64` at
+        // `V2`, and Rust's ABI at `V3`, which inlines it. With `sysv64` at `V3`, a region that
+        // evaluated a polynomial of degree 8 by Horner's rule with `mul_add_with` ran up to 19
+        // more instructions per polynomial (cachegrind, row 136). The lint
+        // `improper_ctypes_definitions` flags `__m128d`, whose layout Rust does not specify for
+        // C, but no C code calls the copies: only the methods below do. `-unwind` lets a panic
+        // unwind through them, as through a function of Rust's ABI.
         #[cfg($copies)]
         mod $m {
             use crate::simd::x86_64::$backend;
             use std::arch::x86_64::__m128d;
 
+            #[allow(improper_ctypes_definitions)] // `__m128d` (see above).
             $(#[target_feature(enable = $f)])*
-            pub(super) fn add_ru(x: __m128d, y: __m128d) -> __m128d {
+            pub(super) extern "sysv64-unwind" fn add_ru(x: __m128d, y: __m128d) -> __m128d {
                 $backend::add_ru(x, y)
             }
 
+            #[allow(improper_ctypes_definitions)] // `__m128d` (see above).
             $(#[target_feature(enable = $f)])*
-            pub(super) fn div_ru(x: __m128d, y: __m128d) -> __m128d {
+            pub(super) extern "sysv64-unwind" fn div_ru(x: __m128d, y: __m128d) -> __m128d {
                 $backend::div_ru(x, y)
             }
 
+            #[allow(improper_ctypes_definitions)] // `__m128d` (see above).
             $(#[$ma])*
             $(#[target_feature(enable = $f)])*
-            pub(super) fn mul_add_ru(x: __m128d, y: __m128d, z: __m128d) -> __m128d {
+            pub(super) extern $abi fn mul_add_ru(
+                x: __m128d,
+                y: __m128d,
+                z: __m128d,
+            ) -> __m128d {
                 $backend::mul_add_ru(x, y, z)
             }
 
+            #[allow(improper_ctypes_definitions)] // `__m128d` (see above).
             $(#[target_feature(enable = $f)])*
-            pub(super) fn mul_ru(x: __m128d, y: __m128d) -> __m128d {
+            pub(super) extern "sysv64-unwind" fn mul_ru(x: __m128d, y: __m128d) -> __m128d {
                 $backend::mul_ru(x, y)
             }
 
@@ -534,6 +589,8 @@ macro_rules! level {
             pub(super) fn sqrt_rd_ru(x: __m128d) -> __m128d {
                 $backend::sqrt_rd_ru(x)
             }
+
+            level!(@sqrt1_ru_copy $sq, $backend, [$($f),*]);
         }
 
         // The copies take the place of the backend functions that are not thin layers, and the
@@ -601,18 +658,16 @@ macro_rules! level {
                 from_m128d(unsafe { $m::sqrt_rd_ru(to_m128d(x)) })
             }
 
-            // The scalar operations of `sse42` and `fma` are those of the portable backend,
-            // with the FMA under `fma`. Both levels take the `sqrt1_ru` of `Baseline`, which in
-            // the builds of the copies is the portable backend's without the FMA. The copy that
-            // `V3` had, which called `sqrt1_ru_impl::<true>`, did not use the FMA either: LLVM
-            // called that function out of line, in an instance compiled without `fma` that
-            // calls the C library's `fma`. Marking `sqrt1_ru_impl` `#[inline(always)]` inlined
-            // it into `Interval::sqrt` too, which `DecInterval::sqrt` then called out of line,
-            // at up to 15 more instructions per call (cachegrind, row 123).
-            #[inline(always)]
-            fn sqrt1_ru(self, x: f64) -> f64 {
-                sealed::Backend::sqrt1_ru(Baseline, x)
-            }
+            // The scalar operations of `sse42` are those of the portable backend, so `V2` takes
+            // the `sqrt1_ru` of `Baseline`, which in the builds of the copies is the portable
+            // backend's without the FMA. `V3` has a copy of the `sqrt1_ru` that `fma` has in
+            // those builds, a lane-wise form of the portable one, which the copy inlines with
+            // the FMA. A copy calling the portable `sqrt1_ru_impl::<true>` did not use the FMA:
+            // LLVM called that function out of line, in an instance compiled without `fma`
+            // that calls the C library's `fma`. Marking `sqrt1_ru_impl` `#[inline(always)]`
+            // inlined it into `Interval::sqrt` too, which `DecInterval::sqrt` then called out
+            // of line, at up to 15 more instructions per call (cachegrind, row 123).
+            level!(@sqrt1_ru $sq, $m);
 
             #[inline(always)]
             fn swap(self, x: F64X2) -> F64X2 {
@@ -662,7 +717,8 @@ level! {
     copies v2 in all(not(docsrs), not(feature = "force-generic"), not(target_feature = "sse4.2")),
     backend sse42,
     features ["popcnt", "sse3", "sse4.1", "sse4.2", "ssse3"],
-    mul_add_ru []
+    mul_add_ru [] extern "sysv64-unwind",
+    sqrt1_ru baseline
 }
 
 #[cfg(target_arch = "x86_64")]
@@ -679,12 +735,11 @@ level! {
     /// [`Interval`](crate::Interval) at `V3` run the `fma` backend in a build that has neither
     /// the target feature `avx512f` nor both `avx` and `fma`, such as one for `x86-64` or
     /// `x86-64-v2`. There, the parts that the `fma` backend takes from the portable backend, its
-    /// slow paths and the square root of the upper bound alone in
-    /// [`Interval::sqrt_with`](crate::Interval::sqrt_with), compute without the FMA, as those of
-    /// the build's backend do. In other builds, such as one for `x86-64-v3` or `haswell`, and
-    /// with `force-generic`, the operations run the build's backend, that of [`Baseline`]. inari
-    /// has no token of `x86-64-v4`: enabling the AVX-512 target features in a function needs
-    /// Rust 1.89, and inari also builds with Rust 1.86.
+    /// slow paths, compute without the FMA, as those of the build's backend do. In other builds,
+    /// such as one for `x86-64-v3` or `haswell`, and with `force-generic`, the operations run the
+    /// build's backend, that of [`Baseline`]. inari has no token of `x86-64-v4`: enabling the
+    /// AVX-512 target features in a function needs Rust 1.89, and inari also builds with Rust
+    /// 1.86.
     ///
     /// ```
     /// use inari::{simd::{Simd, V3}, *};
@@ -706,7 +761,8 @@ level! {
         "avx", "avx2", "bmi1", "bmi2", "f16c", "fma", "lzcnt", "movbe", "popcnt", "sse3",
         "sse4.1", "sse4.2", "ssse3"
     ],
-    mul_add_ru [inline]
+    mul_add_ru [inline] extern "Rust",
+    sqrt1_ru copy
 }
 
 #[cfg(test)]

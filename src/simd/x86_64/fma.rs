@@ -18,8 +18,12 @@
 // BENCHMARKS.md). Only three latency-bound primitives lose, by 3 to 12%.
 //
 // The scalar operations are those of the generic backend, which uses the FMA
-// here as well.
+// here as well where this backend is the build's. In a build without `avx` and
+// `fma`, where this backend serves only the token `V3`, the generic backend
+// computes without the FMA, and `sqrt1_ru` is this backend's own (see below).
 
+#[cfg(not(all(target_feature = "avx", target_feature = "fma")))]
+use super::extract0;
 use super::lanewise::{
     add_i64, andnot, div_rn, exponent_gt, exponent_in, exponent_le, gt_i64, is_finite, is_special,
     lane0, mul_rn, not, or_generic, select, splat_i64, sqrt_rn, step_up, sub_i64, two_sum_err,
@@ -37,9 +41,11 @@ pub(crate) use super::lanewise::add_ru;
 // too (seen in an `x86-64-v2` build), so the copy inlines its body instead.
 #[cfg(not(all(target_feature = "avx", target_feature = "fma")))]
 pub(crate) use super::lanewise::add_ru_body as add_ru;
+#[cfg(all(target_feature = "avx", target_feature = "fma"))]
+pub(crate) use super::lanewise::sqrt1_ru;
 #[cfg(test)]
 pub(crate) use super::lanewise::{sqrt1_rd_mxcsr, sqrt1_ru_mxcsr};
-pub(crate) use super::lanewise::{sqrt1_ru, sub1_ru, sub_ru};
+pub(crate) use super::lanewise::{sub1_ru, sub_ru};
 
 /// `div_ru([x0, x1], [y0, y1]) = [x0 / y0, x1 / y1]` rounded toward +∞.
 // Without `avx` and `fma`, this module is only the backend of the token `V3`, whose copies in
@@ -115,10 +121,17 @@ pub(crate) fn mul_add_ru(a: F64X2, b: F64X2, c: F64X2) -> F64X2 {
     // `move` makes the closure hold copies of a, b and c, not pointers to them.
     // Without it, `Interval::mul_add` built the three pointers before the branch
     // of `or_generic`, also when the fast path was taken: 1 to 24 more
-    // instructions per call in a build for Haswell (cachegrind, row 123).
-    or_generic(ok, r, move || {
-        generic::mul_add_ru(extract(a), extract(b), extract(c))
-    })
+    // instructions per call in a build for Haswell (cachegrind, row 123). With
+    // one codegen unit, LLVM left the closure out of line, which cost
+    // `Interval::mul_add` in that build 12 instructions per call where both
+    // factors contain zero, and 1 where the products are also below 2^-968
+    // (cachegrind, row 136), hence `#[inline(always)]`.
+    or_generic(
+        ok,
+        r,
+        #[inline(always)]
+        move || generic::mul_add_ru(extract(a), extract(b), extract(c)),
+    )
 }
 
 /// `mul_ru([x0, x1], [y0, y1]) = [x0 * y0, x1 * y1]` rounded toward +∞.
@@ -221,6 +234,34 @@ pub(crate) fn sqrt_rd_ru(x: F64X2) -> F64X2 {
     let up = andnot(gt(r, zero()), lane0());
     let stepped = sub_i64(add_i64(s, down), up);
     or_generic(ok, stepped, || generic::sqrt_rd_ru(extract(x)))
+}
+
+/// `sqrt1_ru(x) = √x` rounded toward +∞.
+// Without `avx` and `fma`, this module is only the backend of the token `V3`, whose copy in
+// `src/simd/token.rs` inlines this function and so computes the remainder with the FMA. The
+// portable backend's `sqrt1_ru`, which the build's backend takes, computes it with Dekker's
+// algorithm there. As the build's backend, this backend takes that function, which then uses
+// the FMA.
+#[cfg(not(all(target_feature = "avx", target_feature = "fma")))]
+#[inline(always)]
+pub(crate) fn sqrt1_ru(x: f64) -> f64 {
+    // The method of `sqrt_rd_ru`, rounding toward +∞ in both lanes of a splat.
+    let v = splat(x);
+    let s = sqrt_rn(v);
+    // x - s² is representable where the check passes, so the FMA computes it
+    // exactly.
+    let r = fnmadd(s, s, v);
+    // As in `sqrt_rd_ru`: the check excludes ±0, +∞ and NaN, but not negative
+    // numbers, for which NaN is returned.
+    let ok = exponent_in(v, -966, 1023);
+    // √x > s ⟺ x - s² > 0, and then s >= 2^-483, so its successor is the
+    // increment of its bits.
+    let up = gt(r, zero());
+    let stepped = sub_i64(s, up);
+    extract0(or_generic(ok, stepped, || {
+        let r = generic::sqrt1_ru(x);
+        [r, r]
+    }))
 }
 
 /// `sqrt1_rd(x) = √x` rounded toward -∞.
