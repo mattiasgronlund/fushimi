@@ -1,6 +1,7 @@
 -R theories Inari
 
 theories/ModelTrigTable.v
+theories/ModelAsinTable.v
 theories/Model.v
 theories/Encoding.v
 theories/Spec.v
@@ -287,6 +288,13 @@ theories/FastAsinReal.v
 theories/FastAsinAngle.v
 theories/FastAsinSqrt.v
 theories/FastAsinQuot.v
+theories/AsinSeries.v
+theories/FastAsinTable.v
+theories/FastAsinPolyGappa.v
+theories/FastAsinPolyTail.v
+theories/FastAsinPolyRed.v
+theories/FastAsinPolyB.v
+theories/FastAsinPoly.v
 theories/FastAsin.v
 theories/DyExp.v
 theories/DyHyp.v

@@ -1177,14 +1177,27 @@ fn check2_fast(y: f64, x: f64) {
     check2(y, x);
 }
 
-// The function `i` gives the same `f64`s at x, in both directions and to nearest, with the first
-// stages of the fast paths as with them disabled (`set_atan_stage1`), where the second stages
-// answer, and `check_fast` holds, which compares them with the kernel and with MPFR.
+// The function `i` gives the same `f64`s at x, in both directions and to nearest, with every
+// stage of the fast paths, without stage 0 of asin and acos (`set_asin_stage0`), where their
+// second stages answer, and without the first stages of atan and atan2 either
+// (`set_atan_stage1`), where the second stages answer for those too, and `check_fast` holds,
+// which compares them with the kernel and with MPFR.
 fn check_stages(i: usize, x: f64) {
+    let all = roundings(i, x);
+    set_asin_stage0(false);
     let first = roundings(i, x);
     set_atan_stage1(false);
     let second = roundings(i, x);
     set_atan_stage1(true);
+    set_asin_stage0(true);
+    assert!(
+        all == first,
+        "{}({:e}): {:?} with every stage != {:?} without stage 0",
+        FUNCTIONS[i].0,
+        x,
+        all.map(f64::from_bits),
+        first.map(f64::from_bits)
+    );
     assert!(
         first == second,
         "{}({:e}): {:?} with the first stage != {:?} without it",
@@ -1255,14 +1268,26 @@ fn random_args2(rng: &mut Rng, n: u32) -> (f64, f64) {
 // atan, asin, acos and atan2 give the same `f64`s, in both directions and to nearest, with the
 // fast path as with it disabled, and agree with MPFR, on random arguments of any exponent and of
 // a moderate magnitude (`random_arg`, `random_args2`), and most of their rounding tests pass.
+// asin and acos take their arguments twice: with every stage, and without stage 0
+// (`set_asin_stage0`), where the counts are taken, so that they are those of the first and second
+// stages of atan and of the second stages of asin and acos. The tests of stage 0 fail more often,
+// which `stage0_pass_rates` counts.
 #[test]
 fn fast_path_agrees_with_kernel() {
     let mut rng = Rng(91);
     for (i, (name, _)) in FUNCTIONS.iter().enumerate() {
-        reset_fast_counts();
-        for n in 0..3000 {
-            check_fast(i, random_arg(&mut rng, i, n));
+        let args: Vec<f64> = (0..3000).map(|n| random_arg(&mut rng, i, n)).collect();
+        if i != ATAN {
+            for &x in &args {
+                check_fast(i, x);
+            }
         }
+        set_asin_stage0(false);
+        reset_fast_counts();
+        for &x in &args {
+            check_fast(i, x);
+        }
+        set_asin_stage0(true);
         let (passed, failed) = fast_counts();
         assert!(
             passed > 100 * failed,
@@ -1281,12 +1306,14 @@ fn fast_path_agrees_with_kernel() {
     );
 }
 
-// The second stages of the fast paths, which the first stages leave where their rounding tests
-// fail or `fast_atan1` returns `None`, give the same `f64`s as the kernel where the first stages
-// are disabled (`set_atan_stage1`).
+// The second stages of the fast paths, which the first stages of atan and atan2 leave where their
+// rounding tests fail or `fast_atan1` returns `None`, and stage 0 of asin and acos where its
+// tests fail, give the same `f64`s as the kernel where the first stages (`set_atan_stage1`) and
+// stage 0 (`set_asin_stage0`) are disabled.
 #[test]
 fn fast_stage2_agrees_with_kernel() {
     let mut rng = Rng(110);
+    set_asin_stage0(false);
     set_atan_stage1(false);
     for n in 0..300 {
         let u = rng.below(1 << 53) as f64 / (1u64 << 52) as f64 - 1.0;
@@ -1298,6 +1325,7 @@ fn fast_stage2_agrees_with_kernel() {
         }
     }
     set_atan_stage1(true);
+    set_asin_stage0(true);
 }
 
 // The function `i` of `FUNCTIONS` at x, toward -∞, toward +∞ and to nearest, by the bodies of
@@ -1410,18 +1438,20 @@ fn tiny_quotient_args(rng: &mut Rng, n: u32) -> (f64, f64) {
 // on random arguments drawn as in `fast_path_agrees_with_kernel` (`random_arg`, `random_args2`)
 // and as in `fast_range_random` (`BRANCHES` and `BRANCHES2`), on atan2 at quotients below
 // 2^-1021 (`tiny_quotient_args`), and on `SPECIAL` and its pairs, `HARD_CASES`, `HARD_CASES2`
-// and `regressions()`. It checks them all twice: with the first stages of the fast paths, and
-// without them (`set_atan_stage1`), where the second stages answer, the cold `fast_atan2_dir2`
-// among them. `rocq/theories/FastAtan.v` and `rocq/theories/FastAsin.v` prove it of the fast
-// paths as `Model.v` transcribes them (`fast_atan_dir_fma`, `fast_asin_dir_fma` and the others),
-// on the arguments that their hypotheses allow; this test checks the code as compiled, where the
-// entries call the copy built with the target feature `fma` in a build with the dispatch, on a
-// CPU that has it.
+// and `regressions()`. It checks them all three times: with every stage of the fast paths,
+// without stage 0 of asin and acos (`set_asin_stage0`), where their second stages answer, and
+// without the first stages of atan and atan2 either (`set_atan_stage1`), where the second stages
+// answer for those too, the cold `fast_atan2_dir2` among them. `rocq/theories/FastAtan.v` and
+// `rocq/theories/FastAsin.v` prove it of the fast paths as `Model.v` transcribes them
+// (`fast_atan_dir_fma`, `fast_asin_dir_fma` and the others), on the arguments that their
+// hypotheses allow; this test checks the code as compiled, where the entries call the copy built
+// with the target feature `fma` in a build with the dispatch, on a CPU that has it.
 #[test]
 fn copies_agree() {
-    for stage1 in [true, false] {
+    for (stage0, stage1) in [(true, true), (false, true), (false, false)] {
+        set_asin_stage0(stage0);
         set_atan_stage1(stage1);
-        // The same arguments in both passes.
+        // The same arguments in every pass.
         let mut rng = Rng(920);
         for i in [ATAN, ASIN, ACOS] {
             for n in 0..2000 {
@@ -1478,14 +1508,16 @@ fn copies_agree() {
         }
     }
     set_atan_stage1(true);
+    set_asin_stage0(true);
 }
 
 // The branches of the fast paths of atan, asin and acos, as (function, a, b) for the arguments x
 // with |x| in [a, b) of each, which both signs of x take. atan takes the polynomial at |x|
 // itself below about 1/128, where 64 |x| rounds to 0, from `TINY_NEAR` on (the directed rule
 // settles |x| below `TINY_HYP`), the table up to 1, and π/2 - atan(1 / |x|) up to `HUGE_ATAN`.
-// asin and acos take atan(t / √(1 - t^2)) up to `ASIN_S` and atan(√(1 - t^2) / t) above it, for
-// t = |x|, and acos takes π/2 - x below `TINY_ASIN`, down to 2^-1074, and π - acos t for x < 0.
+// The second stages of asin and acos take atan(t / √(1 - t^2)) up to `ASIN_S` and
+// atan(√(1 - t^2) / t) above it, for t = |x|, and acos takes π/2 - x below `TINY_ASIN`, down to
+// 2^-1074, and π - acos t for x < 0. Stage 0 has its own branches (`BRANCHES0`).
 const BRANCHES: [(usize, f64, f64); 8] = [
     (ATAN, TINY_NEAR, 1.0 / 128.0),
     (ATAN, 1.0 / 128.0, 1.0),
@@ -1549,9 +1581,12 @@ fn at_quotient(rng: &mut Rng, swap: bool, neg: bool, q: f64) -> (f64, f64) {
 
 // atan, asin, acos and atan2 on random arguments of each branch of their fast paths (`BRANCHES`
 // and `BRANCHES2`), half uniform over the branch and half of any exponent in it, with either
-// sign, against MPFR. Most of the rounding tests pass in each branch.
+// sign, against MPFR. Most of the rounding tests pass in each branch. The branches are those of
+// the first and second stages, so stage 0 of asin and acos is disabled (`set_asin_stage0`), as
+// in `fast_path_agrees_with_kernel`.
 #[test]
 fn fast_range_random() {
+    set_asin_stage0(false);
     let mut rng = Rng(911);
     for (i, a, b) in BRANCHES {
         reset_fast_counts();
@@ -1578,14 +1613,15 @@ fn fast_range_random() {
             "atan2 on {branch:?}: {passed} passed, {failed} failed"
         );
     }
+    set_asin_stage0(true);
 }
 
-// atan, asin, acos and atan2 give the same `f64`s with the first stages of their fast paths as
-// with them disabled, and as with the fast paths disabled, and agree with MPFR (`check_stages`,
-// `check2_stages`), on random arguments of each branch of their fast paths (`BRANCHES` and
-// `BRANCHES2`), half uniform over the branch and half of any exponent in it, with either sign, as
-// in `fast_range_random`, and of each set of `COUNT_SETS` and `COUNT_SETS2`, the sets of the
-// instruction counts.
+// atan, asin, acos and atan2 give the same `f64`s with the first stages of their fast paths, and
+// stage 0 of asin and acos, as with them disabled, and as with the fast paths disabled, and
+// agree with MPFR (`check_stages`, `check2_stages`), on random arguments of each branch of their
+// fast paths (`BRANCHES` and `BRANCHES2`), half uniform over the branch and half of any exponent
+// in it, with either sign, as in `fast_range_random`, and of each set of `COUNT_SETS` and
+// `COUNT_SETS2`, the sets of the instruction counts.
 #[test]
 fn first_stage_random() {
     let mut rng = Rng(1102);
@@ -1631,13 +1667,12 @@ fn fast_parts2(y: f64, x: f64) -> Option<(f64, f64, i64, f64)> {
     fast_atan2_pos::<HAS_FMA>(y.abs(), x.abs(), x < 0.0)
 }
 
-// The parts of the first stage of the fast path of the function `i` at x, as `fast_parts` gives
-// those of the second stage: `None` is the second stage's turn.
+// The parts of the first stage of the fast path of atan at x, as `fast_parts` gives those of the
+// second stage: `None` is the second stage's turn. asin and acos have stage 0 (`fast_parts0`) in
+// place of a first stage.
 fn fast_parts1(i: usize, x: f64) -> Option<(f64, f64, i64, f64)> {
     match i {
         ATAN => fast_atan_pos1::<HAS_FMA>(x.abs()),
-        ASIN => fast_asin_pos1::<HAS_FMA>(x.abs()),
-        ACOS => fast_acos_val1::<HAS_FMA>(x),
         _ => unreachable!(),
     }
 }
@@ -1647,17 +1682,31 @@ fn fast_parts1_2(y: f64, x: f64) -> Option<Option<(f64, f64, i64, f64)>> {
     fast_atan2_pos1::<HAS_FMA>(y.abs(), x.abs(), x < 0.0)
 }
 
+// The parts of stage 0 of the fast path of asin or acos at x, as `fast_parts` gives those of the
+// second stage, for |x| <= 1 (above 1 the index into `ASIN_TABLE` can be out of bounds): `None`
+// leaves x to the second stage, which acos does only at 1.
+fn fast_parts0(i: usize, x: f64) -> Option<(f64, f64, i64, f64)> {
+    match i {
+        ASIN => Some(fast_asin_pos0::<HAS_FMA>(x.abs())),
+        ACOS => fast_acos_val0::<HAS_FMA>(x),
+        _ => unreachable!(),
+    }
+}
+
 // atan, asin, acos and atan2 next to the edges of the table, of its index, of the reductions and
 // of the ranges of their fast paths, both signs of each, where they give the same `f64`s with the
-// first stages of the fast paths as with them disabled, with the fast path as with it disabled,
-// and as MPFR (`check_stages`, `check2_stages`):
+// first stages of the fast paths, and stage 0 of asin and acos, as with them disabled, with the
+// fast path as with it disabled, and as MPFR (`check_stages`, `check2_stages`):
 // - atan at the points j/64 of the table, at the ties (2j + 1)/128 of its index, and at their
 //   inverses, which π/2 - atan(1 / t) takes, and the 2 `f64`s on each side of them;
 // - asin and acos at the t at which t / √(1 - t^2) or √(1 - t^2) / t is one of those points, as
 //   the `f64` arithmetic gives them, and the `f64` on each side;
-// - atan at `TINY_NEAR`, `TINY_HYP`, 1 and `HUGE_ATAN`, asin and acos at `TINY_ASIN`, `ASIN_S`,
-//   1/√2, where both quotients are 1, and 1, and the 3 `f64`s on each side of them, and acos at
-//   0 and at 2^k for k in [-1074, -28], which π/2 - x takes;
+// - atan at `TINY_NEAR`, `TINY_HYP`, 1 and `HUGE_ATAN`, asin and acos at `TINY_ASIN`, 1/2, above
+//   which stage 0 takes acos in place of asin, `ASIN_S`, 1/√2, where both quotients are 1, and
+//   1, and the 3 `f64`s on each side of them, and acos at 0 and at 2^k for k in [-1074, -28],
+//   which π/2 - x takes;
+// - asin and acos at the points and ties of the index into `ASIN_TABLE` of `fast_asin_poly`, and
+//   the `f64` on each side;
 // - atan2, in each quadrant and with y and x swapped, at |y| / |x| at the points and ties of the
 //   table, at |y| = |x|, next to the axes, at exponents of |y| and |x| that differ by 59 to 62,
 //   where the core stops, for x > 0 at quotients around 2^-1021, below which the results are left
@@ -1667,8 +1716,10 @@ fn fast_parts1_2(y: f64, x: f64) -> Option<Option<(f64, f64, i64, f64)>> {
 // The fast path computes its parts at every argument of atan in [2^-27, 1], whose core has no
 // quotient, of acos below 2^-27 and at -1, and of asin at ±1, and not of acos at 1; and for x > 0
 // and exponents that differ by more than 60, exactly at the results of at least 2^-1021. So does
-// the first stage, but for atan at the points j/64 for j >= 1, which it leaves to the second; and
-// for those exponents it sends the results below 2^-1021 to the kernel itself.
+// the first stage of atan and atan2, but for atan at the points j/64 for j >= 1, which it leaves
+// to the second; and for those exponents it sends the results below 2^-1021 to the kernel
+// itself. Stage 0 of asin and acos computes its parts at every argument of asin in [2^-27, 1] and
+// of acos in [-1, 1).
 #[test]
 fn fast_edges() {
     let mut args = vec![];
@@ -1697,10 +1748,25 @@ fn fast_edges() {
     for t in [TINY_NEAR, TINY_HYP, 1.0, HUGE_ATAN] {
         args.extend(around(t, 3).into_iter().map(|x| (ATAN, x)));
     }
-    for t in [TINY_ASIN, ASIN_S, FRAC_1_SQRT_2, 1.0] {
+    for t in [TINY_ASIN, 0.5, ASIN_S, FRAC_1_SQRT_2, 1.0] {
         for x in around(t, 3) {
             args.push((ASIN, x));
             args.push((ACOS, x));
+        }
+    }
+    // The points and ties of the index of `fast_asin_poly`: up to 1/2, the t at which 256 t^2 is
+    // j or j + 1/2, as the `f64` arithmetic gives them, and above it, the t = 1 - j/128 and
+    // 1 - (2j + 1)/256 at which 64 (2 - 2t) is j or j + 1/2, exactly.
+    for j in 0..=64 {
+        let (p, tie) = (f64::from(j) / 256.0, f64::from(2 * j + 1) / 512.0);
+        let (q, tie2) = (f64::from(j) / 128.0, f64::from(2 * j + 1) / 256.0);
+        for t in [p.sqrt(), tie.sqrt(), 1.0 - q, 1.0 - tie2] {
+            if t > 0.0 && t < 1.0 {
+                for x in around(t, 1) {
+                    args.push((ASIN, x));
+                    args.push((ACOS, x));
+                }
+            }
         }
     }
     args.push((ACOS, 0.0));
@@ -1719,19 +1785,32 @@ fn fast_edges() {
                 FUNCTIONS[i].0,
                 x
             );
-            // The first stage too, but at the points j/64 of the table for j >= 1, where
+            // The first stage of atan too, but at the points j/64 of the table for j >= 1, where
             // `fast_atan1` leaves t = c to the core.
             let point = i == ATAN && x.abs() >= 1.0 / 64.0 && (64.0 * x).fract() == 0.0;
             assert!(
-                !always || point || fast_parts1(i, x).is_some(),
+                !always || point || i != ATAN || fast_parts1(i, x).is_some(),
                 "{}({:e}): no parts of the first stage",
+                FUNCTIONS[i].0,
+                x
+            );
+            // Stage 0 of asin and acos, at every argument of asin in [2^-27, 1] and of acos in
+            // [-1, 1).
+            let always0 = match i {
+                ASIN => (TINY_ASIN..=1.0).contains(&x.abs()),
+                ACOS => x.abs() <= 1.0 && x != 1.0,
+                _ => false,
+            };
+            assert!(
+                !always0 || fast_parts0(i, x).is_some(),
+                "{}({:e}): no parts of stage 0",
                 FUNCTIONS[i].0,
                 x
             );
         }
     }
     assert!(fast_parts(ACOS, 1.0).is_none());
-    assert!(fast_parts1(ACOS, 1.0).is_none());
+    assert!(fast_parts0(ACOS, 1.0).is_none());
 
     let mut args2 = vec![];
     // The points and ties of the table, as y / x.
@@ -1929,20 +2008,20 @@ fn widened() {
     }
 }
 
-// The same for the first stages of the fast paths, at their parts (`fast_parts1`,
-// `fast_parts1_2`): where a rounding test of a first stage passes, but would fail with 2^6 err in
-// place of its err, atan, asin, acos and atan2 give the same `f64`s with the first stages as with
-// them disabled, as the kernel and as MPFR (`check_stages`, `check2_stages`). The arguments that a
-// first stage leaves to the second, or atan2's to the kernel, are skipped. The branches and skips
-// are those of `widened`, but for acos below `TINY_ASIN`, where the first stage is the second
-// stage's π/2 - x with its err, `ERR70`, which `widened` takes. atan2's branch of the q below
-// 2^-62 for x > 0 and |y| < |x| stays, though its first stage answers it with err = `ERR70` too,
-// as the second stage does: the first takes q from `fast_quot`, which the second does not.
+// The same for the first stages of the fast paths of atan and atan2, at their parts
+// (`fast_parts1`, `fast_parts1_2`): where a rounding test of a first stage passes, but would fail
+// with 2^6 err in place of its err, atan and atan2 give the same `f64`s with the first stages as
+// with them disabled, as the kernel and as MPFR (`check_stages`, `check2_stages`). The arguments
+// that a first stage leaves to the second, or atan2's to the kernel, are skipped. The branches and
+// skips are those of `widened`, but for those of asin and acos, which have stage 0 in place of a
+// first stage (`widened0`). atan2's branch of the q below 2^-62 for x > 0 and |y| < |x| stays,
+// though its first stage answers it with err = `ERR70` too, as the second stage does: the first
+// takes q from `fast_quot`, which the second does not.
 #[test]
 fn widened1() {
     let mut rng = Rng(1103);
     for (i, a, b) in BRANCHES {
-        if i == ACOS && b <= TINY_ASIN {
+        if i != ATAN {
             continue;
         }
         let (mut dir, mut near, mut n) = (0, 0, 0);
@@ -1992,6 +2071,61 @@ fn widened1() {
             dir += usize::from(narrow_dir);
             near += usize::from(narrow_near);
             check2_stages(y, x);
+        }
+    }
+}
+
+// The branches of stage 0 of asin and acos, as (function, a, b) for the arguments x with |x| in
+// [a, b) of each, which both signs of x take: `fast_asin_poly` takes asin t for t = |x| up to 1/2
+// and acos t above it, from `TINY_ASIN` on (below it, acos takes π/2 - x, as its second stage
+// does). 0.5000000000000001 is the `f64` after 1/2.
+const BRANCHES0: [(usize, f64, f64); 4] = [
+    (ASIN, TINY_ASIN, 0.5000000000000001),
+    (ASIN, 0.5000000000000001, 1.0),
+    (ACOS, TINY_ASIN, 0.5000000000000001),
+    (ACOS, 0.5000000000000001, 1.0),
+];
+
+// A random t in the branch [a, b) of `BRANCHES0`, as `in_range` draws it, but for a branch above
+// 1/2 with `log`, where all of [a, b) has one exponent: there 1 - t is log-uniform in
+// [2^-53, 1/2), m 2^e for a random m in [1, 2) and an e uniform in [-53, -2], rounded.
+fn in_branch0(rng: &mut Rng, a: f64, b: f64, log: bool) -> f64 {
+    if log && a > 0.5 {
+        1.0 - log_uniform(rng, -53, -2)
+    } else {
+        in_range(rng, a, b, log)
+    }
+}
+
+// The same as `widened1` for stage 0 of asin and acos, at its parts (`fast_parts0`), on each
+// branch of `BRANCHES0`, half as `in_range` draws it and half log-uniform (`in_branch0`): where a
+// rounding test of stage 0 passes, but would fail with 2^6 err in place of its err, `ERR60`, asin
+// and acos give the same `f64`s with every stage as without stage 0, as the kernel and as MPFR
+// (`check_stages`).
+#[test]
+fn widened0() {
+    let mut rng = Rng(1290);
+    for (i, a, b) in BRANCHES0 {
+        let (mut dir, mut near, mut n) = (0, 0, 0);
+        while dir < 40 || near < 40 {
+            n += 1;
+            assert!(
+                n <= 1_000_000,
+                "{} on [{a:e}, {b:e}): {dir} narrow passes of the directed tests and {near} of \
+                 the test to nearest of stage 0 in 1000000 arguments",
+                FUNCTIONS[i].0
+            );
+            let x = random_sign(&mut rng) * in_branch0(&mut rng, a, b, n % 2 == 1);
+            let Some(parts) = fast_parts0(i, x) else {
+                continue;
+            };
+            let (narrow_dir, narrow_near) = narrow(parts);
+            if !narrow_dir && !narrow_near {
+                continue;
+            }
+            dir += usize::from(narrow_dir);
+            near += usize::from(narrow_near);
+            check_stages(i, x);
         }
     }
 }
@@ -2153,14 +2287,18 @@ impl Stage1Tally {
 // The roundings of `roundings`, by name.
 const MODES: [&str; 3] = ["rd", "ru", "rn"];
 
-// The first stages of the fast paths of atan, asin, acos and atan2 pass at least 95% of their
-// rounding tests on each set of `COUNT_SETS` and `COUNT_SETS2` in each rounding. The test prints,
-// for each set and rounding, how many calls took a rounding test and how many of those the first
-// stage answered.
+// The first stages of the fast paths of atan and atan2 pass at least 95% of their rounding tests
+// on each of their sets of `COUNT_SETS` and on each set of `COUNT_SETS2` in each rounding. The
+// test prints, for each set and rounding, how many calls took a rounding test and how many of
+// those the first stage answered. asin and acos have stage 0 in place of a first stage, which
+// `stage0_pass_rates` counts.
 #[test]
 fn first_stage_pass_rates() {
     let mut rng = Rng(1101);
     for (i, set) in COUNT_SETS {
+        if i != ATAN {
+            continue;
+        }
         let (name, f) = FUNCTIONS[i];
         let args: Vec<f64> = (0..3000).map(|_| count_arg(&mut rng, i, set)).collect();
         for (mode, mode_name) in MODES.into_iter().enumerate() {
@@ -2195,6 +2333,68 @@ fn first_stage_pass_rates() {
                 tally.add(&format!("atan2({y:e}, {x:e}) {mode_name}"), counts, first);
             }
             tally.check(&format!("atan2 {set} {mode_name}"));
+        }
+    }
+}
+
+// The sets of `stage0_pass_rates`, as (name, a, b): `u` is x uniform in [-1, 1), and the others x
+// with a random sign and 1 - |x| in [a, b), half uniform and half of any exponent in it
+// (`in_range`): the decades of 1 - |x| into which 95.6% of the arguments of solidcore's acos
+// calls fall, by a sample of one call in 10,000 (inari issue #2).
+const STAGE0_SETS: [(&str, f64, f64); 6] = [
+    ("u", -1.0, 1.0),
+    ("1e-1", 1e-1, 1.0),
+    ("1e-2", 1e-2, 1e-1),
+    ("1e-3", 1e-3, 1e-2),
+    ("1e-4", 1e-4, 1e-3),
+    ("1e-5", 1e-5, 1e-4),
+];
+
+// Stage 0 of asin and acos answers at least 98% of the calls on each set of `STAGE0_SETS`, in
+// each rounding. Stage 0 takes the first rounding test of every call that has its parts
+// (`fast_parts0`), so it answers a call iff that call took one test, which passed. The test
+// prints, for each function, set and rounding, how many calls took the test and how many passed.
+#[test]
+fn stage0_pass_rates() {
+    let mut rng = Rng(1291);
+    for i in [ASIN, ACOS] {
+        let (name, f) = FUNCTIONS[i];
+        for (set, a, b) in STAGE0_SETS {
+            let args: Vec<f64> = (0..3000)
+                .map(|n| {
+                    if set == "u" {
+                        a + (b - a) * (rng.below(1 << 53) as f64 / (1u64 << 53) as f64)
+                    } else {
+                        random_sign(&mut rng) * (1.0 - in_range(&mut rng, a, b, n % 2 == 1))
+                    }
+                })
+                .collect();
+            for (mode, mode_name) in MODES.into_iter().enumerate() {
+                let (mut tested, mut passed) = (0, 0);
+                for &x in &args {
+                    reset_fast_counts();
+                    match mode {
+                        0 => f(x, false),
+                        1 => f(x, true),
+                        _ => NEAR[i](x),
+                    };
+                    let counts = fast_counts();
+                    if counts != (0, 0) && fast_parts0(i, x).is_some() {
+                        tested += 1;
+                        passed += usize::from(counts == (1, 0));
+                    }
+                }
+                let calls = args.len();
+                eprintln!(
+                    "stage 0, {name} {set} {mode_name}: {calls} calls, {tested} with its test, \
+                     {passed} answered ({:.2}%)",
+                    100.0 * passed as f64 / calls as f64
+                );
+                assert!(
+                    100 * passed >= 98 * calls,
+                    "stage 0, {name} {set} {mode_name}: {passed} of {calls} calls answered"
+                );
+            }
         }
     }
 }
@@ -2432,6 +2632,430 @@ mod mpfr {
                 "{name}: k π lies {above} of an ulp above {lo:e}"
             );
         }
+    }
+
+    // The Taylor coefficients c_0, ..., c_deg at s_j = j / 256 of the sum of the first `terms`
+    // terms of F(s) = asin(√s) / √s = Σ a_n s^n, exactly: c_k = Σ a_n C(n, k) s_j^(n - k) over
+    // k <= n < `terms`, with a_n = b_n / (2n + 1), b_0 = 1 and b_{n+1} = b_n (2n + 1) / (2n + 2).
+    fn asin_shifted(j: u32, terms: u32, deg: u32) -> Vec<rug::Rational> {
+        use rug::{Integer, Rational};
+        let s = Rational::from((j, 256));
+        let mut a = Vec::new();
+        let mut b = Rational::from(1);
+        for n in 0..terms {
+            a.push(Rational::from(&b / (2 * n + 1)));
+            b *= Rational::from((2 * n + 1, 2 * n + 2));
+        }
+        (0..=deg)
+            .map(|k| {
+                // Horner in s_j over n from terms - 1 down to k.
+                let mut c = Rational::new();
+                for n in (k..terms).rev() {
+                    let binom = Integer::from(Integer::binomial_u(n, k));
+                    c = c * &s + Rational::from(&a[n as usize] * binom);
+                }
+                c
+            })
+            .collect()
+    }
+
+    // `ASIN_TABLE[j]` as the comment on it says: [c0h, c0l, c1, ..., c6] with c0h = RN(c_0),
+    // c0l = RN(c_0 - c0h) and the others RN(c_k), for the Taylor coefficients c_k of F at
+    // j / 256, summed to 400 terms, past which the terms are below 2^-700 at 1/4.
+    fn asin_entry(j: u32, deg: u32) -> Vec<u64> {
+        let c = asin_shifted(j, 400, deg);
+        let rn = |r: &rug::Rational| Float::with_val(53, r).to_f64();
+        let c0h = rn(&c[0]);
+        let c0l = rn(&(&c[0] - rug::Rational::from_f64(c0h).unwrap()));
+        let mut e = vec![c0h.to_bits(), c0l.to_bits()];
+        e.extend(c[1..].iter().map(|ck| rn(ck).to_bits()));
+        e
+    }
+
+    // max over j of Σ_k |E_k| R^k, for R = 2^-9 + 2^-55, a bound on |τ|, and E_k the Taylor
+    // coefficients at j / 256 of the sum of the first 34 terms of F less the polynomial of
+    // `table[j]`, (c0h + c0l) + c1 τ + ... + c6 τ^6: the bound that
+    // `rocq/theories/FastAsinTable.v` proves (`asin_table_close`) for `ASIN_TABLE`.
+    fn asin_table_bound(table: &[Vec<u64>]) -> Float {
+        let r = rug::Rational::from(((1u64 << 46) + 1, 1u64 << 55));
+        let mut max = Float::with_val(PREC, 0);
+        for (j, entry) in (0u32..).zip(table.iter()) {
+            let c = asin_shifted(j, 34, 33);
+            let t: Vec<_> = entry
+                .iter()
+                .map(|&b| rug::Rational::from_f64(f64::from_bits(b)).unwrap())
+                .collect();
+            let mut sum = rug::Rational::new();
+            let mut rk = rug::Rational::from(1);
+            for (k, ck) in c.iter().enumerate() {
+                let tk = match k {
+                    0 => rug::Rational::from(&t[0] + &t[1]),
+                    _ if k + 1 < t.len() => t[k + 1].clone(),
+                    _ => rug::Rational::new(),
+                };
+                sum += (ck - tk).abs() * &rk;
+                rk *= &r;
+            }
+            let sum = Float::with_val(PREC, &sum);
+            if sum > max {
+                max = sum;
+            }
+        }
+        max
+    }
+
+    // The text of `src/dyadic/atan/asin_table.rs` with the rows `rows`, laid out as rustfmt lays
+    // it out.
+    fn asin_table_rs(rows: &[Vec<u64>]) -> String {
+        let mut s = String::from(
+            "// Generated by the test `write_asin_table` of `src/dyadic/atan/tests.rs`, as is\n\
+             // `rocq/theories/ModelAsinTable.v`, which transcribes it: change that test, not \
+             this file.\n\n",
+        );
+        s += &format!(
+            "/// The Taylor coefficients of F(s) = asin(√s) / √s at s_j = j / 256 for j from 0 \
+             to {}, each a\n\
+             /// row [c0h, c0l, c1, c2, c3, c4, c5, c6] of the bits of `f64`s, as \
+             `f64::from_bits` is not\n\
+             /// `const` before Rust 1.83: c0h + c0l is F(s_j) in double-double and c_k is \
+             F^(k)(s_j) / k!,\n\
+             /// each rounded to nearest from the sum of the first 400 terms of the series of \
+             F, whose rest\n\
+             /// is below 2^-700. `rocq/theories/FastAsinTable.v` proves that the polynomial \
+             of row j,\n\
+             /// c0h + c0l + c1 τ + ... + c6 τ^6, is within 11 2^-68 of the sum of the first \
+             34 terms of the\n\
+             /// series at s_j + τ for |τ| <= 2^-9 + 2^-55 (`asin_table_close`), and the test\n\
+             /// `fast_asin_table` checks the rows against MPFR.\n\
+             pub(super) const ASIN_TABLE: [[u64; 8]; {}] = [\n",
+            rows.len() - 1,
+            rows.len()
+        );
+        for row in rows {
+            s += "    [\n";
+            for b in row {
+                s += &format!("        {b:#018x},\n");
+            }
+            s += "    ],\n";
+        }
+        s + "];\n"
+    }
+
+    // The text of `rocq/theories/ModelAsinTable.v` with the rows `rows`.
+    fn model_asin_table_v(rows: &[Vec<u64>]) -> String {
+        let mut s = format!(
+            "(** Generated by the test [write_asin_table] of [src/dyadic/atan/tests.rs],\n    \
+             as is [src/dyadic/atan/asin_table.rs]: change that test, not this file.\n    \
+             The test [asin_table_in_rocq] checks that this file transcribes\n    \
+             [ASIN_TABLE] of [asin_table.rs], the Taylor coefficients of\n    \
+             asin(√s) / √s at j / 256 for j from 0 to {}, each row\n    \
+             [[c0h; c0l; c1; c2; c3; c4; c5; c6]] a list of 8. [Model.v] reads it as\n    \
+             [DyadicAtan.ASIN_TABLE]. *)\n\n\
+             From Stdlib Require Import ZArith List.\n\
+             Import ListNotations.\n\
+             Open Scope Z_scope.\n\n\
+             Definition ASIN_TABLE : list (list Z) := [",
+            rows.len() - 1
+        );
+        for (j, row) in rows.iter().enumerate() {
+            let end = if j + 1 == rows.len() { "]]." } else { "];" };
+            s += &format!(
+                "\n  [{:#018x}; {:#018x}; {:#018x}; {:#018x};\n   {:#018x}; {:#018x}; \
+                 {:#018x}; {:#018x}{end}",
+                row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7]
+            );
+        }
+        s + "\n"
+    }
+
+    // `rocq/theories/ModelAsinTable.v`, which the proofs read the rows of `ASIN_TABLE` from, is
+    // what `model_asin_table_v` makes of them. `rocq/` is not in the package that
+    // `cargo package` makes, so where the file is missing there is nothing to check.
+    #[test]
+    fn asin_table_in_rocq() {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/rocq/theories/ModelAsinTable.v"
+        );
+        let Ok(file) = std::fs::read_to_string(path) else {
+            return;
+        };
+        let rows: Vec<_> = ASIN_TABLE.iter().map(|e| e.to_vec()).collect();
+        assert!(
+            file == model_asin_table_v(&rows),
+            "rocq/theories/ModelAsinTable.v does not transcribe `ASIN_TABLE`: run the test \
+             `write_asin_table`"
+        );
+    }
+
+    // Writes `src/dyadic/atan/asin_table.rs` and `rocq/theories/ModelAsinTable.v` with the rows
+    // `asin_entry(j, 6)` for j from 0 to 64, and prints the bound of `asin_table_bound` at
+    // degrees 6 and 7, and the range of each coefficient over j, which the Gappa lemmas of
+    // `rocq/theories/FastAsinPolyGappa.v` take. Run by hand, with `--ignored --nocapture`.
+    #[test]
+    #[ignore]
+    fn write_asin_table() {
+        for deg in [6, 7] {
+            let table: Vec<_> = (0..65).map(|j| asin_entry(j, deg)).collect();
+            let b = asin_table_bound(&table);
+            println!("degree {deg}: bound 2^{:.3}", b.log2().to_f64());
+        }
+        let rows: Vec<_> = (0..65).map(|j| asin_entry(j, 6)).collect();
+        for k in 0..8 {
+            let v = rows.iter().map(|e| f64::from_bits(e[k]));
+            let lo = v.clone().fold(f64::INFINITY, f64::min);
+            let hi = v.fold(f64::NEG_INFINITY, f64::max);
+            println!("entry[{k}] in [{lo:e}, {hi:e}]");
+        }
+        let root = env!("CARGO_MANIFEST_DIR");
+        std::fs::write(
+            format!("{root}/src/dyadic/atan/asin_table.rs"),
+            asin_table_rs(&rows),
+        )
+        .unwrap();
+        std::fs::write(
+            format!("{root}/rocq/theories/ModelAsinTable.v"),
+            model_asin_table_v(&rows),
+        )
+        .unwrap();
+    }
+
+    // `ASIN_TABLE` is what the comment on it says, and its polynomials are within 11 2^-68 of
+    // the sum of the first 34 terms of F on |τ| <= 2^-9 + 2^-55, as `asin_table_close` in
+    // `rocq/theories/FastAsinTable.v` states. c0h is also RN(asin(√s_j) / √s_j) by MPFR, for
+    // j > 0, and 1 = F(0) for j = 0.
+    #[test]
+    fn fast_asin_table() {
+        for (j, entry) in (0u32..).zip(ASIN_TABLE.iter()) {
+            assert_eq!(entry[..], asin_entry(j, 6)[..], "ASIN_TABLE[{j}]");
+            let want = if j == 0 {
+                1.0
+            } else {
+                let mut r = Float::with_val(PREC, j);
+                r /= 256;
+                r.sqrt_mut();
+                let mut v = r.clone();
+                v.asin_mut();
+                (v / r).to_f64()
+            };
+            assert_eq!(entry[0], want.to_bits(), "ASIN_TABLE[{j}][0]");
+        }
+        let table: Vec<_> = ASIN_TABLE.iter().map(|e| e.to_vec()).collect();
+        assert!(
+            asin_table_bound(&table) <= 11.0 * pow2(-68),
+            "asin_table_bound"
+        );
+    }
+
+    // `fast_asin_poly` is within the 7 2^-64 of `fast_asin_poly_correct` in
+    // `rocq/theories/FastAsinPoly.v` of asin t up to 1/2 and of acos t above it, relatively, on
+    // t log-uniform in [2^-27, 1), uniform in [0, 1), and next to 1/2 and 1, with and without
+    // an FMA alike.
+    #[test]
+    fn fast_asin_poly_bound() {
+        let mut rng = Rng(129);
+        let mut ts: Vec<f64> = (0..20_000)
+            .map(|_| log_uniform(&mut rng, -27, -1))
+            .collect();
+        ts.extend((0..20_000).map(|_| rng.below(1 << 53) as f64 / pow2(53)));
+        for k in 1..=53 {
+            ts.extend([0.5 - pow2(-k - 1), 0.5 + pow2(-k), 1.0 - pow2(-k)]);
+        }
+        let mut max = 0.0f64;
+        for &t in ts.iter().filter(|&&t| t >= pow2(-27) && t < 1.0) {
+            let (ch, cl) = fast_asin_poly::<false>(t);
+            assert_eq!(
+                (ch.to_bits(), cl.to_bits()),
+                {
+                    let (h, l) = fast_asin_poly::<true>(t);
+                    (h.to_bits(), l.to_bits())
+                },
+                "fast_asin_poly with and without an FMA at {t:e}"
+            );
+            let mut v = Float::with_val(PREC, t);
+            if t <= 0.5 {
+                v.asin_mut();
+            } else {
+                v.acos_mut();
+            }
+            let err = Float::with_val(PREC, Float::with_val(PREC, &v - ch) - cl).abs() / &v;
+            let e = (err * pow2(64)).to_f64();
+            assert!(e <= 7.0, "fast_asin_poly({t:e}): {e} 2^-64");
+            max = max.max(e);
+        }
+        println!("fast_asin_poly: at most {max} 2^-64");
+    }
+
+    // The `f64` that `s` names, rounded to nearest, ties to even, as C's `strtod` reads it: a
+    // hexadecimal float such as `0x1.ffffffffffdcp-1`, `0x.fffffffffffffp-1022` or `0x4p-1076`,
+    // a decimal such as `2`, `inf`, `nan` or `snan` (here a quiet NaN), each with an optional
+    // sign. These are the forms of CORE-MATH's files of worst cases, read as `parse` in
+    // `src/cr/tests/mpfr/hard_cases.rs` reads them.
+    fn parse(s: &str) -> f64 {
+        let (neg, t) = match s.as_bytes().first() {
+            Some(b'-') => (true, &s[1..]),
+            Some(b'+') => (false, &s[1..]),
+            _ => (false, s),
+        };
+        let v = if let Some(h) = t.strip_prefix("0x") {
+            parse_hex(h)
+        } else if t == "snan" {
+            f64::NAN
+        } else {
+            t.parse().unwrap_or_else(|_| panic!("cannot parse {s}"))
+        };
+        if neg {
+            -v
+        } else {
+            v
+        }
+    }
+
+    // The `f64` nearest m 2^e, ties to even, where m is the integer of the hexadecimal digits of
+    // `s` = `<digits>p<e'>` or `<digits>` (e' = 0) and e = e' - 4k for k digits after the point.
+    // m 2^e is exact at the precision of m, and MPFR rounds it to an `f64`, to a subnormal too.
+    fn parse_hex(s: &str) -> f64 {
+        let (digits, exp) = s.split_once('p').unwrap_or((s, "0"));
+        let (int, frac) = digits.split_once('.').unwrap_or((digits, ""));
+        let m = rug::Integer::from_str_radix(&format!("{int}{frac}"), 16)
+            .unwrap_or_else(|_| panic!("cannot parse 0x{s}"));
+        let e = exp
+            .parse::<i32>()
+            .unwrap_or_else(|_| panic!("cannot parse 0x{s}"))
+            - 4 * i32::try_from(frac.len()).unwrap();
+        (Float::with_val(m.significant_bits().max(1), m) << e).to_f64()
+    }
+
+    // asin (i = `ASIN`) or acos at x toward -∞, toward +∞ and to nearest by its stage 0, with
+    // `FMA` for the products, or `None` where stage 0 leaves x to the second stage.
+    fn stage0<const FMA: bool>(i: usize, x: f64) -> [Option<f64>; 3] {
+        match i {
+            ASIN => [
+                fast_asin_dir0::<FMA>(x, false),
+                fast_asin_dir0::<FMA>(x, true),
+                fast_asin_near0::<FMA>(x),
+            ],
+            ACOS => [
+                fast_acos_dir0::<FMA>(x, false),
+                fast_acos_dir0::<FMA>(x, true),
+                fast_acos_near0::<FMA>(x),
+            ],
+            _ => unreachable!(),
+        }
+    }
+
+    // For each copy of `stage0`, without and with an FMA, and each rounding of `MODES`: the
+    // arguments at which it answered, and the mismatches with MPFR among them.
+    type Stage0Counts = [[(usize, usize); 3]; 2];
+
+    // Stage 0 of asin and acos (`fast_asin_dir0`, `fast_asin_near0`, `fast_acos_dir0` and
+    // `fast_acos_near0`), without and with an FMA, give MPFR's roundings wherever they answer,
+    // at every argument in [-1, 1] of CORE-MATH's worst cases of the function,
+    // `src/binary64/asin/asin.wc` and `acos/acos.wc` of the clone of CORE-MATH at `$CORE_MATH`,
+    // after repeated arguments are removed, but for those of asin below `TINY_ASIN`, which its
+    // rules take: `CORE_MATH=<clone> cargo test --release --lib stage0_hard_cases -- --ignored
+    // --nocapture`. It prints the number of arguments and, for each copy and rounding, how many
+    // the stage answered and how many of those differ from MPFR. Each of those goes into
+    // `regressions`.
+    #[test]
+    #[ignore]
+    fn stage0_hard_cases() {
+        // `parse` at each form of the files, and at ties of the rounding to 53 bits.
+        for (s, v) in [
+            ("+1", 1.0),
+            ("-2", -2.0),
+            ("0x1p+0", 1.0),
+            ("0x1.ffffffffffdcp-1", 1.0 - 9.0 * pow2(-47)),
+            ("0x8p-972", pow2(-969)),
+            ("0x4p-1076", 5e-324),
+            ("-0x.fffffffffffffp-1022", -(f64::MIN_POSITIVE - 5e-324)),
+            ("0x1.00000000000008p+0", 1.0),
+            ("0x1.00000000000018p+0", 1.0 + pow2(-51)),
+            ("0x2p-1076", 0.0),
+        ] {
+            assert_eq!(parse(s).to_bits(), v.to_bits(), "parse({s})");
+        }
+        let root = std::env::var("CORE_MATH").expect("CORE_MATH, a clone of CORE-MATH");
+        let mut errs = vec![];
+        for (i, file) in [(ASIN, "asin"), (ACOS, "acos")] {
+            let name = FUNCTIONS[i].0;
+            let path = format!("{root}/src/binary64/{file}/{file}.wc");
+            let src = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{path}: {e}"));
+            let lo = if i == ASIN { TINY_ASIN } else { 0.0 };
+            let mut seen = std::collections::HashSet::new();
+            // The first word of each line before any `#`, as `args` in `hard_cases.rs` reads it.
+            let xs: Vec<f64> = src
+                .lines()
+                .filter_map(|line| {
+                    let word = line.split('#').next()?.split_whitespace().next()?;
+                    let x = parse(word);
+                    ((lo..=1.0).contains(&x.abs()) && seen.insert(x.to_bits())).then_some(x)
+                })
+                .collect();
+            // Split over 16 threads, as `check_all` in `hard_cases.rs` does.
+            let chunk = xs.len().div_ceil(16).max(1);
+            let parts: Vec<(Stage0Counts, Vec<String>)> = std::thread::scope(|s| {
+                let threads: Vec<_> = xs
+                    .chunks(chunk)
+                    .map(|part| {
+                        s.spawn(move || {
+                            let mut counts = Stage0Counts::default();
+                            let mut errs = vec![];
+                            for &x in part {
+                                let want = [MPFR[i].0(x), MPFR[i].1(x), MPFR_NEAR[i](x)];
+                                let copies = [stage0::<false>(i, x), stage0::<true>(i, x)];
+                                for (fma, got) in copies.into_iter().enumerate() {
+                                    for (r, g) in got.into_iter().enumerate() {
+                                        let Some(g) = g else { continue };
+                                        counts[fma][r].0 += 1;
+                                        if !same(g, want[r]) {
+                                            counts[fma][r].1 += 1;
+                                            errs.push(format!(
+                                                "{name}({x:e}) {}, FMA {}: {g:e} != MPFR's {:e}",
+                                                MODES[r],
+                                                fma == 1,
+                                                want[r]
+                                            ));
+                                        }
+                                    }
+                                }
+                            }
+                            (counts, errs)
+                        })
+                    })
+                    .collect();
+                threads
+                    .into_iter()
+                    .map(|t| t.join().unwrap_or_else(|e| std::panic::resume_unwind(e)))
+                    .collect()
+            });
+            let mut counts = Stage0Counts::default();
+            for (c, es) in parts {
+                for (row, part) in counts.iter_mut().zip(c) {
+                    for (n, p) in row.iter_mut().zip(part) {
+                        *n = (n.0 + p.0, n.1 + p.1);
+                    }
+                }
+                errs.extend(es);
+            }
+            for (fma, row) in counts.iter().enumerate() {
+                for (r, (answered, bad)) in row.iter().enumerate() {
+                    println!(
+                        "stage 0, {name} at the {} arguments of {file}.wc, {}, FMA {}: \
+                         {answered} answered, {bad} mismatches",
+                        xs.len(),
+                        MODES[r],
+                        fma == 1
+                    );
+                }
+            }
+        }
+        assert!(
+            errs.is_empty(),
+            "{} mismatches with MPFR:\n{}",
+            errs.len(),
+            errs.join("\n")
+        );
     }
 }
 

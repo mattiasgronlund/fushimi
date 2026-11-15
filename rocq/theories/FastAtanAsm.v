@@ -1,17 +1,19 @@
 (** * The assembly steps of the fast paths of atan, atan2, asin and acos
 
     [DyadicAtan.pio2_add f rh rl] of [Model.v] adds [f π/2], for [f = 1/2]
-    or [1], to a double-double [rh + rl] with [|rh| <= f] and [|rl| <=
+    or [1], to a double-double [rh + rl] with [|rh| <= 3/2 f] and [|rl| <=
     2^-52], with [PIO2] of [FastAtanTables.v], within [2^-102]
-    ([pio2_add_correct]).
+    ([pio2_add_wide]; [pio2_add_correct] for [|rh| <= f]).
     [DyadicAtan.split v] writes a positive finite [v] as [m 2^e] with [m]
     in [[1, 2)] exactly ([split_correct]), as [DyadicLog.ln_split].
     [DyadicAtan.octant swap neg rh rl] turns a double-double [rh + rl]
     near [v] in [(0, 4/5]] into [h + l] near [v], [π - v], [π/2 - v] or
     [π/2 + v] by [(swap, neg)], scaled by [2^-e] into the range of
     [Fast.round_dir_err] and [Fast.round_near_err], within [2^-70]
-    ([octant_correct]). None of these sums cancels: each is at least
-    [π/4], or is [v] itself. *)
+    ([octant_correct]). For [v] in [(0, 21/20]], and [rh + rl] within [d]
+    of [v], it is within [d + 2^-100], or [2 d / (1 - d)] for [v] itself
+    ([octant_wide]). None of these sums cancels: each is at least [π/2 -
+    21/20 > 1/2], or is [v] itself. *)
 
 From Stdlib Require Import ZArith Reals Lra Lia.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN Plus_error.
@@ -33,11 +35,14 @@ Local Ltac close :=
   set (w := bpow radix2 (-1075)) in *; clearbody w;
   cbn [bpow radix_val radix2] in *; lra.
 
-Lemma pio2_add_correct :
+(** [DyadicAtan.pio2_add f rh rl] for [|rh| <= 3/2 f], as [octant_wide]
+    needs for [v] up to [21/20]: Fast2Sum still applies to [RN(π/2) f +
+    rh], as [RN(π/2) f > 3/2 f]. *)
+Lemma pio2_add_wide :
   forall f rh rl,
   is_finite f = true -> is_finite rh = true -> is_finite rl = true ->
   (B2R f = / 2 \/ B2R f = 1) ->
-  Rabs (B2R rh) <= B2R f -> Rabs (B2R rl) <= bpow radix2 (-52) ->
+  Rabs (B2R rh) <= 3 / 2 * B2R f -> Rabs (B2R rl) <= bpow radix2 (-52) ->
   let '(h, l) := DyadicAtan.pio2_add f rh rl in
   is_finite h = true /\ is_finite l = true /\ B2R h = RN (B2R h + B2R l) /\
   Rabs (B2R h + B2R l - (B2R f * (PI / 2) + (B2R rh + B2R rl))) <= bpow radix2 (-102).
@@ -64,11 +69,11 @@ assert (Hm1 : is_finite (mul P f) = true /\ B2R (mul P f) = B2R P * B2R f).
 destruct Hm1 as (Fm1 & Em1).
 set (m1 := mul P f) in *.
 rewrite EP in Em1, HPi.
-(* [s = RN(P f + rh)], with [P f + rh] in [[0.28, 2.6]]. *)
-destruct (FastExpErr.add_k m1 rh (13 / 5) Fm1 Frh) as (Fs & Es & Hs); [rewrite Em1; close | lra |].
+(* [s = RN(P f + rh)], with [P f + rh] in [[0.035, 3.08]]. *)
+destruct (FastExpErr.add_k m1 rh (16 / 5) Fm1 Frh) as (Fs & Es & Hs); [rewrite Em1; close | lra |].
 set (s := add m1 rh) in *.
 destruct (CancelLanes.fast_two_sum m1 rh s Fm1 Frh) as (Fs0 & Es0); [| exact Fs | exact Es |].
-{ apply Rle_trans with (B2R f); [exact Hrh |]. rewrite Em1, Rabs_pos_eq by lra. lra. }
+{ apply Rle_trans with (3 / 2 * B2R f); [exact Hrh |]. rewrite Em1, Rabs_pos_eq by lra. lra. }
 set (s0 := add rh (sub m1 s)) in *.
 (* [m2 = RN(Pl f)], with [|Pl f| <= 2^-53]. *)
 assert (HPlf : Rabs (B2R Pl * B2R f) <= bpow radix2 (-53)).
@@ -77,14 +82,14 @@ assert (HPlf : Rabs (B2R Pl * B2R f) <= bpow radix2 (-53)).
 destruct (FastExpErr.mul_k Pl f (bpow radix2 (-53)) FPl Ff HPlf) as (Fm2 & _ & Hm2); [close |].
 set (m2 := mul Pl f) in *.
 (* The low parts: [a1 = RN(s0 + m2)] and [v = RN(a1 + rl)]. *)
-destruct (FastExpErr.add_k s0 m2 (4 * bpow radix2 (-53)) Fs0 Fm2) as (Fa1 & _ & Ha1);
+destruct (FastExpErr.add_k s0 m2 (5 * bpow radix2 (-53)) Fs0 Fm2) as (Fa1 & _ & Ha1);
   [close | close |].
 set (a1 := add s0 m2) in *.
 destruct (FastExpErr.add_k a1 rl (7 * bpow radix2 (-53)) Fa1 Frl) as (Fv & _ & Hv);
   [close | close |].
 set (v := add a1 rl) in *.
 (* [h = RN(s + v)], and Fast2Sum is exact as [|v| <= 2^-50 <= s]. *)
-destruct (FastExpErr.add_k s v 3 Fs Fv) as (Fh & Eh & _); [close | lra |].
+destruct (FastExpErr.add_k s v 4 Fs Fv) as (Fh & Eh & _); [close | lra |].
 set (h := add s v) in *.
 destruct (CancelLanes.fast_two_sum s v h Fs Fv) as (Fl & El); [| exact Fh | exact Eh |].
 { rewrite (Rabs_pos_eq (B2R s)) by close. close. }
@@ -92,12 +97,26 @@ rewrite El.
 split; [exact Fh |]. split; [exact Fl |].
 split; [replace (B2R h + (B2R s + B2R v - B2R h)) with (B2R s + B2R v) by ring; exact Eh |].
 (* The error is [f (P + Pl - pi/2)] plus the three roundings of the low
-   parts: [2^-107 + (1 + 4 + 7) 2^-106 + 3 2^-1075 <= 2^-102]. *)
+   parts: [2^-107 + (1 + 5 + 7) 2^-106 + 3 2^-1075 <= 2^-102]. *)
 assert (HPiF : Rabs (B2R f * (884279719003555 / 562949953421312 + B2R Pl - PI / 2)) <=
   1 * bpow radix2 (-107)).
 { apply FastExpErr.Rabs_mul_le; [rewrite Rabs_pos_eq; lra | exact HPi]. }
 clear Es Eh El.
 close.
+Qed.
+
+(** [pio2_add_wide] for [|rh| <= f]. *)
+Lemma pio2_add_correct :
+  forall f rh rl,
+  is_finite f = true -> is_finite rh = true -> is_finite rl = true ->
+  (B2R f = / 2 \/ B2R f = 1) ->
+  Rabs (B2R rh) <= B2R f -> Rabs (B2R rl) <= bpow radix2 (-52) ->
+  let '(h, l) := DyadicAtan.pio2_add f rh rl in
+  is_finite h = true /\ is_finite l = true /\ B2R h = RN (B2R h + B2R l) /\
+  Rabs (B2R h + B2R l - (B2R f * (PI / 2) + (B2R rh + B2R rl))) <= bpow radix2 (-102).
+Proof.
+intros f rh rl Ff Frh Frl Hf Hrh Hrl.
+apply (pio2_add_wide f rh rl Ff Frh Frl Hf); [destruct Hf; lra | exact Hrl].
 Qed.
 
 (** The split of a normal pattern [c]: [m] is [1 + M 2^-52] for the
@@ -232,11 +251,11 @@ Local Lemma lit_neg_half :
   is_finite DyadicLog.neg_half = true /\ B2R DyadicLog.neg_half = - / 2.
 Proof. split; [vm_compute; reflexivity |]. lit_B2R. cbn [bpow radix_val radix2]. lra. Qed.
 
-(** [c x] for [c = 1/2] or [-1/2] and [|x| <= 1]: exact where it is
+(** [c x] for [c = 1/2] or [-1/2] and [|x| <= 2]: exact where it is
     normal, and within half an ulp of the subnormals, [2^-1075], below. *)
 Local Lemma mul_half :
   forall c x, is_finite c = true -> is_finite x = true ->
-  (B2R c = / 2 \/ B2R c = - / 2) -> Rabs (B2R x) <= 1 ->
+  (B2R c = / 2 \/ B2R c = - / 2) -> Rabs (B2R x) <= 2 ->
   is_finite (mul c x) = true /\ Rabs (B2R (mul c x) - B2R c * B2R x) <= bpow radix2 (-1075).
 Proof.
 intros c x Fc Fx Hc Hx.
@@ -296,6 +315,23 @@ Proof.
 intros rh rl v Hrn Hv Hz.
 assert (Hd : bpow radix2 (-73) <= bpow radix2 (-60)) by (apply bpow_le; lia).
 exact (oct_low_d rh rl v _ Hrn Hv Hd Hz).
+Qed.
+
+(** [oct_low_d] for [v] up to [21/20]: [|rh + rl| < 2] gives [|rl| <=
+    2^-52], and then [|rh| <= 53/50]. *)
+Local Lemma oct_low_wide :
+  forall (rh rl : f64) v d, B2R rh = RN (B2R rh + B2R rl) -> 0 < v <= 21 / 20 ->
+  d <= bpow radix2 (-60) -> Rabs (B2R rh + B2R rl - v) <= d ->
+  Rabs (B2R rl) <= bpow radix2 (-52) /\ Rabs (B2R rh) <= 53 / 50.
+Proof.
+intros rh rl v d Hrn Hv Hd Hz.
+assert (Hz1 : Rabs (B2R rh + B2R rl) <= bpow radix2 (-52 + 53)).
+{ change (-52 + 53)%Z with 1%Z. close. }
+pose proof (FastHypPos.rn_err _ (-52) ltac:(lia) Hz1) as Hr.
+rewrite <- Hrn in Hr.
+replace (B2R rh - (B2R rh + B2R rl)) with (- B2R rl) in Hr by ring.
+rewrite Rabs_Ropp in Hr.
+split; [exact Hr | close].
 Qed.
 
 (** For [(swap, neg)] = [(false, false)], [rh + rl] must be within
@@ -420,34 +456,39 @@ destruct swap, neg; cbv beta iota delta [orb] in Hc;
   rewrite Ekk. cbn [bpow radix_val radix2]. lra.
 Qed.
 
-(** [octant_correct] for [rh + rl] within [d] of [v], for [2^-100 <= d <=
-    2^-60], relatively for [(swap, neg)] = [(false, false)] and absolutely
-    for the others: the result is within [3 d] of the octant's value. *)
-Lemma octant_bound :
+(** [octant_correct] for [rh + rl] within [d] of [v], for [v] up to
+    [21/20], above the [π/3] of [DyadicAtan.fast_asin_poly], and [2^-100
+    <= d <= 2^-60], relatively for [(swap, neg)] = [(false, false)] and
+    absolutely for the others: the result is within [d + 2^-100] of the
+    octant's value for the others, and within [2 d / (1 - d)] for [(false,
+    false)]. *)
+Lemma octant_wide :
   forall swap neg rh rl v h l e err d,
   is_finite rh = true -> is_finite rl = true -> B2R rh = RN (B2R rh + B2R rl) ->
-  0 < v <= 4 / 5 -> bpow radix2 (-100) <= d <= bpow radix2 (-60) ->
+  0 < v <= 21 / 20 -> bpow radix2 (-100) <= d <= bpow radix2 (-60) ->
   (if swap || neg then Rabs (B2R rh + B2R rl - v) <= d
    else bpow radix2 (-1020) <= v /\ Rabs (B2R rh + B2R rl - v) <= d * v) ->
   DyadicAtan.octant swap neg rh rl = (h, l, e, err) ->
   is_finite h = true /\ is_finite l = true /\ B2R h = RN (B2R h + B2R l) /\
   (-1021 <= e <= 1)%Z /\
   Rabs ((if swap then (if neg then PI / 2 + v else PI / 2 - v) else (if neg then PI - v else v))
-        * bpow radix2 (- e) - (B2R h + B2R l)) <= 3 * d.
+        * bpow radix2 (- e) - (B2R h + B2R l))
+    <= (if swap || neg then d + bpow radix2 (-100) else 2 * d / (1 - d)).
 Proof.
 intros swap neg rh rl v h l e err d Frh Frl Hrn Hv Hd Hc E.
 destruct Hd as (Hd0 & Hd1).
 destruct FastLogReduce.one_R as (F1 & E1).
 destruct swap, neg; cbv beta iota delta [orb] in Hc;
-  cbv beta iota delta [DyadicAtan.octant] in E; cbv beta iota.
-- (* [π/2 + v]: [π/4 + v/2] with [e = 1]; the error is at most [2^-102 +
-     2 2^-1075 + d / 2 <= 3 d], as [d >= 2^-100]. *)
-  destruct (oct_low_d rh rl v d Hrn Hv Hd1 Hc) as (Hrl & Hrh).
+  cbv beta iota delta [DyadicAtan.octant] in E; cbv beta iota delta [orb].
+- (* [π/2 + v]: [π/4 + v/2] with [e = 1]; [|rh| <= 53/50] gives [|rh/2|
+     <= 3/4], and the error is at most [2^-102 + 2 2^-1075 + d / 2 <= d +
+     2^-100]. *)
+  destruct (oct_low_wide rh rl v d Hrn Hv Hd1 Hc) as (Hrl & Hrh).
   destruct lit_half as (Fc & Ec).
   destruct (mul_half _ rh Fc Frh (or_introl Ec) ltac:(lra)) as (Fa & Ha).
   destruct (mul_half _ rl Fc Frl (or_introl Ec) ltac:(close)) as (Fb & Hb).
   rewrite Ec in Ha, Hb.
-  pose proof (pio2_add_correct _ _ _ Fc Fa Fb (or_introl Ec)
+  pose proof (pio2_add_wide _ _ _ Fc Fa Fb (or_introl Ec)
     ltac:(rewrite Ec; close) ltac:(close)) as H.
   revert E H.
   destruct (DyadicAtan.pio2_add DyadicLog.half (mul DyadicLog.half rh) (mul DyadicLog.half rl))
@@ -457,14 +498,14 @@ destruct swap, neg; cbv beta iota delta [orb] in Hc;
   split; [exact Fh |]. split; [exact Fl |]. split; [exact Hrn' |]. split; [lia |].
   rewrite (bpow_opp radix2 1). change (bpow radix2 1) with 2.
   close.
-- (* [π/2 - v] with [e = 0]: at most [2^-102 + d <= 3 d]. *)
-  destruct (oct_low_d rh rl v d Hrn Hv Hd1 Hc) as (Hrl & Hrh).
+- (* [π/2 - v] with [e = 0]: at most [2^-102 + d <= d + 2^-100]. *)
+  destruct (oct_low_wide rh rl v d Hrn Hv Hd1 Hc) as (Hrl & Hrh).
   assert (Fa : is_finite (opp rh) = true) by (unfold opp; rewrite is_finite_Bopp; exact Frh).
   assert (Ea : B2R (opp rh) = - B2R rh) by (unfold opp; apply B2R_Bopp).
   assert (Fb : is_finite (opp rl) = true) by (unfold opp; rewrite is_finite_Bopp; exact Frl).
   assert (Eb : B2R (opp rl) = - B2R rl) by (unfold opp; apply B2R_Bopp).
-  pose proof (pio2_add_correct _ _ _ F1 Fa Fb (or_intror E1)
-    ltac:(rewrite Ea, Rabs_Ropp, E1; lra) ltac:(rewrite Eb, Rabs_Ropp; close)) as H.
+  pose proof (pio2_add_wide _ _ _ F1 Fa Fb (or_intror E1)
+    ltac:(rewrite Ea, Rabs_Ropp, E1; lra) ltac:(rewrite Eb, Rabs_Ropp; exact Hrl)) as H.
   revert E H.
   destruct (DyadicAtan.pio2_add DyadicExp.one (opp rh) (opp rl)) as (h', l').
   cbv beta iota. intros E (Fh & Fl & Hrn' & Herr). injection E as <- <- <- <-.
@@ -473,12 +514,12 @@ destruct swap, neg; cbv beta iota delta [orb] in Hc;
   change (bpow radix2 (- 0)) with 1.
   close.
 - (* [π - v]: [π/2 - v/2] with [e = 1], as the first case. *)
-  destruct (oct_low_d rh rl v d Hrn Hv Hd1 Hc) as (Hrl & Hrh).
+  destruct (oct_low_wide rh rl v d Hrn Hv Hd1 Hc) as (Hrl & Hrh).
   destruct lit_neg_half as (Fc & Ec).
   destruct (mul_half _ rh Fc Frh (or_intror Ec) ltac:(lra)) as (Fa & Ha).
   destruct (mul_half _ rl Fc Frl (or_intror Ec) ltac:(close)) as (Fb & Hb).
   rewrite Ec in Ha, Hb.
-  pose proof (pio2_add_correct _ _ _ F1 Fa Fb (or_intror E1)
+  pose proof (pio2_add_wide _ _ _ F1 Fa Fb (or_intror E1)
     ltac:(rewrite E1; close) ltac:(close)) as H.
   revert E H.
   destruct (DyadicAtan.pio2_add DyadicExp.one (mul DyadicLog.neg_half rh)
@@ -500,7 +541,8 @@ destruct swap, neg; cbv beta iota delta [orb] in Hc;
   { change (-1020)%Z with (1 + -1021)%Z. rewrite bpow_plus. reflexivity. }
   pose proof (bpow_gt_0 radix2 (-1021)) as P1021.
   assert (Hz' := Hz). apply Rabs_le_inv in Hz'.
-  (* [rh = RN(z)] is in [[2^-1021, 2)], as [z] is in [[2 v / 3, 4 v / 3]]. *)
+  (* [rh = RN(z)] is in [[2^-1021, 2)], as [z] is in [[2 v / 3, 4 v / 3]]
+     and [4 v / 3 <= 7/5]. *)
   assert (Hrh : bpow radix2 (-1021) <= B2R rh < 2).
   { split.
     - rewrite Hrn. apply round_ge_generic;
@@ -514,8 +556,9 @@ destruct swap, neg; cbv beta iota delta [orb] in Hc;
   cbv beta iota. intros E (Fh & Fl & Hk & Eh & El & Hb & Hrn').
   injection E as <- <- <- <-.
   split; [exact Fh |]. split; [exact Fl |]. split; [exact Hrn' |]. split; [lia |].
-  (* [z < 2^(k+1)], or [RN(z) >= 2^(k+1) > rh]; with [z >= (1 - d) v >=
-     2 v / 3], [v < 3 2^k], and the error is at most [d v 2^-k <= 3 d]. *)
+  (* [z < 2^(k+1)], or [RN(z) >= 2^(k+1) > rh]; with [z >= (1 - d) v],
+     [v <= 2 2^k / (1 - d)], and the error is at most [d v 2^-k <= 2 d /
+     (1 - d)]. *)
   assert (Hzk : z < bpow radix2 (k + 1)).
   { destruct (Rlt_or_le z (bpow radix2 (k + 1))) as [H | H]; [exact H | exfalso].
     assert (bpow radix2 (k + 1) <= B2R rh).
@@ -526,7 +569,9 @@ destruct swap, neg; cbv beta iota delta [orb] in Hc;
     by (rewrite <- bpow_plus, Z.add_opp_diag_r; reflexivity).
   assert (Hk1 : bpow radix2 (k + 1) = 2 * bpow radix2 k)
     by (rewrite bpow_plus; change (bpow radix2 1) with 2; ring).
-  assert (H3 : v <= 3 * bpow radix2 k) by lra.
+  assert (Hd0' : 0 <= d) by (pose proof (bpow_gt_0 radix2 (-100)); lra).
+  assert (H1d : 0 < 1 - d) by lra.
+  assert (Hv2 : v * (1 - d) <= 2 * bpow radix2 k) by lra.
   rewrite Eh, El.
   replace (v * bpow radix2 (- k) - (B2R rh * bpow radix2 (- k) + B2R rl * bpow radix2 (- k)))
     with ((v - z) * bpow radix2 (- k)) by (unfold z; ring).
@@ -534,11 +579,52 @@ destruct swap, neg; cbv beta iota delta [orb] in Hc;
   rewrite Rabs_minus_sym.
   apply Rle_trans with (d * v * bpow radix2 (- k)).
   { apply Rmult_le_compat_r; [apply bpow_ge_0 | exact Hz]. }
-  assert (Hd0' : 0 <= d) by (pose proof (bpow_gt_0 radix2 (-100)); lra).
-  apply Rle_trans with (d * (3 * bpow radix2 k) * bpow radix2 (- k)).
-  { apply Rmult_le_compat_r; [apply bpow_ge_0 |].
-    apply Rmult_le_compat_l; [exact Hd0' | exact H3]. }
-  replace (d * (3 * bpow radix2 k) * bpow radix2 (- k))
-    with (3 * d * (bpow radix2 k * bpow radix2 (- k))) by ring.
+  apply (Rmult_le_reg_r (1 - d)); [exact H1d |].
+  replace (2 * d / (1 - d) * (1 - d)) with (2 * d) by (field; lra).
+  replace (d * v * bpow radix2 (- k) * (1 - d))
+    with (d * bpow radix2 (- k) * (v * (1 - d))) by ring.
+  apply Rle_trans with (d * bpow radix2 (- k) * (2 * bpow radix2 k)).
+  { apply Rmult_le_compat_l; [| exact Hv2].
+    apply Rmult_le_pos; [exact Hd0' | apply bpow_ge_0]. }
+  replace (d * bpow radix2 (- k) * (2 * bpow radix2 k))
+    with (2 * d * (bpow radix2 k * bpow radix2 (- k))) by ring.
   rewrite Ekk. lra.
+Qed.
+
+(** [octant_correct] for [rh + rl] within [d] of [v], for [2^-100 <= d <=
+    2^-60], relatively for [(swap, neg)] = [(false, false)] and absolutely
+    for the others: the result is within [3 d] of the octant's value. It is
+    [octant_wide] for [v <= 4/5], as [d + 2^-100 <= 3 d] and [2 d / (1 - d)
+    <= 3 d]. *)
+Lemma octant_bound :
+  forall swap neg rh rl v h l e err d,
+  is_finite rh = true -> is_finite rl = true -> B2R rh = RN (B2R rh + B2R rl) ->
+  0 < v <= 4 / 5 -> bpow radix2 (-100) <= d <= bpow radix2 (-60) ->
+  (if swap || neg then Rabs (B2R rh + B2R rl - v) <= d
+   else bpow radix2 (-1020) <= v /\ Rabs (B2R rh + B2R rl - v) <= d * v) ->
+  DyadicAtan.octant swap neg rh rl = (h, l, e, err) ->
+  is_finite h = true /\ is_finite l = true /\ B2R h = RN (B2R h + B2R l) /\
+  (-1021 <= e <= 1)%Z /\
+  Rabs ((if swap then (if neg then PI / 2 + v else PI / 2 - v) else (if neg then PI - v else v))
+        * bpow radix2 (- e) - (B2R h + B2R l)) <= 3 * d.
+Proof.
+intros swap neg rh rl v h l e err d Frh Frl Hrn Hv Hd Hc E.
+destruct (octant_wide swap neg rh rl v h l e err d Frh Frl Hrn ltac:(lra) Hd Hc E)
+  as (Fh & Fl & Hrn' & He & Herr).
+split; [exact Fh |]. split; [exact Fl |]. split; [exact Hrn' |]. split; [exact He |].
+eapply Rle_trans; [exact Herr |].
+assert (HD : bpow radix2 (-100) <= d <= / 3).
+{ destruct Hd as (Hd0 & Hd1). split; [exact Hd0 |].
+  apply Rle_trans with (1 := Hd1). cbn [bpow radix_val radix2]. lra. }
+pose proof (bpow_gt_0 radix2 (-100)) as H100.
+destruct (swap || neg).
+- (* [d + 2^-100 <= 3 d], as [d >= 2^-100]. *)
+  lra.
+- (* [2 d / (1 - d) <= 3 d], as [d <= 1/3]: [3 d (1 - d) - 2 d = d (1 - 3
+     d) >= 0]. *)
+  apply (Rmult_le_reg_r (1 - d)); [lra |].
+  replace (2 * d / (1 - d) * (1 - d)) with (2 * d) by (field; lra).
+  replace (3 * d * (1 - d)) with (2 * d + d * (1 - 3 * d)) by ring.
+  assert (0 <= d * (1 - 3 * d)) by (apply Rmult_le_pos; lra).
+  lra.
 Qed.

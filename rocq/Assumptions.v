@@ -62,7 +62,8 @@ From Inari Require FastPowTaylor FastPowHorner FastPowCube FastPowPoly FastPowCo
   FastPowRules FastPow.
 From Inari Require FastDdSqrt FastLogDd AsinhTaylor FastAhypOdd FastAhypNear1 FastAhypAsinh FastAhypAcosh
   FastAhypAtanh FastAhyp.
-From Inari Require FastAtanTables FastAtanPoly FastAtanCore FastAtan FastAsin AtanExactDiv
+From Inari Require FastAtanTables FastAtanPoly FastAtanCore FastAtan AsinSeries FastAsinTable
+  FastAsinPolyGappa FastAsinPolyTail FastAsinPolyRed FastAsinPolyB FastAsinPoly FastAsin AtanExactDiv
   AtanPiConst.
 From Inari Require FastRoundSubBits FastRoundSubCommon FastRoundSub FastRoundWide FastRoundWideErr
   FastExpEdge FastExpByEdge.
@@ -541,6 +542,8 @@ Print Assumptions FastAtan1Quot.fast_recip_fma.
 Print Assumptions FastAtan1.fast_atan1_correct.
 Print Assumptions FastAtan1.fast_atan1_fma.
 Print Assumptions FastAtanAsm.octant_bound.
+Print Assumptions FastAtanAsm.pio2_add_wide.
+Print Assumptions FastAtanAsm.octant_wide.
 Print Assumptions FastAtan.fast_atan_pos_correct.
 Print Assumptions FastAtan.fast_atan2_pos_correct.
 Print Assumptions FastAtan.fast_atan_pos_fma.
@@ -562,14 +565,27 @@ Print Assumptions AtanExactDiv.exact_div_fma.
 Print Assumptions AtanPiConst.pi_bounds_correct.
 Print Assumptions AtanPiConst.pi_const_rounds.
 Print Assumptions AtanPiConst.pi_const_near.
+Print Assumptions AsinSeries.asin_poly_bounds.
+Print Assumptions AsinSeries.asin_poly_lipschitz.
+Print Assumptions AsinSeries.acos_half.
+Print Assumptions FastAsinTable.asin_coef_facts.
+Print Assumptions FastAsinTable.asin_table_close.
+Print Assumptions FastAsinPolyGappa.asin_fl_gappa.
+Print Assumptions FastAsinPolyTail.tail_correct.
+Print Assumptions FastAsinPolyTail.tail_fma.
+Print Assumptions FastAsinPolyRed.sqrt_B.
+Print Assumptions FastAsinPolyRed.reduce_B.
+Print Assumptions FastAsinPolyB.case_B.
+Print Assumptions FastAsinPoly.fast_asin_poly_correct.
+Print Assumptions FastAsinPoly.fast_asin_poly_fma.
 Print Assumptions FastAsin.fast_asin_pos_correct.
 Print Assumptions FastAsin.fast_acos_val_correct.
 Print Assumptions FastAsin.fast_asin_pos_fma.
 Print Assumptions FastAsin.fast_acos_val_fma.
-Print Assumptions FastAsin.fast_asin_pos1_correct.
-Print Assumptions FastAsin.fast_acos_val1_correct.
-Print Assumptions FastAsin.fast_asin_pos1_fma.
-Print Assumptions FastAsin.fast_acos_val1_fma.
+Print Assumptions FastAsin.fast_asin_pos0_correct.
+Print Assumptions FastAsin.fast_acos_val0_correct.
+Print Assumptions FastAsin.fast_asin_pos0_fma.
+Print Assumptions FastAsin.fast_acos_val0_fma.
 Print Assumptions FastAsin.fast_asin_dir_correct.
 Print Assumptions FastAsin.fast_asin_near_correct.
 Print Assumptions FastAsin.fast_asin_dir_fma.
