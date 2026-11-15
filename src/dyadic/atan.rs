@@ -196,7 +196,7 @@ fn terms<const N: usize>(z: &Encl<N>) -> u64 {
     } else {
         // -bits - exp > 0 does not overflow, as -bits < 0.
         let e = (-bits - z.hi.exp) as u64;
-        // ceil((64 N + 4) / e); `div_ceil` needs Rust 1.73.
+        // ceil((64 N + 4) / e), in the form that `rocq/theories/Model.v` transcribes.
         cap.min((64 * N as u64 + 3 + e) / e)
     }
 }

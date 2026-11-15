@@ -39,23 +39,6 @@ const NEAR: [Near; 6] = [
 // 1.25 * 2^-26, below which sinh, cosh and tanh are within an ulp of x or 1 (`known`).
 const SMALL: f64 = 5.0 / 268_435_456.0;
 
-// The `f64` after `x` toward +∞, for `x` below +∞: 2^-1074 after either zero, and -0 after
-// -2^-1074. `f64::next_up` came with Rust 1.86, after the MSRV of the time, 1.65.
-fn next_up(x: f64) -> f64 {
-    if x == 0.0 {
-        f64::from_bits(1)
-    } else if x > 0.0 {
-        f64::from_bits(x.to_bits() + 1)
-    } else {
-        f64::from_bits(x.to_bits() - 1)
-    }
-}
-
-// The `f64` before `x` toward -∞, for `x` above -∞.
-fn next_down(x: f64) -> f64 {
-    -next_up(-x)
-}
-
 // 2^n, for n in [-1074, 1023].
 fn pow2(n: i32) -> f64 {
     if n < -1022 {
@@ -112,8 +95,8 @@ fn known(i: usize, x: f64) -> Option<(f64, f64)> {
         // t < sinh t < t + t^3 / 5 for 0 < t < 1, and t^3 / 5 is less than the gap from t to
         // the next `f64` for t < 1.25 * 2^-26: that gap is more than 2^-53 t, and
         // (1.25 * 2^-26)^2 / 5 < 2^-53.
-        SINH if t < SMALL && x > 0.0 => (x, next_up(x)),
-        SINH if t < SMALL => (next_down(x), x),
+        SINH if t < SMALL && x > 0.0 => (x, f64::next_up(x)),
+        SINH if t < SMALL => (f64::next_down(x), x),
         COSH if t == inf => (inf, inf),
         COSH if t == 0.0 => (1.0, 1.0),
         COSH if t > 710.48 => (max, inf),
@@ -129,8 +112,8 @@ fn known(i: usize, x: f64) -> Option<(f64, f64)> {
         // the `f64` before it for t < 1.25 * 2^-26. That gap is 2^-1074 for a subnormal t,
         // 2^-53 t for a normal power of 2 t, where t^2 / 3 < 2^-53 as t <= 2^-26, and
         // 2^-52 t / m for any other normal t = m 2^e with 1 < m < 2, where t^2 m / 3 < 2^-52.
-        TANH if t < SMALL && x > 0.0 => (next_down(x), x),
-        TANH if t < SMALL => (x, next_up(x)),
+        TANH if t < SMALL && x > 0.0 => (f64::next_down(x), x),
+        TANH if t < SMALL => (x, f64::next_up(x)),
         _ => return None,
     };
     Some(r)
@@ -175,7 +158,8 @@ fn check(i: usize, x: f64) {
         return;
     }
     assert!(
-        !lo.is_nan() && (lo.to_bits() == hi.to_bits() || next_up(lo).to_bits() == hi.to_bits()),
+        !lo.is_nan()
+            && (lo.to_bits() == hi.to_bits() || f64::next_up(lo).to_bits() == hi.to_bits()),
         "{}({:e}): {:e} and {:e} are neither equal nor adjacent",
         name,
         x,
@@ -206,8 +190,8 @@ fn around(x: f64, k: usize) -> Vec<f64> {
     let (mut a, mut b) = (x, x);
     let mut v = vec![x];
     for _ in 0..k {
-        a = next_down(a);
-        b = next_up(b);
+        a = f64::next_down(a);
+        b = f64::next_up(b);
         v.push(a);
         v.push(b);
     }
@@ -346,7 +330,7 @@ fn near_exact_values() {
     assert_eq!(exp2_near(-1074.0).to_bits(), 1);
     assert_eq!(exp2_near(-1075.0).to_bits(), 0);
     assert_eq!(exp2_near(-1076.0).to_bits(), 0);
-    assert_eq!(tanh_near(19.0).to_bits(), next_down(1.0).to_bits());
+    assert_eq!(tanh_near(19.0).to_bits(), f64::next_down(1.0).to_bits());
     assert_eq!(tanh_near(20.0).to_bits(), 1f64.to_bits());
 }
 
@@ -617,7 +601,7 @@ fn mpfr_test_cases() {
         check(i, x);
         let (lo, hi) = (FUNCTIONS[i].1(x, false), FUNCTIONS[i].1(x, true));
         let ok = match rnd {
-            "W" => lo == want && hi == next_up(want),
+            "W" => lo == want && hi == f64::next_up(want),
             "D" | "Z" => lo == want,
             "U" => hi == want,
             "N" => lo == want || hi == want,
@@ -1452,7 +1436,7 @@ fn far_side_ties_constructed() {
             let h = (m as f64 + 0.5) * g;
             assert!((1.0..2.0).contains(&h));
             // The l beyond 2^-53 = ulp(h)/2 are not valid.
-            assert!(h + next_up(half) != h && h - next_up(half) != h);
+            assert!(h + f64::next_up(half) != h && h - f64::next_up(half) != h);
             for l in [-half, 0.0, half] {
                 assert_eq!(round(h, l, e), None, "({h:e}, {l:e}, {e})");
             }

@@ -322,8 +322,8 @@ fn log_rules(x: f64) -> Option<f64> {
     }
 }
 
-// The constants of the fast path, as the bits of `f64`s, since `f64::from_bits` is not `const`
-// before Rust 1.83. `LN2H` is ln 2 with its significand cut to 42 bits, so that e LN2H is exact
+// The constants of the fast path, as the bits of `f64`s, which `rocq/theories/Model.v`
+// transcribes as `Z`s. `LN2H` is ln 2 with its significand cut to 42 bits, so that e LN2H is exact
 // for |e| < 2^11, and `LN2L` = RN(ln 2 - LN2H); `LG2` is log10(2) cut and rounded the same way,
 // [LG2H, LG2L], and `ONE` is [1, 0]. `C2` and `C10` are 1/ln 2 and 1/ln 10 in double-double,
 // [RN(v), RN(v - RN(v))]. `Q3`, `Q5`, `Q6` and `Q7` are RN(1/3), RN(1/5), RN(-1/6) and RN(1/7),

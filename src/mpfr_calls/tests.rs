@@ -206,25 +206,6 @@ const EXPONENTS: [i32; 26] = [
     i32::MAX,
 ];
 
-// The `f64` after `x` toward +∞, and NaN and +∞ themselves. `f64::next_up` came with Rust
-// 1.86, after the MSRV of the time, 1.65.
-fn next_up(x: f64) -> f64 {
-    if x.is_nan() || x == f64::INFINITY {
-        x
-    } else if x == 0.0 {
-        f64::from_bits(1)
-    } else if x > 0.0 {
-        f64::from_bits(x.to_bits() + 1)
-    } else {
-        f64::from_bits(x.to_bits() - 1)
-    }
-}
-
-// The `f64` before `x` toward -∞, and NaN and -∞ themselves.
-fn next_down(x: f64) -> f64 {
-    -next_up(-x)
-}
-
 // The structured arguments: those that the header names, and the `f64`s on each side of each,
 // all of both signs. The constants beyond 10 are the thresholds of the rules of the kernel
 // that the tests of its families take, such as 709.782712893384, about ln(f64::MAX).
@@ -293,7 +274,7 @@ fn structured() -> Vec<f64> {
     ];
     let mut v: Vec<f64> = Vec::new();
     for x in base {
-        for y in [next_down(x), x, next_up(x)] {
+        for y in [f64::next_down(x), x, f64::next_up(x)] {
             for z in [y, -y] {
                 if !v.iter().any(|w| w.to_bits() == z.to_bits()) {
                     v.push(z);
@@ -364,7 +345,11 @@ impl Rng {
         let k = self.below(9) as i32 - 4;
         let mut y = x;
         for _ in 0..k.abs() {
-            y = if k > 0 { next_up(y) } else { next_down(y) };
+            y = if k > 0 {
+                f64::next_up(y)
+            } else {
+                f64::next_down(y)
+            };
         }
         y
     }
@@ -373,7 +358,7 @@ impl Rng {
     fn above(&mut self, x: f64) -> f64 {
         let mut y = x;
         for _ in 0..self.below(9) {
-            y = next_up(y);
+            y = f64::next_up(y);
         }
         y
     }
@@ -1048,8 +1033,7 @@ fn interval_unary(m: &mut Mismatches, rng: &mut Rng, i: usize, x: Interval) {
     if !same && !x.is_empty() {
         let names: &[&str] = match name {
             "sin" | "cos" | "tan" => &["sin", "cos", "tan"],
-            // Not `&[name]`: Rust 1.65 frees that temporary at the end of the `let`.
-            _ => std::slice::from_ref(&name),
+            _ => &[name],
         };
         for name in names {
             m.unary(index(name), x.inf_raw());

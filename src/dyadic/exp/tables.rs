@@ -1,5 +1,5 @@
-// The tables of the fast path of `src/dyadic/exp.rs`, as the bits of `f64`s, since
-// `f64::from_bits` is not `const` before Rust 1.83: `T1[i]` is 2^(i/4096) and `T2[j]` is 2^(j/64)
+// The tables of the fast path of `src/dyadic/exp.rs`, as the bits of `f64`s, which
+// `rocq/theories/Model.v` transcribes as `Z`s: `T1[i]` is 2^(i/4096) and `T2[j]` is 2^(j/64)
 // in double-double, each a pair [h, l] with h = RN(v) and l = RN(v - h) for the value v, so that
 // |h + l - v| <= 2^-104. `rocq/theories/FastExpTables.v` proves these bounds, and the tests of
 // `src/dyadic/exp/tests.rs` check the pairs against MPFR.

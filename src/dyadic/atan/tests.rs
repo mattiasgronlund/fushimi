@@ -30,23 +30,6 @@ const NEAR: [Near; 3] = [atan_near, asin_near, acos_near];
 // The signs of (y, x) in the four quadrants.
 const QUADRANTS: [(f64, f64); 4] = [(1.0, 1.0), (1.0, -1.0), (-1.0, 1.0), (-1.0, -1.0)];
 
-// The `f64` after `x` toward +∞, for `x` below +∞: 2^-1074 after either zero, and -0 after
-// -2^-1074. `f64::next_up` came with Rust 1.86, after the MSRV of the time, 1.65.
-fn next_up(x: f64) -> f64 {
-    if x == 0.0 {
-        f64::from_bits(1)
-    } else if x > 0.0 {
-        f64::from_bits(x.to_bits() + 1)
-    } else {
-        f64::from_bits(x.to_bits() - 1)
-    }
-}
-
-// The `f64` before `x` toward -∞, for `x` above -∞.
-fn next_down(x: f64) -> f64 {
-    -next_up(-x)
-}
-
 // 2^n, for n in [-1074, 1023].
 fn pow2(n: i32) -> f64 {
     if n < -1022 {
@@ -91,7 +74,7 @@ fn check_pair(name: &str, args: &str, lo: f64, hi: f64) {
         );
     } else {
         assert!(
-            lo.to_bits() == hi.to_bits() || next_up(lo).to_bits() == hi.to_bits(),
+            lo.to_bits() == hi.to_bits() || f64::next_up(lo).to_bits() == hi.to_bits(),
             "{}({}): {:e} and {:e} are neither equal nor adjacent",
             name,
             args,
@@ -158,8 +141,8 @@ fn around(x: f64, k: usize) -> Vec<f64> {
     let (mut a, mut b) = (x, x);
     let mut v = vec![x];
     for _ in 0..k {
-        a = next_down(a);
-        b = next_up(b);
+        a = f64::next_down(a);
+        b = f64::next_up(b);
         v.push(a);
         v.push(b);
     }
@@ -190,9 +173,8 @@ fn regressions_hold() {
 // asin and acos end.
 const SPECIAL: [f64; 9] = [
     0.0,
-    // 2^-1074, the least `f64` above 0. `f64::from_bits` became `const` in Rust 1.83, after
-    // the MSRV of the time, 1.65.
-    5e-324,
+    // 2^-1074, the least `f64` above 0.
+    f64::from_bits(1),
     f64::MIN_POSITIVE,
     0.5,
     1.0,
@@ -337,7 +319,7 @@ fn pi_times_constants() {
             );
         }
     }
-    for x in [HUGE_ATAN, next_up(HUGE_ATAN), f64::MAX, f64::INFINITY] {
+    for x in [HUGE_ATAN, f64::next_up(HUGE_ATAN), f64::MAX, f64::INFINITY] {
         for x in [x, -x] {
             let c = 0.5_f64.copysign(x);
             for up in [false, true] {
@@ -541,8 +523,8 @@ fn close_to_an_f64() {
     for k in -60..=60 {
         let x = pow2(k);
         if k <= -26 {
-            expect(ATAN, x, next_down(x), x);
-            expect(ATAN, -x, -x, next_up(-x));
+            expect(ATAN, x, f64::next_down(x), x);
+            expect(ATAN, -x, -x, f64::next_up(-x));
         } else {
             check(ATAN, x);
             check(ATAN, -x);
@@ -551,8 +533,8 @@ fn close_to_an_f64() {
     for k in 1..=60 {
         let x = pow2(-k);
         if k >= 25 {
-            expect(ASIN, x, x, next_up(x));
-            expect(ASIN, -x, next_down(-x), -x);
+            expect(ASIN, x, x, f64::next_up(x));
+            expect(ASIN, -x, f64::next_down(-x), -x);
         } else {
             check(ASIN, x);
             check(ASIN, -x);
@@ -564,7 +546,7 @@ fn close_to_an_f64() {
         let x = 1.0 - pow2(-k);
         if k % 2 == 1 && k >= 49 {
             let p = pow2((1 - k) / 2);
-            expect(ACOS, x, p, next_up(p));
+            expect(ACOS, x, p, f64::next_up(p));
         } else {
             check(ACOS, x);
         }
@@ -604,7 +586,11 @@ fn close_to_an_f64() {
             check2(y, x);
             check2(x, y);
             let q = y / x;
-            let t = if q > 0.0 { next_down(q) } else { next_up(q) };
+            let t = if q > 0.0 {
+                f64::next_down(q)
+            } else {
+                f64::next_up(q)
+            };
             if x > 0.0 && q * q * q.abs() < 3.0 * (q - t).abs() {
                 let (lo, hi) = (atan2(y, x, false), atan2(y, x, true));
                 assert!(
@@ -820,7 +806,7 @@ fn same_map(y: f64, x: f64) -> [bool; 4] {
 // a.exp - b.exp = -1021 with |y| 2^1021 < x; and each function gives a quotient at some.
 #[test]
 fn quotient_rules_same_map() {
-    let edges = [1.0, next_up(1.0), 1.5, next_down(2.0)];
+    let edges = [1.0, f64::next_up(1.0), 1.5, f64::next_down(2.0)];
     let mantissa = |rng: &mut Rng| {
         if rng.below(8) == 0 {
             edges[rng.below(4) as usize]
@@ -882,7 +868,7 @@ fn quotient_rules_same_map() {
 fn quotient_rules_at_their_thresholds() {
     assert_eq!(TWO_25.to_bits(), 0x4180_0000_0000_0000);
     assert_eq!(TWO_1021.to_bits(), 0x7fc0_0000_0000_0000);
-    let ms = [1.0, next_up(1.0), next_down(2.0)];
+    let ms = [1.0, f64::next_up(1.0), f64::next_down(2.0)];
     let ks = [-60, 0, 500, 1000];
     let mut args = vec![];
     for d in [-26, -25, -24, -1023, -1022, -1021] {
@@ -908,7 +894,7 @@ fn quotient_rules_at_their_thresholds() {
         }
     }
     for y in [around(pow2(999), 2), around(8.0, 2)].concat() {
-        for x in [f64::MAX, next_down(f64::MAX), pow2(1023)] {
+        for x in [f64::MAX, f64::next_down(f64::MAX), pow2(1023)] {
             args.push((y, x));
         }
     }
@@ -1424,8 +1410,8 @@ fn tiny_quotient_args(rng: &mut Rng, n: u32) -> (f64, f64) {
         // 2^k.
         let y = (xo * m) as f64 * pow2(k - 1075);
         let y = match rng.below(6) {
-            0 => next_up(y),
-            1 => next_down(y),
+            0 => f64::next_up(y),
+            1 => f64::next_down(y),
             _ => y,
         };
         (y, xo as f64 * pow2(k))
@@ -1832,7 +1818,7 @@ fn fast_edges() {
         args2.extend(around(d, 2).into_iter().map(|y| (y, d)));
     }
     args2.push((f64::MAX, f64::MAX));
-    args2.push((next_down(f64::MAX), f64::MAX));
+    args2.push((f64::next_down(f64::MAX), f64::MAX));
     // Next to the axes.
     for t in [5e-324, 1.5e-323, f64::MIN_POSITIVE, pow2(-1000)] {
         for d in [1.0, 3.0, f64::MAX] {
@@ -1843,14 +1829,14 @@ fn fast_edges() {
     for n in [
         pow2(-62),
         pow2(-61),
-        next_down(pow2(-60)),
+        f64::next_down(pow2(-60)),
         pow2(-60),
         1.5 * pow2(-60),
-        next_down(pow2(-59)),
+        f64::next_down(pow2(-59)),
         pow2(-59),
-        next_down(pow2(-58)),
+        f64::next_down(pow2(-58)),
     ] {
-        for d in [1.0, next_up(1.0), 1.5, next_down(2.0)] {
+        for d in [1.0, f64::next_up(1.0), 1.5, f64::next_down(2.0)] {
             for s in [1.0, pow2(-500), pow2(500)] {
                 args2.push((n * s, d * s));
             }
@@ -1860,7 +1846,7 @@ fn fast_edges() {
     // fast path takes y / x itself, `normalize` scales my / mx into [1, 2), by 2 if my < mx,
     // which takes 1 from e, and the rounding tests scale the result back only if it is at least
     // 2^-1021.
-    let ms = [1.0, next_up(1.0), 1.25, 1.5, next_down(2.0)];
+    let ms = [1.0, f64::next_up(1.0), 1.25, 1.5, f64::next_down(2.0)];
     for e in -1024..=-1019 {
         for my in ms {
             for mx in ms {
@@ -2171,7 +2157,7 @@ fn count_arg(rng: &mut Rng, i: usize, name: &str) -> f64 {
         (_, "lu") => s * log_uniform(rng, -30, -1),
         (ACOS, "tiny") => s * log_uniform(rng, -60, -28),
         (_, "tiny") => s * log_uniform(rng, -26, -9),
-        (ATAN, "big") => s * log_uniform(rng, 0, 53).max(next_up(1.0)),
+        (ATAN, "big") => s * log_uniform(rng, 0, 53).max(f64::next_up(1.0)),
         (ATAN, "w") => s * log_uniform(rng, -1074, 1023),
         (_, "w") => s * log_uniform(rng, -1074, -1),
         (_, "n1") => s * (1.0 - rng.below(1 << 45) as f64 * pow2(-53)),
@@ -2715,9 +2701,9 @@ mod mpfr {
         s += &format!(
             "/// The Taylor coefficients of F(s) = asin(√s) / √s at s_j = j / 256 for j from 0 \
              to {}, each a\n\
-             /// row [c0h, c0l, c1, c2, c3, c4, c5, c6] of the bits of `f64`s, as \
-             `f64::from_bits` is not\n\
-             /// `const` before Rust 1.83: c0h + c0l is F(s_j) in double-double and c_k is \
+             /// row [c0h, c0l, c1, c2, c3, c4, c5, c6] of the bits of `f64`s, which \
+             `ModelAsinTable.v`\n\
+             /// transcribes as `Z`s: c0h + c0l is F(s_j) in double-double and c_k is \
              F^(k)(s_j) / k!,\n\
              /// each rounded to nearest from the sum of the first 400 terms of the series of \
              F, whose rest\n\

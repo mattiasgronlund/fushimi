@@ -680,8 +680,8 @@ fn exponent(x: f64) -> i32 {
     ((x.to_bits() >> 52) & 0x7ff) as i32 - 1023
 }
 
-/// Returns the successor of x, which must be finite.
-/// This is `nextUp` of IEEE 754 (`f64::next_up` needs Rust 1.86).
+/// Returns the successor of x, which must be finite: `nextUp` of IEEE 754, without the NaN and
+/// +∞ checks of `f64::next_up`. `rocq/theories/Model.v` transcribes it (`Generic.step_up`).
 fn step_up(x: f64) -> f64 {
     // The bit patterns of the finite floats of one sign are consecutive integers,
     // so moving toward +∞ means incrementing the magnitude if x > 0, and

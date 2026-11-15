@@ -183,7 +183,7 @@ fn square_roots() {
             check_root(x, 0.5, "E", r);
             // next_up(x) = x + d with d = 2^(expo(x) - 52) <= 2^(2g - 51), as expo(x) <= 2g + 1,
             // so that r < sqrt(x + d) < r + d / (2r) <= r + 2^(g - 52) = next_up(r), as r >= 2^g.
-            check_root(next_up(x), 0.5, "W", r);
+            check_root(f64::next_up(x), 0.5, "W", r);
             // next_down(x) = x - d' with d' = d, or d' = d / 2 = 2^(2g - 53) for m = 1, where
             // x = 2^(2g). As d' <= 2^-52 x, r - sqrt(x - d') = d' / (r + sqrt(x - d')) <=
             // d' / (2r) (1 + 2^-52). For m = 1, that is 2^(g - 54) (1 + 2^-52) < 2^(g - 53),
@@ -191,15 +191,15 @@ fn square_roots() {
             // r - next_down(r) = 2^(g - 52), and r >= 2^(expo(x) / 2) gives
             // d' / (2r) <= 2^(expo(x) / 2 - 53) <= 2^(g - 52) / √2. Either way, sqrt(x - d')
             // lies strictly between next_down(r) and r.
-            check_root(next_down(x), 0.5, "W", next_down(r));
+            check_root(f64::next_down(x), 0.5, "W", f64::next_down(r));
             // x^(-1/2) = 1 / r, which is 2^-g for m = 1, and not an `f64` otherwise.
             if m == 1 {
                 check_root(x, -0.5, "E", pow2(-g));
             } else {
                 check_pow(x, -0.5);
             }
-            check_pow(next_up(x), -0.5);
-            check_pow(next_down(x), -0.5);
+            check_pow(f64::next_up(x), -0.5);
+            check_pow(f64::next_down(x), -0.5);
         }
     }
 }

@@ -1,5 +1,5 @@
-// The table of the fast path of `src/dyadic/log.rs`, as the bits of `f64`s, since
-// `f64::from_bits` is not `const` before Rust 1.83. `LOG_TABLE[i]` is [r, h, l] for the m in
+// The table of the fast path of `src/dyadic/log.rs`, as the bits of `f64`s, which
+// `rocq/theories/Model.v` transcribes as `Z`s. `LOG_TABLE[i]` is [r, h, l] for the m in
 // [(362 + i) / 512, (363 + i) / 512): r = RN(1024 / (725 + 2 i)), the inverse of the middle of
 // that interval rounded to nearest, and -ln r in double-double, h = RN(-ln r) and
 // l = RN(-ln r - h), so that |h + l + ln r| <= 2^-104. The two intervals next to 1, one on

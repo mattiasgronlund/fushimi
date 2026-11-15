@@ -1,5 +1,5 @@
-// The table of the fast path of `src/dyadic/atan.rs`, as the bits of `f64`s, since
-// `f64::from_bits` is not `const` before Rust 1.83. `ATAN_TABLE[i]` is atan(i / 64) in
+// The table of the fast path of `src/dyadic/atan.rs`, as the bits of `f64`s, which
+// `rocq/theories/Model.v` transcribes as `Z`s. `ATAN_TABLE[i]` is atan(i / 64) in
 // double-double, [h, l] with h = RN(atan(i / 64)) and l = RN(atan(i / 64) - h), so that
 // |h + l - atan(i / 64)| <= 2^-104, for i from 1 to 64. Entry 0, [0, 0], is never read: the fast
 // path takes the polynomial at the argument itself there.

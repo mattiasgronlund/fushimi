@@ -2,8 +2,8 @@
 // `rocq/theories/ModelAsinTable.v`, which transcribes it: change that test, not this file.
 
 /// The Taylor coefficients of F(s) = asin(√s) / √s at s_j = j / 256 for j from 0 to 64, each a
-/// row [c0h, c0l, c1, c2, c3, c4, c5, c6] of the bits of `f64`s, as `f64::from_bits` is not
-/// `const` before Rust 1.83: c0h + c0l is F(s_j) in double-double and c_k is F^(k)(s_j) / k!,
+/// row [c0h, c0l, c1, c2, c3, c4, c5, c6] of the bits of `f64`s, which `ModelAsinTable.v`
+/// transcribes as `Z`s: c0h + c0l is F(s_j) in double-double and c_k is F^(k)(s_j) / k!,
 /// each rounded to nearest from the sum of the first 400 terms of the series of F, whose rest
 /// is below 2^-700. `rocq/theories/FastAsinTable.v` proves that the polynomial of row j,
 /// c0h + c0l + c1 τ + ... + c6 τ^6, is within 11 2^-68 of the sum of the first 34 terms of the

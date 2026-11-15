@@ -280,23 +280,6 @@ fn check_hypot(x: f64, y: f64) -> bool {
     check_root(&what, 2, &power, lo, hi, near)
 }
 
-// The `f64` after `x` toward +∞, for `x` below +∞. `f64::next_up` came with Rust 1.86, after
-// the MSRV of the time, 1.65.
-fn next_up(x: f64) -> f64 {
-    if x == 0.0 {
-        f64::from_bits(1)
-    } else if x > 0.0 {
-        f64::from_bits(x.to_bits() + 1)
-    } else {
-        f64::from_bits(x.to_bits() - 1)
-    }
-}
-
-// The `f64` before `x` toward -∞, for `x` above -∞.
-fn next_down(x: f64) -> f64 {
-    -next_up(-x)
-}
-
 // 2^n, for n in [-1074, 1023].
 fn pow2(n: i64) -> f64 {
     if n < -1022 {
@@ -311,8 +294,8 @@ fn around(x: f64, k: usize) -> Vec<f64> {
     let (mut a, mut b) = (x, x);
     let mut v = vec![x];
     for _ in 0..k {
-        a = next_down(a);
-        b = next_up(b);
+        a = f64::next_down(a);
+        b = f64::next_up(b);
         v.push(a);
         v.push(b);
     }
@@ -628,7 +611,7 @@ fn hypot_cut() {
             let pairs = [
                 (x, x * pow2(-(g as i64))),
                 (x, y),
-                (pow2(e), next_down(pow2(e + 1 - g as i64))),
+                (pow2(e), f64::next_down(pow2(e + 1 - g as i64))),
                 (tiny * pow2(g as i64), tiny),
             ];
             for (x, y) in pairs {
@@ -658,11 +641,11 @@ fn hypot_overflow() {
     assert!(nears.contains(&f64::MAX) && nears.contains(&f64::INFINITY));
     ys.extend(around(pow2(997), 2));
     ys.extend(around(pow2(998), 2));
-    ys.extend([1.0, f64::MAX / 2.0, next_down(f64::MAX), f64::MAX]);
+    ys.extend([1.0, f64::MAX / 2.0, f64::next_down(f64::MAX), f64::MAX]);
     for x in [
         f64::MAX,
-        next_down(f64::MAX),
-        next_down(next_down(f64::MAX)),
+        f64::next_down(f64::MAX),
+        f64::next_down(f64::next_down(f64::MAX)),
     ] {
         for &y in &ys {
             for (x, y) in [(x, y), (y, x), (-x, y), (x, -y)] {
@@ -1048,7 +1031,7 @@ fn fast_cbrt_near_two() {
         }
         if p >= pow2(-1021) {
             twos += 1;
-            let x = next_down(p);
+            let x = f64::next_down(p);
             let h = fast_cbrt::<HAS_FMA>(x).map(|(h, _, _)| h);
             assert_eq!(h, Some(2.0), "fast_cbrt({:e})", x);
             let fast = [
@@ -1190,17 +1173,17 @@ fn hypot_dd_range() {
     for (big, taken) in [
         (f64::MAX, false),
         (pow2(1023), false),
-        (next_up(pow2(1022)), false),
+        (f64::next_up(pow2(1022)), false),
         (pow2(1022), false),
-        (next_down(pow2(1022)), true),
+        (f64::next_down(pow2(1022)), true),
         (1.0, true),
-        (next_up(f64::MIN_POSITIVE), true),
+        (f64::next_up(f64::MIN_POSITIVE), true),
         (f64::MIN_POSITIVE, true),
-        (next_down(f64::MIN_POSITIVE), false),
+        (f64::next_down(f64::MIN_POSITIVE), false),
         (pow2(-1050), false),
         (pow2(-1074), false),
     ] {
-        for small in [big, next_down(big), big * 0.5, big * pow2(-26)] {
+        for small in [big, f64::next_down(big), big * 0.5, big * pow2(-26)] {
             if small > 0.0 {
                 assert_eq!(
                     hypot_dd::<HAS_FMA>(big, small).is_some(),
@@ -1226,7 +1209,7 @@ fn fast_hypot_gap_rule() {
     let mut ends = vec![f64::MAX];
     for n in -1073..=1023 {
         ends.push(pow2(n));
-        ends.push(next_down(pow2(n)));
+        ends.push(f64::next_down(pow2(n)));
     }
     let ends: Vec<(f64, i64)> = ends.into_iter().map(|v| (v, binade(v))).collect();
     let (mut far, mut subnormal_far) = (0, 0);
@@ -1257,7 +1240,7 @@ fn fast_hypot_gap_rule() {
                 let odd = hypot_odd(big, small);
                 let want = [Some(odd.to_f64(false)), Some(odd.to_f64(true)), Some(big)];
                 assert_eq!(fast, want, "{}", what);
-                assert_eq!(fast[1], Some(next_up(big)), "{}", what);
+                assert_eq!(fast[1], Some(f64::next_up(big)), "{}", what);
                 assert_eq!(odd.to_f64_near(), big, "{}", what);
             } else if hypot_dd::<HAS_FMA>(big, small).is_some() {
                 assert_eq!(tests.0 + tests.1, 3, "{}", what);

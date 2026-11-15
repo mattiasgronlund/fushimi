@@ -2,7 +2,7 @@
 // `rocq/theories/ModelTrigTable.v`, which transcribes it: change that test, not this file.
 
 /// sin and cos of i π/4096 for i from 0 to 1024 in double-double, each a row [sh, sl, ch, cl]
-/// of the bits of `f64`s, as `f64::from_bits` is not `const` before Rust 1.83, with h = RN(v)
+/// of the bits of `f64`s, which `ModelTrigTable.v` transcribes as `Z`s, with h = RN(v)
 /// and l = RN(v - h) for the value v, so that |h + l - v| <= 2^-104.
 /// `rocq/theories/FastTrigTables.v` proves these bounds (`sc_correct`), and the test
 /// `fast_tables_and_constants` checks the rows against MPFR. A `static`, not a `const`, as

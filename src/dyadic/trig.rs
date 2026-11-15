@@ -261,7 +261,7 @@ fn terms<const N: usize>(z: &Encl<N>) -> u64 {
     } else {
         // -bits - exp > 0 does not overflow, as -bits < 0.
         let e = (-bits - z.hi.exp) as u64;
-        // ceil((64 N + 4) / e); `div_ceil` needs Rust 1.73.
+        // ceil((64 N + 4) / e), in the form that `rocq/theories/Model.v` transcribes.
         cap.min((64 * N as u64 + 3 + e) / e)
     }
 }
@@ -454,8 +454,8 @@ fn tan_small(x: f64, up: bool) -> Option<f64> {
     Some(if neg { -v } else { v })
 }
 
-// The constants of the fast path, as the bits of `f64`s, since `f64::from_bits` is not `const`
-// before Rust 1.83. u = π/4096; `INV` = RN(1 / u); `U1` is u with its significand cut to 26
+// The constants of the fast path, as the bits of `f64`s, which `rocq/theories/Model.v`
+// transcribes as `Z`s. u = π/4096; `INV` = RN(1 / u); `U1` is u with its significand cut to 26
 // bits (25 significant bits, as the 26th is 0), so that n U1 is exact for |n| < 2^27, `U2` is
 // u - U1 cut to 26 bits (24 significant bits), so that n U2 is exact too, and
 // `U3` = RN(u - U1 - U2), with |u - U1 - U2 - U3| < 2^-120, and `U4` = RN(u - U1 - U2 - U3),

@@ -27,23 +27,6 @@ type Near = fn(f64) -> f64;
 // 2^-27, give x for sin and tan and 1 for cos.
 const NEAR: [Near; 3] = [sin_near, cos_near, tan_near];
 
-// The `f64` after `x` toward +∞, for `x` below +∞: 2^-1074 after either zero, and -0 after
-// -2^-1074. `f64::next_up` came with Rust 1.86, after the MSRV of the time, 1.65.
-fn next_up(x: f64) -> f64 {
-    if x == 0.0 {
-        f64::from_bits(1)
-    } else if x > 0.0 {
-        f64::from_bits(x.to_bits() + 1)
-    } else {
-        f64::from_bits(x.to_bits() - 1)
-    }
-}
-
-// The `f64` before `x` toward -∞, for `x` above -∞.
-fn next_down(x: f64) -> f64 {
-    -next_up(-x)
-}
-
 // 2^n, for n in [-1074, 1023].
 fn pow2(n: i32) -> f64 {
     if n < -1022 {
@@ -88,7 +71,7 @@ fn check_pair(name: &str, x: f64, lo: f64, hi: f64) {
         );
     } else {
         assert!(
-            lo.to_bits() == hi.to_bits() || next_up(lo).to_bits() == hi.to_bits(),
+            lo.to_bits() == hi.to_bits() || f64::next_up(lo).to_bits() == hi.to_bits(),
             "{}({:e}): {:e} and {:e} are neither equal nor adjacent",
             name,
             x,
@@ -145,8 +128,8 @@ fn around(x: f64, k: usize) -> Vec<f64> {
     let (mut a, mut b) = (x, x);
     let mut v = vec![x];
     for _ in 0..k {
-        a = next_down(a);
-        b = next_up(b);
+        a = f64::next_down(a);
+        b = f64::next_up(b);
         v.push(a);
         v.push(b);
     }
@@ -214,9 +197,8 @@ fn regressions_hold() {
 // results, and finite values from the least to the greatest.
 const SPECIAL: [f64; 9] = [
     0.0,
-    // 2^-1074, the least `f64` above 0. `f64::from_bits` became `const` in Rust 1.83, after
-    // the MSRV of the time, 1.65.
-    5e-324,
+    // 2^-1074, the least `f64` above 0.
+    f64::from_bits(1),
     f64::MIN_POSITIVE,
     0.5,
     1.0,
@@ -296,8 +278,8 @@ fn rules_at_their_thresholds() {
         (TAN, 6f64.cbrt() * pow2(-27)),
     ] {
         let tiny = |x: f64| if i == COS { 1.0 } else { x };
-        let below = next_down(next_down(next_down(t)));
-        let above = next_up(next_up(next_up(t)));
+        let below = f64::next_down(f64::next_down(f64::next_down(t)));
+        let above = f64::next_up(f64::next_up(f64::next_up(t)));
         let name = FUNCTIONS[i].0;
         assert_eq!(NEAR[i](below), tiny(below), "{}({:e})", name, below);
         assert_ne!(NEAR[i](above), tiny(above), "{}({:e})", name, above);
@@ -359,8 +341,8 @@ fn close_to_an_f64() {
             check_all(y);
         }
         let lo = 1.0 - i * i * pow2(-53);
-        expect(COS, x, lo, next_up(lo));
-        expect(COS, -x, lo, next_up(lo));
+        expect(COS, x, lo, f64::next_up(lo));
+        expect(COS, -x, lo, f64::next_up(lo));
     }
     for j in 1..=60 {
         let x = 3.0 * pow2(-j);
@@ -370,10 +352,10 @@ fn close_to_an_f64() {
         if (15..=25).contains(&j) {
             let s = x - 9.0 * pow2(-3 * j - 1);
             let t = x + 9.0 * pow2(-3 * j);
-            expect(SIN, x, s, next_up(s));
-            expect(SIN, -x, -next_up(s), -s);
-            expect(TAN, x, t, next_up(t));
-            expect(TAN, -x, -next_up(t), -t);
+            expect(SIN, x, s, f64::next_up(s));
+            expect(SIN, -x, -f64::next_up(s), -s);
+            expect(TAN, x, t, f64::next_up(t));
+            expect(TAN, -x, -f64::next_up(t), -t);
         }
     }
 }
@@ -408,7 +390,7 @@ fn short_dyadics() {
         for y in [x, -x] {
             assert_eq!(
                 (cos(y, false), cos(y, true)),
-                (lo, next_up(lo)),
+                (lo, f64::next_up(lo)),
                 "cos({:e})",
                 y
             );
@@ -495,7 +477,12 @@ fn small_rules_near_their_centres() {
         let lo = 1.0 - m * m * pow2(-53);
         for y in [x, -x] {
             let got = (cos_small(y.abs(), false), cos_small(y.abs(), true));
-            assert_eq!(got, (Some(lo), Some(next_up(lo))), "cos_small({:e})", y);
+            assert_eq!(
+                got,
+                (Some(lo), Some(f64::next_up(lo))),
+                "cos_small({:e})",
+                y
+            );
         }
     }
     for e in 15..=25 {
@@ -503,11 +490,17 @@ fn small_rules_near_their_centres() {
         let s = x - 9.0 * pow2(-3 * e - 1);
         let t = x + 9.0 * pow2(-3 * e);
         let got = [false, true].map(|up| [x, -x].map(|y| sin_small(y, up)));
-        let want = [[Some(s), Some(-next_up(s))], [Some(next_up(s)), Some(-s)]];
+        let want = [
+            [Some(s), Some(-f64::next_up(s))],
+            [Some(f64::next_up(s)), Some(-s)],
+        ];
         assert_eq!(got, want, "sin_small({:e})", x);
         let got = [false, true].map(|up| [x, -x].map(|y| tan_small(y, up)));
         let want = if e >= 16 {
-            [[Some(t), Some(-next_up(t))], [Some(next_up(t)), Some(-t)]]
+            [
+                [Some(t), Some(-f64::next_up(t))],
+                [Some(f64::next_up(t)), Some(-t)],
+            ]
         } else {
             [[None; 2]; 2]
         };
@@ -970,7 +963,7 @@ fn reduction_edges() {
             "{x:e}"
         );
         assert!(
-            fast_reduce(next_down(x.abs()).copysign(x)).is_some(),
+            fast_reduce(f64::next_down(x.abs()).copysign(x)).is_some(),
             "{x:e}"
         );
         for y in around(x, 3) {
@@ -1144,7 +1137,7 @@ fn big_edge_args() -> Vec<f64> {
     let mut x = f64::MAX;
     v.push(x);
     for _ in 0..3 {
-        x = next_down(x);
+        x = f64::next_down(x);
         v.push(x);
     }
     v.extend(NEAR_STEPS.iter().map(|&(x, _)| x));
@@ -1501,7 +1494,7 @@ mod mpfr {
         s += &format!(
             "/// sin and cos of i π/4096 for i from 0 to {} in double-double, each a row \
              [sh, sl, ch, cl]\n\
-             /// of the bits of `f64`s, as `f64::from_bits` is not `const` before Rust 1.83, \
+             /// of the bits of `f64`s, which `ModelTrigTable.v` transcribes as `Z`s, \
              with h = RN(v)\n\
              /// and l = RN(v - h) for the value v, so that |h + l - v| <= 2^-104.\n\
              /// `rocq/theories/FastTrigTables.v` proves these bounds (`sc_correct`), and the \
@@ -1626,7 +1619,7 @@ mod mpfr {
         v.extend(exact_rh().into_iter().map(|(_, x)| x));
         let mut x = LIMIT;
         for _ in 0..3 {
-            x = next_down(x);
+            x = f64::next_down(x);
             v.push(x);
         }
         v

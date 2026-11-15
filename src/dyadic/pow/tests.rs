@@ -10,23 +10,6 @@ use super::*;
 use crate::dyadic::tests::Rng;
 use crate::simd::HAS_FMA;
 
-// The `f64` after `x` toward +∞, for `x` below +∞. `f64::next_up` came with Rust 1.86, after
-// the MSRV of the time, 1.65.
-fn next_up(x: f64) -> f64 {
-    if x == 0.0 {
-        f64::from_bits(1)
-    } else if x > 0.0 {
-        f64::from_bits(x.to_bits() + 1)
-    } else {
-        f64::from_bits(x.to_bits() - 1)
-    }
-}
-
-// The `f64` before `x` toward -∞, for `x` above -∞.
-fn next_down(x: f64) -> f64 {
-    -next_up(-x)
-}
-
 // 2^n, for n in [-1074, 1023].
 fn pow2(n: i64) -> f64 {
     if n < -1022 {
@@ -41,8 +24,8 @@ fn around(x: f64, k: usize) -> Vec<f64> {
     let (mut a, mut b) = (x, x);
     let mut v = vec![x];
     for _ in 0..k {
-        a = next_down(a);
-        b = next_up(b);
+        a = f64::next_down(a);
+        b = f64::next_up(b);
         v.push(a);
         v.push(b);
     }
@@ -91,7 +74,7 @@ fn check_rounding(what: &str, lo: f64, hi: f64, rnd: &str, want: f64) {
     let same = |a: f64, b: f64| a.to_bits() == b.to_bits() || (a.is_nan() && b.is_nan());
     let ok = match rnd {
         "E" => same(lo, want) && same(hi, want),
-        "W" => same(lo, want) && same(hi, next_up(want)),
+        "W" => same(lo, want) && same(hi, f64::next_up(want)),
         "D" => same(lo, want),
         "U" => same(hi, want),
         "Z" => same(if want > 0.0 { lo } else { hi }, want),
@@ -111,7 +94,7 @@ fn check_pair(what: &str, lo: f64, hi: f64) {
         assert!(lo.is_nan() && hi.is_nan(), "{}: {:e} {:e}", what, lo, hi);
     } else {
         assert!(
-            lo.to_bits() == hi.to_bits() || next_up(lo).to_bits() == hi.to_bits(),
+            lo.to_bits() == hi.to_bits() || f64::next_up(lo).to_bits() == hi.to_bits(),
             "{}: {:e} and {:e} are neither equal nor adjacent",
             what,
             lo,
@@ -505,7 +488,7 @@ fn special_values() {
     for x in [inf, 0.0, 1.0, 2.0, 0.5, max, f64::MIN_POSITIVE, tiny] {
         xs.extend([x, -x]);
     }
-    let mut ys = vec![f64::NAN, next_up(17.0)];
+    let mut ys = vec![f64::NAN, f64::next_up(17.0)];
     for y in [
         inf,
         0.0,
@@ -693,10 +676,10 @@ fn exact_pair(rng: &mut Rng, i: usize) -> (f64, f64) {
 // (x, y) moved by one ulp of x or of y, at random.
 fn moved(rng: &mut Rng, (x, y): (f64, f64)) -> (f64, f64) {
     match rng.below(4) {
-        0 => (next_up(x), y),
-        1 => (next_down(x), y),
-        2 => (x, next_up(y)),
-        _ => (x, next_down(y)),
+        0 => (f64::next_up(x), y),
+        1 => (f64::next_down(x), y),
+        2 => (x, f64::next_up(y)),
+        _ => (x, f64::next_down(y)),
     }
 }
 
@@ -809,9 +792,9 @@ fn pown_case(name: &str, rng: &mut Rng) -> (f64, i32) {
             if name == "pnexact" {
                 (x, n)
             } else if rng.below(2) == 0 {
-                (next_up(x), n)
+                (f64::next_up(x), n)
             } else {
-                (next_down(x), n)
+                (f64::next_down(x), n)
             }
         }
         _ => unreachable!(),

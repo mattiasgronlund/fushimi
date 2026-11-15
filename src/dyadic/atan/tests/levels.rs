@@ -60,7 +60,7 @@ impl Case {
             Case::Asin(x) => asin(x, up),
             Case::Acos(x) => acos(x, up),
             Case::PiMul(c) => pi_times(c, up),
-            Case::Pi if up => next_up(std::f64::consts::PI),
+            Case::Pi if up => f64::next_up(std::f64::consts::PI),
             Case::Pi => std::f64::consts::PI,
         }
     }

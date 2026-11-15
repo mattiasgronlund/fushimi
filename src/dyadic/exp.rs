@@ -423,8 +423,8 @@ pub(super) fn toward_zero(x: f64, up: bool) -> f64 {
     }
 }
 
-// The constants of `fast_exp`, as the bits of `f64`s, since `f64::from_bits` is not `const`
-// before Rust 1.83. c = ln 2 / 4096; `C1` is c with its significand cut to 31 bits, so that
+// The constants of `fast_exp`, as the bits of `f64`s, which `rocq/theories/Model.v` transcribes
+// as `Z`s. c = ln 2 / 4096; `C1` is c with its significand cut to 31 bits, so that
 // k C1 is exact for |k| < 2^22, and `C2` = RN(c - C1), with |c - C1 - C2| < 2^-98. `INV` =
 // RN(1 / c), `P3` = RN(1/6) and `P4` = RN(1/24). `LN2` and `LN10` are ln 2 and ln 10 in
 // double-double, [RN(v), RN(v - RN(v))], within 2^-106 and 2^-105 of them.
