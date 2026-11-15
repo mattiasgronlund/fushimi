@@ -1,0 +1,47 @@
+    Finished `release` profile [optimized] target(s) in 0.01s
+     Running unittests src/lib.rs (target/release/build/inari/b6663968ddc632e5/out/inari-b6663968ddc632e5)
+
+running 5 tests
+add_ru                     96 cases, 0 mismatches
+sub_ru                     48 cases, 0 mismatches
+sub1_ru                    48 cases, 0 mismatches
+mul_ru/fma                 48 cases, 0 mismatches
+mul_ru/dekker              48 cases, 0 mismatches
+div_ru/fma                  0 cases, 0 mismatches
+div_ru/dekker               0 cases, 0 mismatches
+mul_add_ru/fma            192 cases, 0 mismatches
+mul_add_ru/dekker         192 cases, 0 mismatches
+
+test simd::differential_tests::regressions_generic ... ok
+test simd::differential_tests::round_ties_even ... ok
+mul_add1_rn_emulated: 7088146 cases, 0 mismatches
+test simd::differential_tests::mul_add_rn_emulated ... ok
+mul_ru_tiny/fma      20179336 cases (7141985 tiny), 0 mismatches
+mul_ru_tiny/dekker   20179336 cases (7143995 tiny), 0 mismatches
+
+test simd::differential_tests::mul_ru_tiny_generic ... ok
+add_ru               20133140 cases, 0 mismatches
+sub_ru               20133134 cases, 0 mismatches
+sub1_ru              20133134 cases, 0 mismatches
+mul_ru/fma           20133134 cases, 0 mismatches
+mul_ru/dekker        20133134 cases, 0 mismatches
+div_ru/fma           20133128 cases, 0 mismatches
+div_ru/dekker        20133128 cases, 0 mismatches
+add_ru/fpcr          20133140 cases, 0 mismatches
+sub_ru/fpcr          20133134 cases, 0 mismatches
+sub1_ru/fpcr         20133134 cases, 0 mismatches
+mul_ru/fpcr          20133134 cases, 0 mismatches
+div_ru/fpcr          20133128 cases, 0 mismatches
+mul_add_ru/fma       21458012 cases, 0 mismatches
+mul_add_ru/dekker    21458012 cases, 0 mismatches
+mul_add_ru/fpcr      21458012 cases, 0 mismatches
+sqrt_rd_ru           20133128 cases, 0 mismatches
+sqrt1_ru/fma         10000258 cases, 0 mismatches
+sqrt1_ru/dekker      10000258 cases, 0 mismatches
+sqrt1_rd/fma         10000258 cases, 0 mismatches
+sqrt1_rd/dekker      10000258 cases, 0 mismatches
+
+test simd::differential_tests::differential ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 345 filtered out; finished in 25.41s
+

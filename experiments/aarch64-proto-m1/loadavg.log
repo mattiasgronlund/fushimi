@@ -1,0 +1,30 @@
+aarch64-r1 before 2026-11-15T08:58:00Z { 2.42 3.49 3.04 }
+aarch64-r1 after  2026-11-15T09:04:49Z { 3.15 3.33 3.10 } exit 0
+generic-r1 before 2026-11-15T09:04:49Z { 3.15 3.33 3.10 }
+generic-r1 after  2026-11-15T09:11:59Z { 7.05 3.92 3.32 } exit 0
+proto-r1 before 2026-11-15T09:11:59Z { 7.05 3.92 3.32 }
+proto-r1 after  2026-11-15T09:18:56Z { 1.44 2.21 2.69 } exit 0
+aarch64-r2 before 2026-11-15T09:18:56Z { 1.44 2.21 2.69 }
+aarch64-r2 after  2026-11-15T09:25:46Z { 2.34 2.57 2.75 } exit 0
+generic-r2 before 2026-11-15T09:25:46Z { 2.34 2.57 2.75 }
+generic-r2 after  2026-11-15T09:32:53Z { 1.63 1.89 2.31 } exit 0
+proto-r2 before 2026-11-15T09:32:53Z { 1.63 1.89 2.31 }
+proto-r2 after  2026-11-15T09:39:48Z { 1.61 2.10 2.27 } exit 0
+aarch64-r3 before 2026-11-15T09:40:11Z { 1.90 2.13 2.27 }
+aarch64-r3 after  2026-11-15T09:47:02Z { 4.81 2.74 2.39 } exit 0
+generic-r3 before 2026-11-15T09:49:47Z { 2.46 2.81 2.49 }
+generic-r3 after  2026-11-15T09:56:52Z { 4.86 3.82 3.07 } exit 0
+proto-r3 before 2026-11-15T09:58:37Z { 2.32 3.26 2.94 }
+proto-r3 after  2026-11-15T10:05:33Z { 2.05 2.64 2.83 } exit 0
+aarch64-r4 before 2026-11-15T10:05:33Z { 2.05 2.64 2.83 }
+aarch64-r4 after  2026-11-15T10:12:25Z { 3.32 2.44 2.57 } exit 0
+generic-r4 before 2026-11-15T10:15:40Z { 2.32 2.60 2.63 }
+generic-r4 after  2026-11-15T10:22:49Z { 1.71 2.17 2.41 } exit 0
+proto-r4 before 2026-11-15T10:22:50Z { 1.71 2.17 2.41 }
+proto-r4 after  2026-11-15T10:29:46Z { 1.85 1.95 2.18 } exit 0
+aarch64-r5 before 2026-11-15T10:30:02Z { 1.75 1.92 2.17 }
+aarch64-r5 after  2026-11-15T10:36:54Z { 1.41 1.96 2.14 } exit 0
+generic-r5 before 2026-11-15T10:36:54Z { 1.41 1.96 2.14 }
+generic-r5 after  2026-11-15T10:44:04Z { 2.31 2.18 2.18 } exit 0
+proto-r5 before 2026-11-15T10:44:04Z { 2.31 2.18 2.18 }
+proto-r5 after  2026-11-15T10:51:01Z { 1.82 2.09 2.12 } exit 0

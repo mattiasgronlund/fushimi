@@ -1,0 +1,6 @@
+ %CPU COMM
+ 19.1 /System/Library/CoreServices/Finder.app/Contents/MacOS/Finder
+  4.1 /usr/libexec/dasd
+  3.2 /System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer
+  1.5 target/release/solidcraft
+  0.9 /Library/Application Support/org.pqrs/Karabiner-DriverKit-VirtualHIDDevice/Applications/Karabiner-VirtualHIDDevice-Daemon.app/Contents/MacOS/Karabiner-VirtualHIDDevice-Daemon

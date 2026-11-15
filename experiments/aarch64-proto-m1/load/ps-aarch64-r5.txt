@@ -1,0 +1,6 @@
+ %CPU COMM
+ 20.9 claude
+ 19.0 /System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer
+ 10.8 /Applications/kitty.app/Contents/MacOS/kitty
+  5.7 /Applications/Claude.app/Contents/MacOS/Claude
+  5.0 /Library/SystemExtensions/70C33EF6-65B2-419B-B810-B3314186A6EF/io.tailscale.ipn.macsys.network-extension.systemextension/Contents/MacOS/io.tailscale.ipn.macsys.network-extension

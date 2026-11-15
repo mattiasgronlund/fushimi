@@ -1,0 +1,6 @@
+ %CPU COMM
+ 13.2 /System/Applications/Weather.app/Contents/PlugIns/WeatherWidget.appex/Contents/MacOS/WeatherWidget
+ 12.6 /usr/libexec/runningboardd
+  3.7 /System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer
+  2.1 /System/Library/PrivateFrameworks/ChronoCore.framework/Support/chronod
+  2.0 /usr/sbin/bluetoothd

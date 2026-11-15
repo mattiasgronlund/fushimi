@@ -1,0 +1,5 @@
+ %CPU COMM
+ 17.9 /System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer
+ 14.8 /Applications/kitty.app/Contents/MacOS/kitty
+  6.3 /Applications/Claude.app/Contents/MacOS/Claude
+  3.6 /System/Library/CoreServices/loginwindow.app/Contents/MacOS/loginwindow

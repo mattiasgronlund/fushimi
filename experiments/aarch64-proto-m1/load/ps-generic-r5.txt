@@ -1,0 +1,6 @@
+ %CPU COMM
+  7.1 /System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer
+  3.6 target/release/solidcraft
+  2.7 /Library/SystemExtensions/70C33EF6-65B2-419B-B810-B3314186A6EF/io.tailscale.ipn.macsys.network-extension.systemextension/Contents/MacOS/io.tailscale.ipn.macsys.network-extension
+  1.9 /System/Library/DriverExtensions/com.apple.DriverKit-AppleBCMWLAN.dext/com.apple.DriverKit-AppleBCMWLAN
+  1.3 claude

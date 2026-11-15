@@ -1,0 +1,6 @@
+ %CPU COMM
+ 44.4 /sbin/launchd
+ 42.4 /usr/sbin/systemstats
+ 33.8 claude
+  5.0 /Applications/kitty.app/Contents/MacOS/kitty
+  2.2 /Applications/AlDente.app/Contents/MacOS/AlDente

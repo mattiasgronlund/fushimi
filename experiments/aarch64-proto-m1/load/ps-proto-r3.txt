@@ -1,0 +1,6 @@
+ %CPU COMM
+ 57.4 /usr/libexec/opendirectoryd
+ 42.9 /System/Library/PrivateFrameworks/AssistantServices.framework/Versions/A/Support/assistantd
+ 13.9 /System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer
+ 11.4 /Applications/kitty.app/Contents/MacOS/kitty
+  5.3 /System/Library/CoreServices/Finder.app/Contents/MacOS/Finder

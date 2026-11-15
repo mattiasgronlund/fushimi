@@ -1,0 +1,6 @@
+ %CPU COMM
+ 17.7 /System/Library/CoreServices/Finder.app/Contents/MacOS/Finder
+ 15.3 /System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer
+  2.0 /Applications/kitty.app/Contents/MacOS/kitty
+  1.8 /Library/SystemExtensions/70C33EF6-65B2-419B-B810-B3314186A6EF/io.tailscale.ipn.macsys.network-extension.systemextension/Contents/MacOS/io.tailscale.ipn.macsys.network-extension
+  1.1 /System/Library/DriverExtensions/com.apple.DriverKit-AppleBCMWLAN.dext/com.apple.DriverKit-AppleBCMWLAN

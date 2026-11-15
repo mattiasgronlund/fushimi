@@ -1,0 +1,6 @@
+ %CPU COMM
+ 70.9 /Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtectRemediatorAdload
+ 24.7 /usr/libexec/opendirectoryd
+ 15.8 /System/Library/PrivateFrameworks/AssistantServices.framework/Versions/A/Support/assistantd
+  5.8 /usr/libexec/trustd
+  3.5 /Applications/kitty.app/Contents/MacOS/kitty
