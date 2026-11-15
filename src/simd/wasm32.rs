@@ -10,6 +10,18 @@
 // does (see `mul_ru_tiny`). WebAssembly has no FMA (relaxed-simd's
 // `f64x2.relaxed_madd` may round twice), so Dekker's TwoProduct is used
 // throughout. The scalar operations are those of the generic backend.
+//
+// The thin layers over `std::arch::wasm32` that a `*_with` operation of `Interval`
+// reaches, other than through the backend functions that round upward or downward
+// (`add_ru`, `div_ru`, `mul_add_ru`, `mul_ru`, `sqrt_rd_ru` and `sqrt1_ru`), are
+// `#[inline(always)]` (see `Baseline` in `src/simd/token.rs`), so they are inlined
+// into the operation as the crate's own operations inline them. Without this, those
+// calls make the crate export them, and an operation instantiated in another crate
+// calls them out of line. Some are reached through other functions: `select` and
+// `is_nan` through `max`, `constant` through `neg0` and
+// `Interval::with_infsup_raw`, `bitmask`, `ge` and `le` through
+// `Interval::classify`, `extract0` through `Interval::is_empty` and `inf_raw`, and
+// `extract1` through `Interval::sup_raw`.
 
 use super::generic;
 use std::arch::wasm32::*;
@@ -58,6 +70,8 @@ pub(crate) fn any(x: F64X2) -> bool {
     bitmask(x) != 0
 }
 
+// Inlined, see the top of this file.
+#[inline(always)]
 pub(crate) fn bitmask(x: F64X2) -> u32 {
     i64x2_bitmask(x) as u32
 }
@@ -66,6 +80,8 @@ pub(crate) fn ceil(x: F64X2) -> F64X2 {
     f64x2_ceil(x)
 }
 
+// Inlined, see the top of this file.
+#[inline(always)]
 pub(crate) fn constant(x: f64, y: f64) -> F64X2 {
     f64x2(x, y)
 }
@@ -100,10 +116,14 @@ pub(crate) fn extract(x: F64X2) -> [f64; 2] {
     [extract0(x), extract1(x)]
 }
 
+// Inlined, see the top of this file.
+#[inline(always)]
 pub(crate) fn extract0(x: F64X2) -> f64 {
     f64x2_extract_lane::<0>(x)
 }
 
+// Inlined, see the top of this file.
+#[inline(always)]
 pub(crate) fn extract1(x: F64X2) -> f64 {
     f64x2_extract_lane::<1>(x)
 }
@@ -112,6 +132,8 @@ pub(crate) fn floor(x: F64X2) -> F64X2 {
     f64x2_floor(x)
 }
 
+// Inlined, see the top of this file.
+#[inline(always)]
 pub(crate) fn ge(x: F64X2, y: F64X2) -> F64X2 {
     f64x2_ge(x, y)
 }
@@ -125,6 +147,8 @@ pub(crate) fn hadd_rn(x: F64X2, y: F64X2) -> F64X2 {
     f64x2_add(shuffle02(x, y), shuffle13(x, y))
 }
 
+// Inlined, see the top of this file.
+#[inline(always)]
 pub(crate) fn le(x: F64X2, y: F64X2) -> F64X2 {
     f64x2_le(x, y)
 }
@@ -134,7 +158,8 @@ pub(crate) fn lt(x: F64X2, y: F64X2) -> F64X2 {
 }
 
 // The vector version of the `maximumNumber` operation defined in IEEE 754-2019,
-// which does not propagate NaNs.
+// which does not propagate NaNs. Inlined, see the top of this file.
+#[inline(always)]
 pub(crate) fn max(x: F64X2, y: F64X2) -> F64X2 {
     let m = f64x2_max(x, y);
     select(is_nan(x), y, select(is_nan(y), x, m))
@@ -278,6 +303,8 @@ pub(crate) fn neg(x: F64X2) -> F64X2 {
 }
 
 /// `neg0([x0, x1]) = [-x0, x1]`
+// Inlined, see the top of this file.
+#[inline(always)]
 pub(crate) fn neg0(x: F64X2) -> F64X2 {
     v128_xor(x, constant(-0.0, 0.0))
 }
@@ -296,20 +323,28 @@ pub(crate) fn round_ties_even(x: F64X2) -> F64X2 {
 }
 
 /// `shuffle02([x0, x1], [x2, x3]) = [x0, x2]`
+// Inlined, see the top of this file.
+#[inline(always)]
 pub(crate) fn shuffle02(x: F64X2, y: F64X2) -> F64X2 {
     i64x2_shuffle::<0, 2>(x, y)
 }
 
 /// `shuffle03([x0, x1], [x2, x3]) = [x0, x3]`
+// Inlined, see the top of this file.
+#[inline(always)]
 pub(crate) fn shuffle03(x: F64X2, y: F64X2) -> F64X2 {
     i64x2_shuffle::<0, 3>(x, y)
 }
 
 /// `shuffle13([x0, x1], [x2, x3]) = [x1, x3]`
+// Inlined, see the top of this file.
+#[inline(always)]
 pub(crate) fn shuffle13(x: F64X2, y: F64X2) -> F64X2 {
     i64x2_shuffle::<1, 3>(x, y)
 }
 
+// Inlined, see the top of this file.
+#[inline(always)]
 pub(crate) fn splat(x: f64) -> F64X2 {
     f64x2_splat(x)
 }
@@ -366,6 +401,8 @@ pub(crate) fn sub1_ru(x: f64, y: f64) -> f64 {
     generic::sub1_ru(x, y)
 }
 
+// Inlined, see the top of this file.
+#[inline(always)]
 pub(crate) fn swap(x: F64X2) -> F64X2 {
     i64x2_shuffle::<1, 0>(x, x)
 }
@@ -383,6 +420,8 @@ const ZERO: F64X2 = f64x2(0.0, 0.0);
 const LANE0: F64X2 = i64x2(-1, 0);
 
 /// `select(m, x, y)` takes the lanes of x where m is set, and those of y elsewhere.
+// Inlined, see the top of this file.
+#[inline(always)]
 fn select(m: F64X2, x: F64X2, y: F64X2) -> F64X2 {
     v128_bitselect(x, y, m)
 }
@@ -422,6 +461,8 @@ fn is_finite(x: F64X2) -> F64X2 {
     exponent_le(x, 1023)
 }
 
+// Inlined, see the top of this file.
+#[inline(always)]
 fn is_nan(x: F64X2) -> F64X2 {
     f64x2_ne(x, x)
 }

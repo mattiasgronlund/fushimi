@@ -6,128 +6,140 @@ use std::{cmp::Ordering, unreachable};
 impl Interval {
     // Division functions [a, b] / [c, d] for various cases, shared
     // between `mul_rev_to_pair` (below) and `Div` (in arith.rs).
-    #[inline]
-    pub(crate) fn div_m_n1(self, rhs: Self) -> Self {
-        // `rocq/theories/Model.v` transcribes this function for the proofs of
-        // `(Dec)Interval::div` and `(Dec)Interval::mul_rev_to_pair`, so it has to be updated
-        // along with it.
+    #[inline(always)]
+    pub(crate) fn div_m_n1<S: Simd>(self, s: S, rhs: Self) -> Self {
+        // `rocq/theories/Model.v` transcribes this function for an `s` whose backend is the
+        // portable one, for the proofs of `(Dec)Interval::div` and
+        // `(Dec)Interval::mul_rev_to_pair`, so it has to be updated along with it.
         // M / N1 => [b/d, a/d] = [-b/d; a/d] = [b/-d; -a/-d] = [b; -a] ./ [-d; -d]
-        let x = swap(self.rep); // [b; -a]
-        let y = swap(rhs.rep); // [d; -c]
-        let y = neg0(y); // [-d; -c]
-        let y = shuffle02(y, y); // [-d; -d]
-        Self { rep: div_ru(x, y) }
-    }
-
-    #[inline]
-    pub(crate) fn div_m_p1(self, rhs: Self) -> Self {
-        // `rocq/theories/Model.v` transcribes this function for the proofs of
-        // `(Dec)Interval::div` and `(Dec)Interval::mul_rev_to_pair`, so it has to be updated
-        // along with it.
-        // M / P1 => [a/c, b/c] = [-a/c; b/c] = [-a; b] ./ [c; c]
-        let x = self.rep; // [-a; b]
-        let y = neg0(rhs.rep); // [c; d]
-        let y = shuffle02(y, y); // [c; c]
-        Self { rep: div_ru(x, y) }
-    }
-
-    #[inline]
-    pub(crate) fn div_n_n0(self, rhs: Self) -> Self {
-        // `rocq/theories/Model.v` transcribes this function for the proofs of
-        // `(Dec)Interval::div` and `(Dec)Interval::mul_rev_to_pair`, so it has to be updated
-        // along with it.
-        // N / N0 => [b/c, +∞] = [-b/c; +∞] = [b/-c; +∞]
-        let x = swap(self.rep); // [b; -a]
-        let y = rhs.rep; // [-c; d]
+        let x = s.swap(self.rep); // [b; -a]
+        let y = s.swap(rhs.rep); // [d; -c]
+        let y = s.neg0(y); // [-d; -c]
+        let y = s.shuffle02(y, y); // [-d; -d]
         Self {
-            rep: shuffle02(div_ru(x, y), splat(f64::INFINITY)),
+            rep: s.div_ru(x, y),
         }
     }
 
-    #[inline]
-    pub(crate) fn div_n_n1(self, rhs: Self) -> Self {
-        // `rocq/theories/Model.v` transcribes this function for the proofs of
-        // `(Dec)Interval::div` and `(Dec)Interval::mul_rev_to_pair`, so it has to be updated
-        // along with it.
-        // N / N1 => [b/c, a/d] = [-b/c; a/d] = [b/-c; a/d] = [b; a] ./ [-c; d]
-        let x = neg0(self.rep); // [a; b]
-        let x = swap(x); // [b; a]
-        let y = rhs.rep; // [-c; d]
-        Self { rep: div_ru(x, y) }
+    #[inline(always)]
+    pub(crate) fn div_m_p1<S: Simd>(self, s: S, rhs: Self) -> Self {
+        // `rocq/theories/Model.v` transcribes this function for an `s` whose backend is the
+        // portable one, for the proofs of `(Dec)Interval::div` and
+        // `(Dec)Interval::mul_rev_to_pair`, so it has to be updated along with it.
+        // M / P1 => [a/c, b/c] = [-a/c; b/c] = [-a; b] ./ [c; c]
+        let x = self.rep; // [-a; b]
+        let y = s.neg0(rhs.rep); // [c; d]
+        let y = s.shuffle02(y, y); // [c; c]
+        Self {
+            rep: s.div_ru(x, y),
+        }
     }
 
-    #[inline]
-    pub(crate) fn div_n_p0(self, rhs: Self) -> Self {
-        // `rocq/theories/Model.v` transcribes this function for the proofs of
-        // `(Dec)Interval::div` and `(Dec)Interval::mul_rev_to_pair`, so it has to be updated
-        // along with it.
+    #[inline(always)]
+    pub(crate) fn div_n_n0<S: Simd>(self, s: S, rhs: Self) -> Self {
+        // `rocq/theories/Model.v` transcribes this function for an `s` whose backend is the
+        // portable one, for the proofs of `(Dec)Interval::div` and
+        // `(Dec)Interval::mul_rev_to_pair`, so it has to be updated along with it.
+        // N / N0 => [b/c, +∞] = [-b/c; +∞] = [b/-c; +∞]
+        let x = s.swap(self.rep); // [b; -a]
+        let y = rhs.rep; // [-c; d]
+        Self {
+            rep: s.shuffle02(s.div_ru(x, y), s.splat(f64::INFINITY)),
+        }
+    }
+
+    #[inline(always)]
+    pub(crate) fn div_n_n1<S: Simd>(self, s: S, rhs: Self) -> Self {
+        // `rocq/theories/Model.v` transcribes this function for an `s` whose backend is the
+        // portable one, for the proofs of `(Dec)Interval::div` and
+        // `(Dec)Interval::mul_rev_to_pair`, so it has to be updated along with it.
+        // N / N1 => [b/c, a/d] = [-b/c; a/d] = [b/-c; a/d] = [b; a] ./ [-c; d]
+        let x = s.neg0(self.rep); // [a; b]
+        let x = s.swap(x); // [b; a]
+        let y = rhs.rep; // [-c; d]
+        Self {
+            rep: s.div_ru(x, y),
+        }
+    }
+
+    #[inline(always)]
+    pub(crate) fn div_n_p0<S: Simd>(self, s: S, rhs: Self) -> Self {
+        // `rocq/theories/Model.v` transcribes this function for an `s` whose backend is the
+        // portable one, for the proofs of `(Dec)Interval::div` and
+        // `(Dec)Interval::mul_rev_to_pair`, so it has to be updated along with it.
         // N / P0 => [-∞, b/d] = [+∞; b/d]
         let x = self.rep; // [-a; b]
         let y = rhs.rep; // [-c; d]
         Self {
-            rep: shuffle03(splat(f64::INFINITY), div_ru(x, y)),
+            rep: s.shuffle03(s.splat(f64::INFINITY), s.div_ru(x, y)),
         }
     }
 
-    #[inline]
-    pub(crate) fn div_n_p1(self, rhs: Self) -> Self {
-        // `rocq/theories/Model.v` transcribes this function for the proofs of
-        // `(Dec)Interval::div` and `(Dec)Interval::mul_rev_to_pair`, so it has to be updated
-        // along with it.
+    #[inline(always)]
+    pub(crate) fn div_n_p1<S: Simd>(self, s: S, rhs: Self) -> Self {
+        // `rocq/theories/Model.v` transcribes this function for an `s` whose backend is the
+        // portable one, for the proofs of `(Dec)Interval::div` and
+        // `(Dec)Interval::mul_rev_to_pair`, so it has to be updated along with it.
         // N / P1 => [a/c, b/d] = [-a/c; b/d] = [-a; b] ./ [c; d]
         let x = self.rep; // [-a; b]
-        let y = neg0(rhs.rep); // [c; d]
-        Self { rep: div_ru(x, y) }
+        let y = s.neg0(rhs.rep); // [c; d]
+        Self {
+            rep: s.div_ru(x, y),
+        }
     }
 
-    #[inline]
-    pub(crate) fn div_p_n0(self, rhs: Self) -> Self {
-        // `rocq/theories/Model.v` transcribes this function for the proofs of
-        // `(Dec)Interval::div` and `(Dec)Interval::mul_rev_to_pair`, so it has to be updated
-        // along with it.
+    #[inline(always)]
+    pub(crate) fn div_p_n0<S: Simd>(self, s: S, rhs: Self) -> Self {
+        // `rocq/theories/Model.v` transcribes this function for an `s` whose backend is the
+        // portable one, for the proofs of `(Dec)Interval::div` and
+        // `(Dec)Interval::mul_rev_to_pair`, so it has to be updated along with it.
         // P / N0 => [-∞, a/c] = [+∞; a/c] = [+∞; -a/-c]
         let x = self.rep; // [-a; b]
         let y = rhs.rep; // [-c; d]
         Self {
-            rep: shuffle02(splat(f64::INFINITY), div_ru(x, y)),
+            rep: s.shuffle02(s.splat(f64::INFINITY), s.div_ru(x, y)),
         }
     }
 
-    #[inline]
-    pub(crate) fn div_p_n1(self, rhs: Self) -> Self {
-        // `rocq/theories/Model.v` transcribes this function for the proofs of
-        // `(Dec)Interval::div` and `(Dec)Interval::mul_rev_to_pair`, so it has to be updated
-        // along with it.
+    #[inline(always)]
+    pub(crate) fn div_p_n1<S: Simd>(self, s: S, rhs: Self) -> Self {
+        // `rocq/theories/Model.v` transcribes this function for an `s` whose backend is the
+        // portable one, for the proofs of `(Dec)Interval::div` and
+        // `(Dec)Interval::mul_rev_to_pair`, so it has to be updated along with it.
         // P / N1 => [b/d, a/c] = [-b/d; a/c] = [-b/d; -a/-c] = [-b; -a] ./ [d; -c]
-        let x = swap(self.rep); // [b; -a]
-        let x = neg0(x); // [-b; -a]
-        let y = swap(rhs.rep); // [d; -c]
-        Self { rep: div_ru(x, y) }
+        let x = s.swap(self.rep); // [b; -a]
+        let x = s.neg0(x); // [-b; -a]
+        let y = s.swap(rhs.rep); // [d; -c]
+        Self {
+            rep: s.div_ru(x, y),
+        }
     }
 
-    #[inline]
-    pub(crate) fn div_p_p0(self, rhs: Self) -> Self {
-        // `rocq/theories/Model.v` transcribes this function for the proofs of
-        // `(Dec)Interval::div` and `(Dec)Interval::mul_rev_to_pair`, so it has to be updated
-        // along with it.
+    #[inline(always)]
+    pub(crate) fn div_p_p0<S: Simd>(self, s: S, rhs: Self) -> Self {
+        // `rocq/theories/Model.v` transcribes this function for an `s` whose backend is the
+        // portable one, for the proofs of `(Dec)Interval::div` and
+        // `(Dec)Interval::mul_rev_to_pair`, so it has to be updated along with it.
         // P / P0 => [a/d, +∞] = [-a/d; +∞]
         let x = self.rep; // [-a; b]
-        let y = swap(rhs.rep); // [d; -c]
+        let y = s.swap(rhs.rep); // [d; -c]
         Self {
-            rep: shuffle02(div_ru(x, y), splat(f64::INFINITY)),
+            rep: s.shuffle02(s.div_ru(x, y), s.splat(f64::INFINITY)),
         }
     }
 
-    #[inline]
-    pub(crate) fn div_p_p1(self, rhs: Self) -> Self {
-        // `rocq/theories/Model.v` transcribes this function for the proofs of
-        // `(Dec)Interval::div` and `(Dec)Interval::mul_rev_to_pair`, so it has to be updated
-        // along with it.
+    #[inline(always)]
+    pub(crate) fn div_p_p1<S: Simd>(self, s: S, rhs: Self) -> Self {
+        // `rocq/theories/Model.v` transcribes this function for an `s` whose backend is the
+        // portable one, for the proofs of `(Dec)Interval::div` and
+        // `(Dec)Interval::mul_rev_to_pair`, so it has to be updated along with it.
         // P / P1 => [a/d, b/c] = [-a/d; b/c] = [-a; b] ./ [d; c]
         let x = self.rep; // [-a; b]
-        let y = neg0(rhs.rep); // [c; d]
-        let y = swap(y); // [d; c]
-        Self { rep: div_ru(x, y) }
+        let y = s.neg0(rhs.rep); // [c; d]
+        let y = s.swap(y); // [d; c]
+        Self {
+            rep: s.div_ru(x, y),
+        }
     }
 
     /// Returns the reverse multiplication $\numerator \setdiv′ \self$
@@ -229,16 +241,16 @@ impl Interval {
                     },
                 ]
             }
-            M_N1 => [numerator.div_m_n1(self), Self::EMPTY],
-            M_P1 => [numerator.div_m_p1(self), Self::EMPTY],
-            N1_N0 => [numerator.div_n_n0(self), Self::EMPTY],
-            N0_N1 | N1_N1 => [numerator.div_n_n1(self), Self::EMPTY],
-            N1_P0 => [numerator.div_n_p0(self), Self::EMPTY],
-            N0_P1 | N1_P1 => [numerator.div_n_p1(self), Self::EMPTY],
-            P1_N0 => [numerator.div_p_n0(self), Self::EMPTY],
-            P0_N1 | P1_N1 => [numerator.div_p_n1(self), Self::EMPTY],
-            P1_P0 => [numerator.div_p_p0(self), Self::EMPTY],
-            P0_P1 | P1_P1 => [numerator.div_p_p1(self), Self::EMPTY],
+            M_N1 => [numerator.div_m_n1(Baseline, self), Self::EMPTY],
+            M_P1 => [numerator.div_m_p1(Baseline, self), Self::EMPTY],
+            N1_N0 => [numerator.div_n_n0(Baseline, self), Self::EMPTY],
+            N0_N1 | N1_N1 => [numerator.div_n_n1(Baseline, self), Self::EMPTY],
+            N1_P0 => [numerator.div_n_p0(Baseline, self), Self::EMPTY],
+            N0_P1 | N1_P1 => [numerator.div_n_p1(Baseline, self), Self::EMPTY],
+            P1_N0 => [numerator.div_p_n0(Baseline, self), Self::EMPTY],
+            P0_N1 | P1_N1 => [numerator.div_p_n1(Baseline, self), Self::EMPTY],
+            P1_P0 => [numerator.div_p_p0(Baseline, self), Self::EMPTY],
+            P0_P1 | P1_P1 => [numerator.div_p_p1(Baseline, self), Self::EMPTY],
         }
     }
 
@@ -410,13 +422,49 @@ impl Interval {
     /// | Domain | Range |
     /// | ------ | ----- |
     /// | $\R^3$ | $\R$  |
-    // Almost a copy-paste of mul. Additions/modifications are indicated with "// *".
-    #[allow(clippy::many_single_char_names)]
     #[must_use]
     pub fn mul_add(self, rhs: Self, addend: Self) -> Self {
-        // Proved correct in `rocq/theories/MulAdd.v` for the portable backend.
-        // `rocq/theories/Model.v` transcribes this function, so it has to be updated
-        // along with it.
+        // Proved correct in `rocq/theories/MulAdd.v` for the portable backend, as
+        // `mul_add_with` called with `Baseline`. `rocq/theories/Model.v` transcribes this call,
+        // so it has to be updated along with it.
+        self.mul_add_with(Baseline, rhs, addend)
+    }
+
+    /// Returns `self.mul_add(rhs, addend)`, computed by the backend of `s` (see
+    /// [`Simd`](crate::simd::Simd)).
+    ///
+    /// The result is the same interval as `self.mul_add(rhs, addend)` for every `s`, as both are
+    /// the tightest result ([Conformance to the standard](crate::_docs::conformance): "Unless
+    /// otherwise noted, all operations return the tightest results").
+    ///
+    /// This method is `#[inline(always)]`, so that it gets the target features of the level of
+    /// `s` where it is inlined into the function inside which
+    /// [`s.vectorize`](crate::simd::Simd::vectorize) calls its closure: where it is called in the
+    /// closure, and the closure is inlined into that function.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use inari::{const_interval as c, simd::{Baseline, Simd}};
+    /// let x = c!(1.0, 2.0);
+    /// let y = c!(-3.0, 0.5);
+    /// let z = c!(0.1, 0.2);
+    /// assert_eq!(Baseline.vectorize(|| x.mul_add_with(Baseline, y, z)), x.mul_add(y, z));
+    /// #[cfg(target_arch = "x86_64")]
+    /// {
+    ///     if let Some(s) = inari::simd::V3::try_new() {
+    ///         assert_eq!(s.vectorize(|| x.mul_add_with(s, y, z)), x.mul_add(y, z));
+    ///     }
+    /// }
+    /// ```
+    // Almost a copy-paste of mul. Additions/modifications are indicated with "// *".
+    #[allow(clippy::many_single_char_names)]
+    #[inline(always)]
+    #[must_use]
+    pub fn mul_add_with<S: Simd>(self, s: S, rhs: Self, addend: Self) -> Self {
+        // Proved correct in `rocq/theories/MulAdd.v` for an `s` whose backend is the portable
+        // one. `rocq/theories/Model.v` transcribes this function for such an `s`, so it has to
+        // be updated along with it.
         if addend.is_empty() {
             return Self::EMPTY; // *
         }
@@ -428,72 +476,72 @@ impl Interval {
             }
             M_Z | N0_Z | N1_Z | P0_Z | P1_Z | Z_M | Z_N0 | Z_N1 | Z_P0 | Z_P1 | Z_Z => addend, // *
             M_M => {
-                let x = shuffle02(self.rep, self.rep);
-                let y = swap(rhs.rep);
-                let xy = mul_add_ru(x, y, addend.rep); // *
-                let z = shuffle13(self.rep, self.rep);
+                let x = s.shuffle02(self.rep, self.rep);
+                let y = s.swap(rhs.rep);
+                let xy = s.mul_add_ru(x, y, addend.rep); // *
+                let z = s.shuffle13(self.rep, self.rep);
                 let w = rhs.rep;
-                let zw = mul_add_ru(z, w, addend.rep); // *
-                let r = max(xy, zw);
+                let zw = s.mul_add_ru(z, w, addend.rep); // *
+                let r = s.max(xy, zw);
                 Self { rep: r }
             }
             M_N0 | M_N1 => {
-                let x = swap(self.rep);
-                let y = shuffle02(rhs.rep, rhs.rep);
+                let x = s.swap(self.rep);
+                let y = s.shuffle02(rhs.rep, rhs.rep);
                 Self {
-                    rep: mul_add_ru(x, y, addend.rep), // *
+                    rep: s.mul_add_ru(x, y, addend.rep), // *
                 }
             }
             M_P0 | M_P1 => {
                 let x = self.rep;
-                let y = shuffle13(rhs.rep, rhs.rep);
+                let y = s.shuffle13(rhs.rep, rhs.rep);
                 Self {
-                    rep: mul_add_ru(x, y, addend.rep), // *
+                    rep: s.mul_add_ru(x, y, addend.rep), // *
                 }
             }
             N0_M | N1_M => {
-                let x = shuffle02(self.rep, self.rep);
-                let y = swap(rhs.rep);
+                let x = s.shuffle02(self.rep, self.rep);
+                let y = s.swap(rhs.rep);
                 Self {
-                    rep: mul_add_ru(x, y, addend.rep), // *
+                    rep: s.mul_add_ru(x, y, addend.rep), // *
                 }
             }
             N0_N0 | N0_N1 | N1_N0 | N1_N1 => {
-                let x = swap(self.rep);
-                let x = neg0(x);
-                let y = swap(rhs.rep);
+                let x = s.swap(self.rep);
+                let x = s.neg0(x);
+                let y = s.swap(rhs.rep);
                 Self {
-                    rep: mul_add_ru(x, y, addend.rep), // *
+                    rep: s.mul_add_ru(x, y, addend.rep), // *
                 }
             }
             N0_P0 | N0_P1 | N1_P0 | N1_P1 => {
                 let x = self.rep;
-                let y = neg0(rhs.rep);
-                let y = swap(y);
+                let y = s.neg0(rhs.rep);
+                let y = s.swap(y);
                 Self {
-                    rep: mul_add_ru(x, y, addend.rep), // *
+                    rep: s.mul_add_ru(x, y, addend.rep), // *
                 }
             }
             P0_M | P1_M => {
-                let x = shuffle13(self.rep, self.rep);
+                let x = s.shuffle13(self.rep, self.rep);
                 let y = rhs.rep;
                 Self {
-                    rep: mul_add_ru(x, y, addend.rep), // *
+                    rep: s.mul_add_ru(x, y, addend.rep), // *
                 }
             }
             P0_N0 | P0_N1 | P1_N0 | P1_N1 => {
-                let x = neg0(self.rep);
-                let x = swap(x);
+                let x = s.neg0(self.rep);
+                let x = s.swap(x);
                 let y = rhs.rep;
                 Self {
-                    rep: mul_add_ru(x, y, addend.rep), // *
+                    rep: s.mul_add_ru(x, y, addend.rep), // *
                 }
             }
             P0_P0 | P0_P1 | P1_P0 | P1_P1 => {
                 let x = self.rep;
-                let y = neg0(rhs.rep);
+                let y = s.neg0(rhs.rep);
                 Self {
-                    rep: mul_add_ru(x, y, addend.rep), // *
+                    rep: s.mul_add_ru(x, y, addend.rep), // *
                 }
             }
         }
@@ -508,40 +556,77 @@ impl Interval {
     /// | $\R ∖ \set 0$ | $\R ∖ \set 0$ |
     #[must_use]
     pub fn recip(self) -> Self {
-        // Proved correct in `rocq/theories/Recip.v` for the portable backend.
-        // `rocq/theories/Model.v` transcribes this function, so it has to be updated
-        // along with it.
+        // Proved correct in `rocq/theories/Recip.v` for the portable backend, as `recip_with`
+        // called with `Baseline`. `rocq/theories/Model.v` transcribes this call, so it has to
+        // be updated along with it.
+        self.recip_with(Baseline)
+    }
+
+    /// Returns `self.recip()`, computed by the backend of `s` (see [`Simd`](crate::simd::Simd)).
+    ///
+    /// The result is the same interval as `self.recip()` for every `s`, as both are the tightest
+    /// result ([Conformance to the standard](crate::_docs::conformance): "Unless otherwise noted,
+    /// all operations return the tightest results").
+    ///
+    /// This method is `#[inline(always)]`, so that it gets the target features of the level of
+    /// `s` where it is inlined into the function inside which
+    /// [`s.vectorize`](crate::simd::Simd::vectorize) calls its closure: where it is called in the
+    /// closure, and the closure is inlined into that function.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use inari::{const_interval as c, simd::{Baseline, Simd}};
+    /// let x = c!(3.0, 4.0);
+    /// assert_eq!(Baseline.vectorize(|| x.recip_with(Baseline)), x.recip());
+    /// #[cfg(target_arch = "x86_64")]
+    /// {
+    ///     if let Some(s) = inari::simd::V3::try_new() {
+    ///         assert_eq!(s.vectorize(|| x.recip_with(s)), x.recip());
+    ///     }
+    /// }
+    /// ```
+    #[inline(always)]
+    #[must_use]
+    pub fn recip_with<S: Simd>(self, s: S) -> Self {
+        // Proved correct in `rocq/theories/Recip.v` for an `s` whose backend is the portable
+        // one. `rocq/theories/Model.v` transcribes this function for such an `s`, so it has to
+        // be updated along with it.
         use IntervalClass::*;
         match self.classify() {
             E | Z => Self::EMPTY,
             M => Self::ENTIRE,
             N0 => {
                 // 1 / N0 => [-∞, 1/a] = [+∞; -1/-a]
-                let x = splat(-1.0);
+                let x = s.splat(-1.0);
                 let y = self.rep; // [-a; b]
                 Self {
-                    rep: shuffle02(splat(f64::INFINITY), div_ru(x, y)),
+                    rep: s.shuffle02(s.splat(f64::INFINITY), s.div_ru(x, y)),
                 }
             }
             N1 => {
                 // 1 / N1 => [1/b, 1/a] = [-1/b; 1/a] = [-1/b; -1/-a] = [-1; -1] ./ [b; -a]
-                let x = splat(-1.0);
-                let y = swap(self.rep); // [b; -a]
-                Self { rep: div_ru(x, y) }
+                let x = s.splat(-1.0);
+                let y = s.swap(self.rep); // [b; -a]
+                Self {
+                    rep: s.div_ru(x, y),
+                }
             }
             P0 => {
                 // 1 / P0 => [1/b, +∞] = [-1/b; +∞]
-                let x = splat(-1.0);
+                let x = s.splat(-1.0);
                 let y = self.rep; // [-a; b]
                 Self {
-                    rep: shuffle13(div_ru(x, y), splat(f64::INFINITY)),
+                    rep: s.shuffle13(s.div_ru(x, y), s.splat(f64::INFINITY)),
                 }
             }
             P1 => {
                 // 1 / P1 => [1/b, 1/a] = [-1/b; 1/a] = [-1/b; -1/-a] = [-1; -1] ./ [b; -a]
-                let x = splat(-1.0);
-                let y = swap(self.rep); // [b; -a]
-                Self { rep: div_ru(x, y) }
+                let x = s.splat(-1.0);
+                let y = s.swap(self.rep); // [b; -a]
+                Self {
+                    rep: s.div_ru(x, y),
+                }
             }
         }
     }
@@ -555,9 +640,42 @@ impl Interval {
     /// | $\R$   | $\[0, ∞)$ |
     #[must_use]
     pub fn sqr(self) -> Self {
-        // Proved correct in `rocq/theories/Sqr.v` for the portable backend.
-        // `rocq/theories/Model.v` transcribes this function, so it has to be updated
-        // along with it.
+        // Proved correct in `rocq/theories/Sqr.v` for the portable backend, as `sqr_with`
+        // called with `Baseline`. `rocq/theories/Model.v` transcribes this call, so it has to
+        // be updated along with it.
+        self.sqr_with(Baseline)
+    }
+
+    /// Returns `self.sqr()`, computed by the backend of `s` (see [`Simd`](crate::simd::Simd)).
+    ///
+    /// The result is the same interval as `self.sqr()` for every `s`, as both are the tightest
+    /// result ([Conformance to the standard](crate::_docs::conformance): "Unless otherwise noted,
+    /// all operations return the tightest results").
+    ///
+    /// This method is `#[inline(always)]`, so that it gets the target features of the level of
+    /// `s` where it is inlined into the function inside which
+    /// [`s.vectorize`](crate::simd::Simd::vectorize) calls its closure: where it is called in the
+    /// closure, and the closure is inlined into that function.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use inari::{const_interval as c, simd::{Baseline, Simd}};
+    /// let x = c!(-3.0, 0.1);
+    /// assert_eq!(Baseline.vectorize(|| x.sqr_with(Baseline)), x.sqr());
+    /// #[cfg(target_arch = "x86_64")]
+    /// {
+    ///     if let Some(s) = inari::simd::V3::try_new() {
+    ///         assert_eq!(s.vectorize(|| x.sqr_with(s)), x.sqr());
+    ///     }
+    /// }
+    /// ```
+    #[inline(always)]
+    #[must_use]
+    pub fn sqr_with<S: Simd>(self, s: S) -> Self {
+        // Proved correct in `rocq/theories/Sqr.v` for an `s` whose backend is the portable one.
+        // `rocq/theories/Model.v` transcribes this function for such an `s`, so it has to be
+        // updated along with it.
         use IntervalClass::*;
         match self.classify() {
             E => Self::EMPTY,
@@ -565,23 +683,27 @@ impl Interval {
             M => {
                 // [0, max(a^2, b^2)] = [0; max(a^2, b^2)]
                 let x = self.rep; // [-a; b]
-                let r = mul_ru(x, x); // [a^2; b^2]
-                let r = max(r, swap(r)); // [max(a^2, b^2); _]
+                let r = s.mul_ru(x, x); // [a^2; b^2]
+                let r = s.max(r, s.swap(r)); // [max(a^2, b^2); _]
                 Self {
-                    rep: shuffle02(splat(0.0), r),
+                    rep: s.shuffle02(s.splat(0.0), r),
                 }
             }
             N0 | N1 => {
                 // [b^2, a^2] = [-b^2; a^2] = [-b; -a] .* [b; -a]
-                let x = swap(self.rep); // [b; -a]
-                let y = neg0(x); // [-b; -a]
-                Self { rep: mul_ru(x, y) }
+                let x = s.swap(self.rep); // [b; -a]
+                let y = s.neg0(x); // [-b; -a]
+                Self {
+                    rep: s.mul_ru(x, y),
+                }
             }
             P0 | P1 => {
                 // [a^2, b^2] = [-a^2; b^2] = [-a; b] .* [a; b]
                 let x = self.rep; // [-a; b]
-                let y = neg0(x); // [a; b]
-                Self { rep: mul_ru(x, y) }
+                let y = s.neg0(x); // [a; b]
+                Self {
+                    rep: s.mul_ru(x, y),
+                }
             }
         }
     }
@@ -595,9 +717,42 @@ impl Interval {
     /// | $\[0, ∞)$ | $\[0, ∞)$ |
     #[must_use]
     pub fn sqrt(self) -> Self {
-        // Proved correct in `rocq/theories/Sqrt.v` for the portable backend.
-        // `rocq/theories/Model.v` transcribes this function, so it has to be updated
-        // along with it.
+        // Proved correct in `rocq/theories/Sqrt.v` for the portable backend, as `sqrt_with`
+        // called with `Baseline`. `rocq/theories/Model.v` transcribes this call, so it has to
+        // be updated along with it.
+        self.sqrt_with(Baseline)
+    }
+
+    /// Returns `self.sqrt()`, computed by the backend of `s` (see [`Simd`](crate::simd::Simd)).
+    ///
+    /// The result is the same interval as `self.sqrt()` for every `s`, as both are the tightest
+    /// result ([Conformance to the standard](crate::_docs::conformance): "Unless otherwise noted,
+    /// all operations return the tightest results").
+    ///
+    /// This method is `#[inline(always)]`, so that it gets the target features of the level of
+    /// `s` where it is inlined into the function inside which
+    /// [`s.vectorize`](crate::simd::Simd::vectorize) calls its closure: where it is called in the
+    /// closure, and the closure is inlined into that function.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use inari::{const_interval as c, simd::{Baseline, Simd}};
+    /// let x = c!(2.0, 3.0);
+    /// assert_eq!(Baseline.vectorize(|| x.sqrt_with(Baseline)), x.sqrt());
+    /// #[cfg(target_arch = "x86_64")]
+    /// {
+    ///     if let Some(s) = inari::simd::V3::try_new() {
+    ///         assert_eq!(s.vectorize(|| x.sqrt_with(s)), x.sqrt());
+    ///     }
+    /// }
+    /// ```
+    #[inline(always)]
+    #[must_use]
+    pub fn sqrt_with<S: Simd>(self, s: S) -> Self {
+        // Proved correct in `rocq/theories/Sqrt.v` for an `s` whose backend is the portable
+        // one. `rocq/theories/Model.v` transcribes this function for such an `s`, so it has to
+        // be updated along with it.
         if self.is_empty() {
             return Self::EMPTY;
         }
@@ -610,12 +765,12 @@ impl Interval {
         } else if a <= 0.0 {
             // Only one square root is needed, so `sqrt_rd_ru` would be wasted: a
             // lower lane of zero fails its fast-path check (see BENCHMARKS.md).
-            Self::with_infsup_raw(0.0, sqrt1_ru(b))
+            Self::with_infsup_raw(0.0, s.sqrt1_ru(b))
         } else {
             // Both endpoints in one vector square root. `neg0` turns the
             // representation [-a; b] into [a; b], and back afterward.
             Self {
-                rep: neg0(sqrt_rd_ru(neg0(self.rep))),
+                rep: s.neg0(s.sqrt_rd_ru(s.neg0(self.rep))),
             }
         }
     }

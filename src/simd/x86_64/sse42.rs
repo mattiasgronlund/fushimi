@@ -32,6 +32,11 @@ pub(crate) use super::lanewise::{add_ru, sqrt1_ru, sub1_ru, sub_ru};
 pub(crate) use super::lanewise::{sqrt1_rd_mxcsr, sqrt1_ru_mxcsr};
 
 /// `div_ru([x0, x1], [y0, y1]) = [x0 / y0, x1 / y1]` rounded toward +∞.
+// Without `sse4.2`, this module is only the backend of the token `V2`, whose copies in
+// `src/simd/token.rs` compile it with its target features by inlining it.
+#[cfg_attr(not(target_feature = "sse4.2"), inline(always))]
+// As the build's backend, it is out of line (see `Baseline` in `src/simd/token.rs`).
+#[cfg_attr(target_feature = "sse4.2", inline(never))]
 pub(crate) fn div_ru(x: F64X2, y: F64X2) -> F64X2 {
     // See `generic::div1_ru_fast`, Dekker's variant.
     let q = div_rn(x, y);
@@ -55,6 +60,9 @@ pub(crate) fn div_ru(x: F64X2, y: F64X2) -> F64X2 {
 
 /// `mul_add_ru([x0, x1], [y0, y1], [z0, z1]) = [x0 * y0 + z0, x1 * y1 + z1]`
 /// rounded toward +∞ (with a single rounding).
+#[cfg_attr(not(target_feature = "sse4.2"), inline(always))]
+// As the build's backend, it is out of line (see `Baseline` in `src/simd/token.rs`).
+#[cfg_attr(target_feature = "sse4.2", inline(never))]
 pub(crate) fn mul_add_ru(a: F64X2, b: F64X2, c: F64X2) -> F64X2 {
     // See `generic::mul_add1_ru_fast` for the algorithm (ErrFma) and its
     // hypotheses, with the FMA emulated by `generic::mul_add1_rn_emulated`.
@@ -97,6 +105,9 @@ pub(crate) fn mul_add_ru(a: F64X2, b: F64X2, c: F64X2) -> F64X2 {
 }
 
 /// `mul_ru([x0, x1], [y0, y1]) = [x0 * y0, x1 * y1]` rounded toward +∞.
+#[cfg_attr(not(target_feature = "sse4.2"), inline(always))]
+// As the build's backend, it is out of line (see `Baseline` in `src/simd/token.rs`).
+#[cfg_attr(target_feature = "sse4.2", inline(never))]
 pub(crate) fn mul_ru(x: F64X2, y: F64X2) -> F64X2 {
     // See `generic::mul1_ru_fast`.
     let p = mul_rn(x, y);
@@ -112,6 +123,7 @@ pub(crate) fn mul_ru(x: F64X2, y: F64X2) -> F64X2 {
 
 /// Returns RU(x * y) from p = RN(x * y), in the lanes that are `special` or
 /// where `two_prod_is_exact(x, y, p)`.
+#[inline(always)]
 fn mul_ru_fast(x: F64X2, y: F64X2, p: F64X2, special: F64X2) -> F64X2 {
     let e = two_prod_err(x, y, p);
     let up = andnot(gt(e, zero()), special);
@@ -124,6 +136,7 @@ fn mul_ru_fast(x: F64X2, y: F64X2, p: F64X2, special: F64X2) -> F64X2 {
 ///
 /// This is `fma::mul_ru_tiny` with Dekker's TwoProduct, which also bounds the
 /// factors. See there for why the result is RU(x * y).
+#[cfg_attr(not(target_feature = "sse4.2"), inline(always))]
 fn mul_ru_tiny(x: F64X2, y: F64X2, p: F64X2, ok: F64X2, special: F64X2) -> F64X2 {
     // Powers of two, so that scaling by them is exact unless it overflows or
     // underflows.
@@ -163,6 +176,8 @@ fn mul_ru_tiny(x: F64X2, y: F64X2, p: F64X2, ok: F64X2, special: F64X2) -> F64X2
 
 /// `sqrt_rd_ru([x0, x1]) = [√x0, √x1]`, the first rounded toward -∞ and the
 /// second toward +∞.
+// Inlined into its one caller (see `Baseline` in `src/simd/token.rs`).
+#[inline(always)]
 pub(crate) fn sqrt_rd_ru(x: F64X2) -> F64X2 {
     // The lane-wise form of `generic::sqrt1_fast`, Dekker's variant, correcting
     // the two lanes in opposite directions.
@@ -193,6 +208,7 @@ pub(crate) fn sqrt1_rd(x: f64) -> f64 {
 }
 
 /// Splits x into x_hi + x_lo, each with at most 26 significant bits. See `generic::split`.
+#[inline(always)]
 fn split(x: F64X2) -> (F64X2, F64X2) {
     // 2^27 + 1.
     let t = mul_rn(splat(134217729.0), x);
@@ -202,6 +218,7 @@ fn split(x: F64X2) -> (F64X2, F64X2) {
 
 /// Returns the error e = x * y - p, where p = RN(x * y), with Dekker's algorithm.
 /// See `generic::two_prod_err`.
+#[inline(always)]
 fn two_prod_err(x: F64X2, y: F64X2, p: F64X2) -> F64X2 {
     let (xh, xl) = split(x);
     let (yh, yl) = split(y);
@@ -213,6 +230,7 @@ fn two_prod_err(x: F64X2, y: F64X2, p: F64X2) -> F64X2 {
 }
 
 // The lanes where `two_prod_err(x, y, x * y)` is exact. See `generic::two_prod_is_exact`.
+#[inline(always)]
 fn two_prod_is_exact(x: F64X2, y: F64X2, p: F64X2) -> F64X2 {
     and(
         exponent_in(p, -968, 1022),
@@ -221,6 +239,7 @@ fn two_prod_is_exact(x: F64X2, y: F64X2, p: F64X2) -> F64X2 {
 }
 
 // Returns RN(x + y) rounded to odd instead. See `generic::add_odd`.
+#[inline(always)]
 fn add_odd(x: F64X2, y: F64X2) -> F64X2 {
     let s = add_rn(x, y);
     let e = two_sum_err(x, y, s);
@@ -237,10 +256,12 @@ fn add_odd(x: F64X2, y: F64X2) -> F64X2 {
     select(inexact_even, odd, s)
 }
 
+#[inline(always)]
 fn eq_i64(x: F64X2, y: F64X2) -> F64X2 {
     unsafe { _mm_castsi128_pd(_mm_cmpeq_epi64(_mm_castpd_si128(x), _mm_castpd_si128(y))) }
 }
 
+#[inline(always)]
 fn ne(x: F64X2, y: F64X2) -> F64X2 {
     unsafe { _mm_cmpneq_pd(x, y) }
 }

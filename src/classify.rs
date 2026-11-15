@@ -2,6 +2,10 @@ use crate::{interval::Interval, simd::*};
 use std::mem::transmute;
 
 impl Interval {
+    // `#[inline]` lets a `*_with` method instantiated in a user's crate inline this
+    // function and `classify2`. Without it, a `V3` region (`src/simd/token.rs`) in a
+    // build for plain `x86-64` calls `classify2` out of line in every `mul_with`.
+    #[inline]
     pub(crate) fn classify(self) -> IntervalClass {
         // `rocq/theories/Model.v` transcribes this function for the proofs of
         // `(Dec)Interval::abs`, `(Dec)Interval::atan2`, `(Dec)Interval::div`,
@@ -16,6 +20,8 @@ impl Interval {
         unsafe { transmute((le_zero << 2) | ge_zero) }
     }
 
+    // `#[inline]`, for the reason given on `classify`.
+    #[inline]
     pub(crate) fn classify2(self, rhs: Self) -> IntervalClass2 {
         // `rocq/theories/Model.v` transcribes this function for the proofs of
         // `(Dec)Interval::atan2`, `(Dec)Interval::div`, `(Dec)Interval::mul`,

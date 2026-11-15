@@ -163,6 +163,10 @@ impl Interval {
     /// assert!(Interval::EMPTY.is_empty());
     /// assert!(!Interval::ENTIRE.is_empty());
     /// ```
+    // `#[inline]` lets a `*_with` method instantiated in a user's crate inline this
+    // function. Without it, `mul_add_with` and `sqrt_with` called with `Baseline` in a
+    // user's crate for `wasm32` with `simd128` call it out of line.
+    #[inline]
     pub fn is_empty(self) -> bool {
         // `rocq/theories/Model.v` transcribes this function for the proofs of
         // `DecInterval::abs`, `DecInterval::add`, `(Dec)Interval::cancel_minus`,

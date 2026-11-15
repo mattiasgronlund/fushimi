@@ -98,6 +98,10 @@ impl fmt::Debug for Interval {
 }
 
 impl Interval {
+    // `#[inline]` lets a `*_with` method instantiated in a user's crate inline this
+    // function. Without it, `sqrt_with` called with `Baseline` in a user's crate for
+    // `wasm32` with `simd128` calls it out of line.
+    #[inline]
     pub(crate) fn inf_raw(self) -> f64 {
         // `rocq/theories/Model.v` transcribes this function for the proofs of
         // `DecInterval::ceil`, `DecInterval::floor`, `DecInterval::round`,
@@ -111,6 +115,8 @@ impl Interval {
         -extract0(self.rep)
     }
 
+    // `#[inline]`, for the reason given on `inf_raw`.
+    #[inline]
     pub(crate) fn sup_raw(self) -> f64 {
         // `rocq/theories/Model.v` transcribes this function for the proofs of
         // `DecInterval::ceil`, `DecInterval::floor`, `DecInterval::round`,
@@ -124,6 +130,8 @@ impl Interval {
         extract1(self.rep)
     }
 
+    // `#[inline]`, for the reason given on `inf_raw`.
+    #[inline]
     pub(crate) fn with_infsup_raw(a: f64, b: f64) -> Self {
         // `rocq/theories/Model.v` transcribes this function for the proofs of
         // `(Dec)Interval::sqrt` and of the functions of `src/elementary.rs` in
@@ -141,6 +149,10 @@ impl Interval {
         }
     }
 
+    // `#[inline]` lets a `*_with` method instantiated in a user's crate inline this
+    // function. Without it, `div_with`, `mul_with` and `sqr_with` called with `Baseline`
+    // in a user's crate for `wasm32` with `simd128` call it out of line.
+    #[inline]
     pub(crate) fn zero() -> Self {
         // `rocq/theories/Model.v` transcribes this function for the proofs of
         // `(Dec)Interval::atan2`, `(Dec)Interval::div`, `(Dec)Interval::mul`,

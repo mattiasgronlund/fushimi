@@ -49,4 +49,4 @@ mod numeric;
 mod overlap;
 mod parse;
 mod set_op;
-mod simd;
+pub mod simd;

@@ -34,6 +34,8 @@ pub(crate) fn any(x: F64X2) -> bool {
 
 /// `bitmask([x0, x1]) = b0 | b1 << 1`, where bi is 1 if xi has all bits set and 0 if it
 /// has none. Each xi must be one or the other, as the comparisons return.
+// Inlined, as `ge` is.
+#[inline(always)]
 pub(crate) fn bitmask(x: F64X2) -> u32 {
     // `vmovn_u64` keeps the low 32 bits of each lane, so n = x1[31:0] << 32 | x0[31:0] on
     // little-endian targets. Bit 31 of n is a bit of x0 and bit 32 a bit of x1. Reading
@@ -80,6 +82,10 @@ pub(crate) fn floor(x: F64X2) -> F64X2 {
     unsafe { vrndmq_f64(x) }
 }
 
+// Inlined, as the crate's operations inline it, where `Interval::classify` calls it. That
+// function is `#[inline]`, so the call makes the crate export this one, and without this, a
+// `*_with` method instantiated in another crate (see `src/simd/token.rs`) calls it out of line.
+#[inline(always)]
 pub(crate) fn ge(x: F64X2, y: F64X2) -> F64X2 {
     unsafe { transmute(vcgeq_f64(x, y)) }
 }
@@ -92,6 +98,8 @@ pub(crate) fn hadd_rn(x: F64X2, y: F64X2) -> F64X2 {
     unsafe { constant(vaddvq_f64(x), vaddvq_f64(y)) }
 }
 
+// Inlined, as `ge` is.
+#[inline(always)]
 pub(crate) fn le(x: F64X2, y: F64X2) -> F64X2 {
     unsafe { transmute(vcleq_f64(x, y)) }
 }
@@ -100,6 +108,10 @@ pub(crate) fn lt(x: F64X2, y: F64X2) -> F64X2 {
     unsafe { transmute(vcltq_f64(x, y)) }
 }
 
+// Inlined, as the crate's operations inline it, where a token's operation calls it (see
+// `Baseline` in `src/simd/token.rs`). Without this, the call there makes the crate export it, and
+// an operation instantiated in another crate calls it out of line.
+#[inline(always)]
 pub(crate) fn max(x: F64X2, y: F64X2) -> F64X2 {
     unsafe { vmaxnmq_f64(x, y) }
 }

@@ -76,6 +76,8 @@ pub(crate) fn add_rn(x: F64X2, y: F64X2) -> F64X2 {
 }
 
 /// `add_ru([x0, x1], [y0, y1]) = [x0 + y0, x1 + y1]` rounded toward +∞.
+// Out of line as the build's backend (see `Baseline` in `src/simd/token.rs`).
+#[cfg_attr(inari_generic_backend, inline(never))]
 pub(crate) fn add_ru(x: F64X2, y: F64X2) -> F64X2 {
     // Proved correct in `rocq/theories/AddRu.v`. `rocq/theories/Model.v` transcribes
     // this function for that proof and those of `(Dec)Interval::add` and
@@ -157,6 +159,8 @@ pub(crate) fn constant(x: f64, y: f64) -> F64X2 {
 }
 
 /// `div_ru([x0, x1], [y0, y1]) = [x0 / y0, x1 / y1]` rounded toward +∞.
+// Out of line as the build's backend (see `Baseline` in `src/simd/token.rs`).
+#[cfg_attr(inari_generic_backend, inline(never))]
 pub(crate) fn div_ru(x: F64X2, y: F64X2) -> F64X2 {
     // Proved correct in `rocq/theories/DivRu.v`. `rocq/theories/Model.v` transcribes
     // this function for that proof and those of `(Dec)Interval::div`,
@@ -305,6 +309,8 @@ pub(crate) fn minimum(x: F64X2, y: F64X2) -> F64X2 {
 
 /// `mul_add_ru([x0, x1], [y0, y1], [z0, z1]) = [x0 * y0 + z0, x1 * y1 + z1]`
 /// rounded toward +∞ (with a single rounding).
+// Inlined into its one caller as the build's backend (see `Baseline` in `src/simd/token.rs`).
+#[cfg_attr(inari_generic_backend, inline(always))]
 pub(crate) fn mul_add_ru(x: F64X2, y: F64X2, z: F64X2) -> F64X2 {
     // Proved correct in `rocq/theories/MulAddRu.v`. `rocq/theories/Model.v` transcribes
     // this function for that proof and those of `(Dec)Interval::mul_add`, so it has to
@@ -313,6 +319,8 @@ pub(crate) fn mul_add_ru(x: F64X2, y: F64X2, z: F64X2) -> F64X2 {
 }
 
 /// `mul_ru([x0, x1], [y0, y1]) = [x0 * y0, x1 * y1]` rounded toward +∞.
+// Out of line as the build's backend (see `Baseline` in `src/simd/token.rs`).
+#[cfg_attr(inari_generic_backend, inline(never))]
 pub(crate) fn mul_ru(x: F64X2, y: F64X2) -> F64X2 {
     // Proved correct in `rocq/theories/MulRu.v`. `rocq/theories/Model.v` transcribes
     // this function for that proof and those of `(Dec)Interval::mul` and
@@ -412,6 +420,8 @@ pub(crate) fn splat(x: f64) -> F64X2 {
 
 /// `sqrt_rd_ru([x0, x1]) = [√x0, √x1]`, the first rounded toward -∞ and the
 /// second toward +∞.
+// Inlined into its one caller as the build's backend (see `Baseline` in `src/simd/token.rs`).
+#[cfg_attr(inari_generic_backend, inline(always))]
 pub(crate) fn sqrt_rd_ru(x: F64X2) -> F64X2 {
     [sqrt1_rd(x[0]), sqrt1_ru(x[1])]
 }

@@ -29,11 +29,27 @@ use super::{add_rn, all, and, eq, extract, gt, lt, or, splat, sub_rn, F64X2};
 use crate::simd::generic;
 use std::arch::x86_64::*;
 
-pub(crate) use super::lanewise::{add_ru, sqrt1_ru, sub1_ru, sub_ru};
+#[cfg(all(target_feature = "avx", target_feature = "fma"))]
+pub(crate) use super::lanewise::add_ru;
+// Without `avx` and `fma`, `lanewise::add_ru` can be the build's own backend function (that of
+// `sse42`), compiled without those features. Called from the copy of `V3` in
+// `src/simd/token.rs`, it took its vectors in memory from every caller, the build's operations
+// too (seen in an `x86-64-v2` build), so the copy inlines its body instead.
+#[cfg(not(all(target_feature = "avx", target_feature = "fma")))]
+pub(crate) use super::lanewise::add_ru_body as add_ru;
 #[cfg(test)]
 pub(crate) use super::lanewise::{sqrt1_rd_mxcsr, sqrt1_ru_mxcsr};
+pub(crate) use super::lanewise::{sqrt1_ru, sub1_ru, sub_ru};
 
 /// `div_ru([x0, x1], [y0, y1]) = [x0 / y0, x1 / y1]` rounded toward +∞.
+// Without `avx` and `fma`, this module is only the backend of the token `V3`, whose copies in
+// `src/simd/token.rs` compile it with its target features by inlining it.
+#[cfg_attr(
+    not(all(target_feature = "avx", target_feature = "fma")),
+    inline(always)
+)]
+// As the build's backend, it is out of line (see `Baseline` in `src/simd/token.rs`).
+#[cfg_attr(all(target_feature = "avx", target_feature = "fma"), inline(never))]
 pub(crate) fn div_ru(x: F64X2, y: F64X2) -> F64X2 {
     // See `generic::div1_ru_fast`, the FMA variant.
     let q = div_rn(x, y);
@@ -56,6 +72,8 @@ pub(crate) fn div_ru(x: F64X2, y: F64X2) -> F64X2 {
 
 /// `mul_add_ru([x0, x1], [y0, y1], [z0, z1]) = [x0 * y0 + z0, x1 * y1 + z1]`
 /// rounded toward +∞ (with a single rounding).
+// Inlined into its one caller (see `Baseline` in `src/simd/token.rs`).
+#[inline(always)]
 pub(crate) fn mul_add_ru(a: F64X2, b: F64X2, c: F64X2) -> F64X2 {
     // See `generic::mul_add1_ru_fast` for the algorithm (ErrFma) and its
     // hypotheses. Rounding to nearest is the FMA itself here, so the emulation
@@ -94,12 +112,22 @@ pub(crate) fn mul_add_ru(a: F64X2, b: F64X2, c: F64X2) -> F64X2 {
     // If err > 0, then r1 is inexact and thus nonzero.
     let up = andnot(gt(err, zero()), special);
     let r = select(up, step_up(r1), r1);
-    or_generic(ok, r, || {
+    // `move` makes the closure hold copies of a, b and c, not pointers to them.
+    // Without it, `Interval::mul_add` built the three pointers before the branch
+    // of `or_generic`, also when the fast path was taken: 1 to 24 more
+    // instructions per call in a build for Haswell (cachegrind, row 123).
+    or_generic(ok, r, move || {
         generic::mul_add_ru(extract(a), extract(b), extract(c))
     })
 }
 
 /// `mul_ru([x0, x1], [y0, y1]) = [x0 * y0, x1 * y1]` rounded toward +∞.
+#[cfg_attr(
+    not(all(target_feature = "avx", target_feature = "fma")),
+    inline(always)
+)]
+// As the build's backend, it is out of line (see `Baseline` in `src/simd/token.rs`).
+#[cfg_attr(all(target_feature = "avx", target_feature = "fma"), inline(never))]
 pub(crate) fn mul_ru(x: F64X2, y: F64X2) -> F64X2 {
     // See `generic::mul1_ru_fast`.
     let p = mul_rn(x, y);
@@ -117,6 +145,7 @@ pub(crate) fn mul_ru(x: F64X2, y: F64X2) -> F64X2 {
 
 /// Returns RU(x * y) from p = RN(x * y), in the lanes that are `special` or
 /// where `two_prod_is_exact(p)`.
+#[inline(always)]
 fn mul_ru_fast(x: F64X2, y: F64X2, p: F64X2, special: F64X2) -> F64X2 {
     let e = two_prod_err(x, y, p);
     let up = andnot(gt(e, zero()), special);
@@ -129,6 +158,10 @@ fn mul_ru_fast(x: F64X2, y: F64X2, p: F64X2, special: F64X2) -> F64X2 {
 /// Products below 2^-968 are rounded here, on both lanes at once, rather than by
 /// the generic backend: in operations recorded from rcad, a CAD kernel, most
 /// products were that small. The algorithm is that of `generic::mul1_ru_tiny`.
+#[cfg_attr(
+    not(all(target_feature = "avx", target_feature = "fma")),
+    inline(always)
+)]
 fn mul_ru_tiny(x: F64X2, y: F64X2, p: F64X2, ok: F64X2, special: F64X2) -> F64X2 {
     // Powers of two, so that scaling by them is exact unless it overflows or
     // underflows.
@@ -168,6 +201,8 @@ fn mul_ru_tiny(x: F64X2, y: F64X2, p: F64X2, ok: F64X2, special: F64X2) -> F64X2
 
 /// `sqrt_rd_ru([x0, x1]) = [√x0, √x1]`, the first rounded toward -∞ and the
 /// second toward +∞.
+// Inlined into its one caller (see `Baseline` in `src/simd/token.rs`).
+#[inline(always)]
 pub(crate) fn sqrt_rd_ru(x: F64X2) -> F64X2 {
     // The lane-wise form of `generic::sqrt1_fast` with an FMA, correcting the two
     // lanes in opposite directions.
@@ -199,23 +234,27 @@ pub(crate) fn sqrt1_rd(x: f64) -> f64 {
 
 /// `fmadd([x0, x1], [y0, y1], [z0, z1]) = [x0 * y0 + z0, x1 * y1 + z1]` with a
 /// single rounding to nearest.
+#[inline(always)]
 fn fmadd(x: F64X2, y: F64X2, z: F64X2) -> F64X2 {
     unsafe { _mm_fmadd_pd(x, y, z) }
 }
 
 /// `fnmadd([x0, x1], [y0, y1], [z0, z1]) = [z0 - x0 * y0, z1 - x1 * y1]` with a
 /// single rounding to nearest.
+#[inline(always)]
 fn fnmadd(x: F64X2, y: F64X2, z: F64X2) -> F64X2 {
     unsafe { _mm_fnmadd_pd(x, y, z) }
 }
 
 /// Returns the error e = x * y - p, where p = RN(x * y). See `generic::two_prod_err`.
+#[inline(always)]
 fn two_prod_err(x: F64X2, y: F64X2, p: F64X2) -> F64X2 {
     unsafe { _mm_fmsub_pd(x, y, p) }
 }
 
 // The lanes where `two_prod_err(x, y, x * y)` is exact, which with an FMA depends
 // on the product alone. See `generic::two_prod_is_exact`.
+#[inline(always)]
 fn two_prod_is_exact(p: F64X2) -> F64X2 {
     exponent_in(p, -968, 1023)
 }

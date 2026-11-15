@@ -19,46 +19,127 @@ impl Neg for Interval {
 
 forward_ref_unop!(impl Neg, neg for Interval);
 
+impl Interval {
+    /// Returns `self + rhs`, computed by the backend of `s` (see [`Simd`](crate::simd::Simd)).
+    ///
+    /// The result is the same interval as `self + rhs` for every `s`, as both are the tightest
+    /// result ([Conformance to the standard](crate::_docs::conformance): "Unless otherwise noted,
+    /// all operations return the tightest results").
+    ///
+    /// This method is `#[inline(always)]`, so that it gets the target features of the level of
+    /// `s` where it is inlined into the function inside which
+    /// [`s.vectorize`](crate::simd::Simd::vectorize) calls its closure: where it is called in the
+    /// closure, and the closure is inlined into that function.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use inari::{const_interval as c, simd::{Baseline, Simd}};
+    /// let x = c!(1.0, 2.0);
+    /// let y = c!(-3.0, 0.5);
+    /// assert_eq!(Baseline.vectorize(|| x.add_with(Baseline, y)), x + y);
+    /// #[cfg(target_arch = "x86_64")]
+    /// {
+    ///     if let Some(s) = inari::simd::V3::try_new() {
+    ///         assert_eq!(s.vectorize(|| x.add_with(s, y)), x + y);
+    ///     }
+    /// }
+    /// ```
+    #[inline(always)]
+    #[must_use]
+    pub fn add_with<S: Simd>(self, s: S, rhs: Self) -> Self {
+        // Proved correct in `rocq/theories/AddSub.v` for an `s` whose backend is the portable
+        // one. `rocq/theories/Model.v` transcribes this function for such an `s`, so it has to
+        // be updated along with it.
+        // [a + c, b + d] = [-a - c; b + d] = [-a; b] .+ [-c; d]
+        let x = self.rep; // [-a; b]
+        let y = rhs.rep; // [-c; d]
+        Self {
+            rep: s.add_ru(x, y),
+        }
+    }
+}
+
 impl Add for Interval {
     type Output = Self;
 
     fn add(self, rhs: Self) -> Self {
-        // Proved correct in `rocq/theories/AddSub.v` for the portable backend.
-        // `rocq/theories/Model.v` transcribes this function, so it has to be updated
-        // along with it.
-        // [a + c, b + d] = [-a - c; b + d] = [-a; b] .+ [-c; d]
-        let x = self.rep; // [-a; b]
-        let y = rhs.rep; // [-c; d]
-        Self { rep: add_ru(x, y) }
+        // Proved correct in `rocq/theories/AddSub.v` for the portable backend, as `add_with`
+        // called with `Baseline`. `rocq/theories/Model.v` transcribes this call, so it has to
+        // be updated along with it.
+        self.add_with(Baseline, rhs)
     }
 }
 
 forward_ref_binop!(impl Add, add for Interval, Interval);
 
+impl Interval {
+    /// Returns `self - rhs`, computed by the backend of `s` (see [`Simd`](crate::simd::Simd)).
+    ///
+    /// The result is the same interval as `self - rhs` for every `s`, as both are the tightest
+    /// result ([Conformance to the standard](crate::_docs::conformance): "Unless otherwise noted,
+    /// all operations return the tightest results").
+    ///
+    /// This method is `#[inline(always)]`, so that it gets the target features of the level of
+    /// `s` where it is inlined into the function inside which
+    /// [`s.vectorize`](crate::simd::Simd::vectorize) calls its closure: where it is called in the
+    /// closure, and the closure is inlined into that function.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use inari::{const_interval as c, simd::{Baseline, Simd}};
+    /// let x = c!(1.0, 2.0);
+    /// let y = c!(-3.0, 0.5);
+    /// assert_eq!(Baseline.vectorize(|| x.sub_with(Baseline, y)), x - y);
+    /// #[cfg(target_arch = "x86_64")]
+    /// {
+    ///     if let Some(s) = inari::simd::V3::try_new() {
+    ///         assert_eq!(s.vectorize(|| x.sub_with(s, y)), x - y);
+    ///     }
+    /// }
+    /// ```
+    #[inline(always)]
+    #[must_use]
+    pub fn sub_with<S: Simd>(self, s: S, rhs: Self) -> Self {
+        // Proved correct in `rocq/theories/AddSub.v` for an `s` whose backend is the portable
+        // one. `rocq/theories/Model.v` transcribes this function for such an `s`, so it has to
+        // be updated along with it.
+        // [a - d, b - c] = [-a + d; b - c] = [-a; b] .+ [d; -c]
+        let x = self.rep; // [-a; b]
+        let y = s.swap(rhs.rep); // [d; -c]
+        Self {
+            rep: s.add_ru(x, y),
+        }
+    }
+}
+
 impl Sub for Interval {
     type Output = Self;
 
     fn sub(self, rhs: Self) -> Self {
-        // Proved correct in `rocq/theories/AddSub.v` for the portable backend.
-        // `rocq/theories/Model.v` transcribes this function, so it has to be updated
-        // along with it.
-        // [a - d, b - c] = [-a + d; b - c] = [-a; b] .+ [d; -c]
-        let x = self.rep; // [-a; b]
-        let y = swap(rhs.rep); // [d; -c]
-        Self { rep: add_ru(x, y) }
+        // Proved correct in `rocq/theories/AddSub.v` for the portable backend, as `sub_with`
+        // called with `Baseline`. `rocq/theories/Model.v` transcribes this call, so it has to
+        // be updated along with it.
+        self.sub_with(Baseline, rhs)
     }
 }
 
 forward_ref_binop!(impl Sub, sub for Interval, Interval);
 
-impl Mul for Interval {
-    type Output = Self;
-
-    #[allow(clippy::many_single_char_names)]
-    fn mul(self, rhs: Self) -> Self {
-        // Proved correct in `rocq/theories/Mul.v` for the portable backend.
-        // `rocq/theories/Model.v` transcribes this function, so it has to be updated
-        // along with it.
+// The body of `Interval::mul_with`, with `$lhs` for `self`, `$s` for `s` and `$rhs` for `rhs`.
+// `Mul::mul` expands it with `Baseline` rather than calling `mul_with`. The body is too large
+// for rustc's MIR inliner even with `#[inline(always)]` (seen with rustc 1.98), which only LLVM
+// always follows, so the call would stay in the MIR of `mul`, and as it takes `self` and `rhs`
+// by `move`, rustc would no longer mark the pointers through which `mul` takes them `readonly`
+// and `captures(none)`.
+// A caller that sees only the declaration of `mul`, such as `<DecInterval as Mul>::mul` in
+// another codegen unit, would then copy both intervals to its stack before the call.
+macro_rules! mul_with_body {
+    ($lhs:expr, $s:expr, $rhs:expr) => {{
+        let lhs: Interval = $lhs;
+        let s = $s;
+        let rhs: Interval = $rhs;
         // [a, b] * [c, d] =
         //
         //    |      M     |      N     |      P     |  Z
@@ -70,7 +151,7 @@ impl Mul for Interval {
         // *1 [min{a*d, b*c}, max{a*c, b*d}]
 
         use IntervalClass2::*;
-        match self.classify2(rhs) {
+        match lhs.classify2(rhs) {
             E_E | E_M | E_N0 | E_N1 | E_P0 | E_P1 | E_Z | M_E | N0_E | N1_E | P0_E | P1_E | Z_E => {
                 Self::EMPTY
             }
@@ -82,79 +163,208 @@ impl Mul for Interval {
                 //   = [max(-a*d, b*-c); max(-a*-c, b*d)]
                 //   = .max([-a*d; -a*-c], [b*-c; b*d])
                 //   = .max([-a; -a] .* [d; -c], [b; b] .* [-c; d])
-                let x = shuffle02(self.rep, self.rep); // [-a; -a]
-                let y = swap(rhs.rep); // [d; -c]
-                let xy = mul_ru(x, y);
-                let z = shuffle13(self.rep, self.rep); // [b; b]
+                let x = s.shuffle02(lhs.rep, lhs.rep); // [-a; -a]
+                let y = s.swap(rhs.rep); // [d; -c]
+                let xy = s.mul_ru(x, y);
+                let z = s.shuffle13(lhs.rep, lhs.rep); // [b; b]
                 let w = rhs.rep; // [-c; d]
-                let zw = mul_ru(z, w);
-                let r = max(xy, zw);
+                let zw = s.mul_ru(z, w);
+                let r = s.max(xy, zw);
                 Self { rep: r }
             }
             M_N0 | M_N1 => {
                 // M * N => [b*c, a*c] = [-b*c; a*c] = [b*-c; -a*-c] = [b; -a] .* [-c; -c]
-                let x = swap(self.rep); // [b; -a]
-                let y = shuffle02(rhs.rep, rhs.rep); // [-c; -c]
-                Self { rep: mul_ru(x, y) }
+                let x = s.swap(lhs.rep); // [b; -a]
+                let y = s.shuffle02(rhs.rep, rhs.rep); // [-c; -c]
+                Self {
+                    rep: s.mul_ru(x, y),
+                }
             }
             M_P0 | M_P1 => {
                 // M * P => [a*d, b*d] = [-a*d; b*d] = [-a; b] .* [d; d]
-                let x = self.rep; // [-a; b]
-                let y = shuffle13(rhs.rep, rhs.rep); // [d; d]
-                Self { rep: mul_ru(x, y) }
+                let x = lhs.rep; // [-a; b]
+                let y = s.shuffle13(rhs.rep, rhs.rep); // [d; d]
+                Self {
+                    rep: s.mul_ru(x, y),
+                }
             }
             N0_M | N1_M => {
                 // N * M => [a*d, a*c] = [-a*d; a*c] = [-a*d; -a*-c] = [-a; -a] .* [d; -c]
-                let x = shuffle02(self.rep, self.rep); // [-a; -a]
-                let y = swap(rhs.rep); // [d; -c]
-                Self { rep: mul_ru(x, y) }
+                let x = s.shuffle02(lhs.rep, lhs.rep); // [-a; -a]
+                let y = s.swap(rhs.rep); // [d; -c]
+                Self {
+                    rep: s.mul_ru(x, y),
+                }
             }
             N0_N0 | N0_N1 | N1_N0 | N1_N1 => {
                 // N * N => [b*d, a*c] = [-b*d; a*c] = [-b*d; -a*-c] = [-b; -a] .* [d; -c]
-                let x = swap(self.rep); // [b; -a]
-                let x = neg0(x); // [-b; -a]
-                let y = swap(rhs.rep); // [d; -c]
-                Self { rep: mul_ru(x, y) }
+                let x = s.swap(lhs.rep); // [b; -a]
+                let x = s.neg0(x); // [-b; -a]
+                let y = s.swap(rhs.rep); // [d; -c]
+                Self {
+                    rep: s.mul_ru(x, y),
+                }
             }
             N0_P0 | N0_P1 | N1_P0 | N1_P1 => {
                 // N * P => [a*d, b*c] = [-a*d; b*c] = [-a; b] .* [d; c]
-                let x = self.rep; // [-a; b]
-                let y = neg0(rhs.rep); // [c; d]
-                let y = swap(y); // [d; c]
-                Self { rep: mul_ru(x, y) }
+                let x = lhs.rep; // [-a; b]
+                let y = s.neg0(rhs.rep); // [c; d]
+                let y = s.swap(y); // [d; c]
+                Self {
+                    rep: s.mul_ru(x, y),
+                }
             }
             P0_M | P1_M => {
                 // P * M => [b*c, b*d] = [-b*c; b*d] = [b*-c; b*d] = [b; b] .* [-c; d]
-                let x = shuffle13(self.rep, self.rep); // [b; b]
+                let x = s.shuffle13(lhs.rep, lhs.rep); // [b; b]
                 let y = rhs.rep; // [-c; d]
-                Self { rep: mul_ru(x, y) }
+                Self {
+                    rep: s.mul_ru(x, y),
+                }
             }
             P0_N0 | P0_N1 | P1_N0 | P1_N1 => {
                 // P * N => [b*c, a*d] = [-b*c; a*d] = [b*-c; a*d] = [b; a] .* [-c; d]
-                let x = neg0(self.rep); // [a; b]
-                let x = swap(x); // [b; a]
+                let x = s.neg0(lhs.rep); // [a; b]
+                let x = s.swap(x); // [b; a]
                 let y = rhs.rep; // [-c; d]
-                Self { rep: mul_ru(x, y) }
+                Self {
+                    rep: s.mul_ru(x, y),
+                }
             }
             P0_P0 | P0_P1 | P1_P0 | P1_P1 => {
                 // P * P => [a*c, b*d] = [-a*c; b*d] = [-a; b] .* [c; d]
-                let x = self.rep; // [-a; b]
-                let y = neg0(rhs.rep); // [c; d]
-                Self { rep: mul_ru(x, y) }
+                let x = lhs.rep; // [-a; b]
+                let y = s.neg0(rhs.rep); // [c; d]
+                Self {
+                    rep: s.mul_ru(x, y),
+                }
             }
         }
+    }};
+}
+
+// The methods of a token that `mul_with_body!` calls, for `Mul::mul`, which expands the macro with
+// `Baseline`. They are those of the sealed supertrait of `Simd`, which this module cannot name:
+// `mul_with` calls them through its bound `S: Simd`, but on the type `Baseline` only a trait in
+// scope gives them. Each method calls the one of the same name through the bound `S: Simd`, as
+// the bound comes first in method resolution.
+trait TokenMethods {
+    fn max(self, x: F64X2, y: F64X2) -> F64X2;
+    fn mul_ru(self, x: F64X2, y: F64X2) -> F64X2;
+    fn neg0(self, x: F64X2) -> F64X2;
+    fn shuffle02(self, x: F64X2, y: F64X2) -> F64X2;
+    fn shuffle13(self, x: F64X2, y: F64X2) -> F64X2;
+    fn swap(self, x: F64X2) -> F64X2;
+}
+
+impl<S: Simd> TokenMethods for S {
+    fn max(self, x: F64X2, y: F64X2) -> F64X2 {
+        self.max(x, y)
+    }
+
+    fn mul_ru(self, x: F64X2, y: F64X2) -> F64X2 {
+        self.mul_ru(x, y)
+    }
+
+    fn neg0(self, x: F64X2) -> F64X2 {
+        self.neg0(x)
+    }
+
+    fn shuffle02(self, x: F64X2, y: F64X2) -> F64X2 {
+        self.shuffle02(x, y)
+    }
+
+    fn shuffle13(self, x: F64X2, y: F64X2) -> F64X2 {
+        self.shuffle13(x, y)
+    }
+
+    fn swap(self, x: F64X2) -> F64X2 {
+        self.swap(x)
+    }
+}
+
+impl Interval {
+    /// Returns `self * rhs`, computed by the backend of `s` (see [`Simd`](crate::simd::Simd)).
+    ///
+    /// The result is the same interval as `self * rhs` for every `s`, as both are the tightest
+    /// result ([Conformance to the standard](crate::_docs::conformance): "Unless otherwise noted,
+    /// all operations return the tightest results").
+    ///
+    /// This method is `#[inline(always)]`, so that it gets the target features of the level of
+    /// `s` where it is inlined into the function inside which
+    /// [`s.vectorize`](crate::simd::Simd::vectorize) calls its closure: where it is called in the
+    /// closure, and the closure is inlined into that function.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use inari::{const_interval as c, simd::{Baseline, Simd}};
+    /// let x = c!(1.0, 2.0);
+    /// let y = c!(-3.0, 0.5);
+    /// assert_eq!(Baseline.vectorize(|| x.mul_with(Baseline, y)), x * y);
+    /// #[cfg(target_arch = "x86_64")]
+    /// {
+    ///     if let Some(s) = inari::simd::V3::try_new() {
+    ///         assert_eq!(s.vectorize(|| x.mul_with(s, y)), x * y);
+    ///     }
+    /// }
+    /// ```
+    #[inline(always)]
+    #[must_use]
+    pub fn mul_with<S: Simd>(self, s: S, rhs: Self) -> Self {
+        // Proved correct in `rocq/theories/Mul.v` for an `s` whose backend is the portable one.
+        // `rocq/theories/Model.v` transcribes this function for such an `s`, so it has to be
+        // updated along with it and with `mul_with_body!`, which is its body.
+        mul_with_body!(self, s, rhs)
+    }
+}
+
+impl Mul for Interval {
+    type Output = Self;
+
+    fn mul(self, rhs: Self) -> Self {
+        // Proved correct in `rocq/theories/Mul.v` for the portable backend, as `mul_with`
+        // called with `Baseline`: this is the body of `mul_with`, `mul_with_body!`, with
+        // `Baseline` for `s` (see the comment on the macro). `rocq/theories/Model.v`
+        // transcribes this, so it has to be updated along with it.
+        mul_with_body!(self, Baseline, rhs)
     }
 }
 
 forward_ref_binop!(impl Mul, mul for Interval, Interval);
 
-impl Div for Interval {
-    type Output = Self;
-
-    fn div(self, rhs: Self) -> Self {
-        // Proved correct in `rocq/theories/Div.v` for the portable backend.
-        // `rocq/theories/Model.v` transcribes this function, so it has to be updated
-        // along with it.
+impl Interval {
+    /// Returns `self / rhs`, computed by the backend of `s` (see [`Simd`](crate::simd::Simd)).
+    ///
+    /// The result is the same interval as `self / rhs` for every `s`, as both are the tightest
+    /// result ([Conformance to the standard](crate::_docs::conformance): "Unless otherwise noted,
+    /// all operations return the tightest results").
+    ///
+    /// This method is `#[inline(always)]`, so that it gets the target features of the level of
+    /// `s` where it is inlined into the function inside which
+    /// [`s.vectorize`](crate::simd::Simd::vectorize) calls its closure: where it is called in the
+    /// closure, and the closure is inlined into that function.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use inari::{const_interval as c, simd::{Baseline, Simd}};
+    /// let x = c!(1.0, 2.0);
+    /// let y = c!(3.0, 4.0);
+    /// assert_eq!(Baseline.vectorize(|| x.div_with(Baseline, y)), x / y);
+    /// #[cfg(target_arch = "x86_64")]
+    /// {
+    ///     if let Some(s) = inari::simd::V3::try_new() {
+    ///         assert_eq!(s.vectorize(|| x.div_with(s, y)), x / y);
+    ///     }
+    /// }
+    /// ```
+    #[inline(always)]
+    #[must_use]
+    pub fn div_with<S: Simd>(self, s: S, rhs: Self) -> Self {
+        // Proved correct in `rocq/theories/Div.v` for an `s` whose backend is the portable one.
+        // `rocq/theories/Model.v` transcribes this function for such an `s`, so it has to be
+        // updated along with it.
         // [a, b] / [c, d] =
         //
         //    |  M  |     N0    |     N1     |     P0    |     P1     | Z
@@ -170,17 +380,28 @@ impl Div for Interval {
             | P0_E | P0_Z | P1_E | P1_Z | Z_E | Z_Z => Self::EMPTY,
             M_M | M_N0 | M_P0 | N0_M | N1_M | P0_M | P1_M => Self::ENTIRE,
             Z_M | Z_N0 | Z_N1 | Z_P0 | Z_P1 => Self::zero(),
-            M_N1 => self.div_m_n1(rhs),
-            M_P1 => self.div_m_p1(rhs),
-            N0_N0 | N1_N0 => self.div_n_n0(rhs),
-            N0_N1 | N1_N1 => self.div_n_n1(rhs),
-            N0_P0 | N1_P0 => self.div_n_p0(rhs),
-            N0_P1 | N1_P1 => self.div_n_p1(rhs),
-            P0_N0 | P1_N0 => self.div_p_n0(rhs),
-            P0_N1 | P1_N1 => self.div_p_n1(rhs),
-            P0_P0 | P1_P0 => self.div_p_p0(rhs),
-            P0_P1 | P1_P1 => self.div_p_p1(rhs),
+            M_N1 => self.div_m_n1(s, rhs),
+            M_P1 => self.div_m_p1(s, rhs),
+            N0_N0 | N1_N0 => self.div_n_n0(s, rhs),
+            N0_N1 | N1_N1 => self.div_n_n1(s, rhs),
+            N0_P0 | N1_P0 => self.div_n_p0(s, rhs),
+            N0_P1 | N1_P1 => self.div_n_p1(s, rhs),
+            P0_N0 | P1_N0 => self.div_p_n0(s, rhs),
+            P0_N1 | P1_N1 => self.div_p_n1(s, rhs),
+            P0_P0 | P1_P0 => self.div_p_p0(s, rhs),
+            P0_P1 | P1_P1 => self.div_p_p1(s, rhs),
         }
+    }
+}
+
+impl Div for Interval {
+    type Output = Self;
+
+    fn div(self, rhs: Self) -> Self {
+        // Proved correct in `rocq/theories/Div.v` for the portable backend, as `div_with`
+        // called with `Baseline`. `rocq/theories/Model.v` transcribes this call, so it has to
+        // be updated along with it.
+        self.div_with(Baseline, rhs)
     }
 }
 

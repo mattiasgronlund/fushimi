@@ -62,7 +62,7 @@ com-unchecked src/simd/x86_64.rs: unsafe { transmute::<F64X2, [f64; 2]>(x) }
 com-unchecked src/simd/x86_64.rs: unsafe { transmute::<F64X2, [f64; 2]>(x)[0] }
 com-unchecked src/simd/x86_64.rs: unsafe { transmute::<F64X2, [f64; 2]>(x)[1] }
 com-unchecked src/simd/x86_64.rs: use std::{arch::x86_64::*, mem::transmute};
-valid-raw src/basic.rs: Self::with_infsup_raw(0.0, sqrt1_ru(b))
+valid-raw src/basic.rs: Self::with_infsup_raw(0.0, s.sqrt1_ru(b))
 valid-raw src/bytes.rs: Some(Self::new_unchecked(Interval::with_infsup_raw(a, b), dec))
 valid-raw src/bytes.rs: Some(Self::with_infsup_raw(a, b))
 valid-raw src/classify.rs: // `classify2_pair` in `rocq/theories/Classify2.v` shows that `transmute` gets the
@@ -136,49 +136,49 @@ valid-rep src/absmax.rs: rep: shuffle03(max, min),
 valid-rep src/absmax.rs: rep: shuffle03(min, max),
 valid-rep src/absmax.rs: rep: shuffle03(min, max),
 valid-rep src/absmax.rs: rep: swap(self.rep),
-valid-rep src/arith.rs: Self { rep: add_ru(x, y) }
-valid-rep src/arith.rs: Self { rep: add_ru(x, y) }
-valid-rep src/arith.rs: Self { rep: mul_ru(x, y) }
-valid-rep src/arith.rs: Self { rep: mul_ru(x, y) }
-valid-rep src/arith.rs: Self { rep: mul_ru(x, y) }
-valid-rep src/arith.rs: Self { rep: mul_ru(x, y) }
-valid-rep src/arith.rs: Self { rep: mul_ru(x, y) }
-valid-rep src/arith.rs: Self { rep: mul_ru(x, y) }
-valid-rep src/arith.rs: Self { rep: mul_ru(x, y) }
-valid-rep src/arith.rs: Self { rep: mul_ru(x, y) }
 valid-rep src/arith.rs: Self { rep: r }
+valid-rep src/arith.rs: rep: s.add_ru(x, y),
+valid-rep src/arith.rs: rep: s.add_ru(x, y),
+valid-rep src/arith.rs: rep: s.mul_ru(x, y),
+valid-rep src/arith.rs: rep: s.mul_ru(x, y),
+valid-rep src/arith.rs: rep: s.mul_ru(x, y),
+valid-rep src/arith.rs: rep: s.mul_ru(x, y),
+valid-rep src/arith.rs: rep: s.mul_ru(x, y),
+valid-rep src/arith.rs: rep: s.mul_ru(x, y),
+valid-rep src/arith.rs: rep: s.mul_ru(x, y),
+valid-rep src/arith.rs: rep: s.mul_ru(x, y),
 valid-rep src/arith.rs: rep: swap(self.rep),
-valid-rep src/basic.rs: Self { rep: div_ru(x, y) }
-valid-rep src/basic.rs: Self { rep: div_ru(x, y) }
-valid-rep src/basic.rs: Self { rep: div_ru(x, y) }
-valid-rep src/basic.rs: Self { rep: div_ru(x, y) }
-valid-rep src/basic.rs: Self { rep: div_ru(x, y) }
-valid-rep src/basic.rs: Self { rep: div_ru(x, y) }
-valid-rep src/basic.rs: Self { rep: div_ru(x, y) }
-valid-rep src/basic.rs: Self { rep: div_ru(x, y) }
-valid-rep src/basic.rs: Self { rep: mul_ru(x, y) }
-valid-rep src/basic.rs: Self { rep: mul_ru(x, y) }
 valid-rep src/basic.rs: Self { rep: r }
 valid-rep src/basic.rs: Self { rep: z }
 valid-rep src/basic.rs: Self { rep: z }
-valid-rep src/basic.rs: rep: mul_add_ru(x, y, addend.rep), // *
-valid-rep src/basic.rs: rep: mul_add_ru(x, y, addend.rep), // *
-valid-rep src/basic.rs: rep: mul_add_ru(x, y, addend.rep), // *
-valid-rep src/basic.rs: rep: mul_add_ru(x, y, addend.rep), // *
-valid-rep src/basic.rs: rep: mul_add_ru(x, y, addend.rep), // *
-valid-rep src/basic.rs: rep: mul_add_ru(x, y, addend.rep), // *
-valid-rep src/basic.rs: rep: mul_add_ru(x, y, addend.rep), // *
-valid-rep src/basic.rs: rep: mul_add_ru(x, y, addend.rep), // *
-valid-rep src/basic.rs: rep: neg0(sqrt_rd_ru(neg0(self.rep))),
-valid-rep src/basic.rs: rep: shuffle02(div_ru(x, y), splat(f64::INFINITY)),
-valid-rep src/basic.rs: rep: shuffle02(div_ru(x, y), splat(f64::INFINITY)),
+valid-rep src/basic.rs: rep: s.div_ru(x, y),
+valid-rep src/basic.rs: rep: s.div_ru(x, y),
+valid-rep src/basic.rs: rep: s.div_ru(x, y),
+valid-rep src/basic.rs: rep: s.div_ru(x, y),
+valid-rep src/basic.rs: rep: s.div_ru(x, y),
+valid-rep src/basic.rs: rep: s.div_ru(x, y),
+valid-rep src/basic.rs: rep: s.div_ru(x, y),
+valid-rep src/basic.rs: rep: s.div_ru(x, y),
+valid-rep src/basic.rs: rep: s.mul_add_ru(x, y, addend.rep), // *
+valid-rep src/basic.rs: rep: s.mul_add_ru(x, y, addend.rep), // *
+valid-rep src/basic.rs: rep: s.mul_add_ru(x, y, addend.rep), // *
+valid-rep src/basic.rs: rep: s.mul_add_ru(x, y, addend.rep), // *
+valid-rep src/basic.rs: rep: s.mul_add_ru(x, y, addend.rep), // *
+valid-rep src/basic.rs: rep: s.mul_add_ru(x, y, addend.rep), // *
+valid-rep src/basic.rs: rep: s.mul_add_ru(x, y, addend.rep), // *
+valid-rep src/basic.rs: rep: s.mul_add_ru(x, y, addend.rep), // *
+valid-rep src/basic.rs: rep: s.mul_ru(x, y),
+valid-rep src/basic.rs: rep: s.mul_ru(x, y),
+valid-rep src/basic.rs: rep: s.neg0(s.sqrt_rd_ru(s.neg0(self.rep))),
+valid-rep src/basic.rs: rep: s.shuffle02(s.div_ru(x, y), s.splat(f64::INFINITY)),
+valid-rep src/basic.rs: rep: s.shuffle02(s.div_ru(x, y), s.splat(f64::INFINITY)),
+valid-rep src/basic.rs: rep: s.shuffle02(s.splat(0.0), r),
+valid-rep src/basic.rs: rep: s.shuffle02(s.splat(f64::INFINITY), s.div_ru(x, y)),
+valid-rep src/basic.rs: rep: s.shuffle02(s.splat(f64::INFINITY), s.div_ru(x, y)),
+valid-rep src/basic.rs: rep: s.shuffle03(s.splat(f64::INFINITY), s.div_ru(x, y)),
+valid-rep src/basic.rs: rep: s.shuffle13(s.div_ru(x, y), s.splat(f64::INFINITY)),
 valid-rep src/basic.rs: rep: shuffle02(q, splat(f64::INFINITY)),
-valid-rep src/basic.rs: rep: shuffle02(splat(0.0), r),
-valid-rep src/basic.rs: rep: shuffle02(splat(f64::INFINITY), div_ru(x, y)),
-valid-rep src/basic.rs: rep: shuffle02(splat(f64::INFINITY), div_ru(x, y)),
 valid-rep src/basic.rs: rep: shuffle02(splat(f64::INFINITY), q),
-valid-rep src/basic.rs: rep: shuffle03(splat(f64::INFINITY), div_ru(x, y)),
-valid-rep src/basic.rs: rep: shuffle13(div_ru(x, y), splat(f64::INFINITY)),
 valid-rep src/basic.rs: rep: shuffle13(q, splat(f64::INFINITY)),
 valid-rep src/basic.rs: rep: shuffle13(splat(f64::INFINITY), q),
 valid-rep src/integer.rs: Self { rep: neg0(r) }

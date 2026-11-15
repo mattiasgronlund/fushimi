@@ -1,3 +1,31 @@
+//! Interval arithmetic at a level of the CPU detected at run time.
+//!
+//! Without a token, interval arithmetic such as `x + y` runs the backend that inari picks when
+//! it is compiled, from the target of the build, its target features and the feature
+//! `force-generic`. The `*_with` operations of [`Interval`](crate::Interval), such as
+//! [`Interval::add_with`](crate::Interval::add_with), take a token of a level, a value of a type
+//! that implements [`Simd`], and run the backend that the token gives: [`Baseline`], on every
+//! target, gives the build's, and on x86-64, `V2` and `V3`, whose `try_new` checks that the CPU
+//! has their target features, give the `sse42` and the `fma` backend in the builds that the last
+//! paragraph names. Every token gives the same intervals, since these operations return the
+//! tightest results (see [Conformance to the standard](crate::_docs::conformance)); only the
+//! speed differs.
+//!
+//! To run a loop at the highest level of a token that the CPU has, implement [`WithLevel`] for
+//! a type whose [`with_level`](WithLevel::with_level) runs the loop, and call [`dispatch`] once,
+//! around the loop. To run it at the level of a token, call the token's
+//! [`vectorize`](Simd::vectorize). The code gets the target features of the level only where the
+//! compiler inlines it into the region that `vectorize` enters, so mark `with_level`, a large
+//! closure and the functions between them and the operations `#[inline(always)]`.
+//!
+//! On x86-64, unless the feature `force-generic` is on, `V2` gives the `sse42` backend in a build
+//! without the target feature `sse4.2`, such as one for `x86-64`, the default of
+//! `x86_64-unknown-linux-gnu`, and `V3` gives the `fma` backend in a build that has neither the
+//! target feature `avx512f` nor both `avx` and `fma`, such as one for `x86-64` or `x86-64-v2`.
+//! In other builds, each gives the build's backend, that of [`Baseline`], as both do in a build
+//! for `x86-64-v3` or `haswell`. inari has no token of `x86-64-v4`: enabling the AVX-512 target
+//! features in a function needs Rust 1.89, and inari also builds with Rust 1.86.
+
 // A SIMD vector [x0; x1] stored in a register is usually depicted as:
 //
 //   +----------------+----------------+
@@ -6,6 +34,11 @@
 //   |127           64|63             0|
 //
 //   r[63:0] = x0, r[127:64] = x1.
+
+mod token;
+pub use token::{dispatch, Baseline, Simd, WithLevel};
+#[cfg(target_arch = "x86_64")]
+pub use token::{V2, V3};
 
 cfg_if::cfg_if! {
     if #[cfg(docsrs)] {
@@ -77,6 +110,16 @@ cfg_if::cfg_if! {
         #[allow(dead_code)]
         mod generic;
         pub(crate) use generic::{round_up_exact, two_prod_err, HAS_FMA};
+        #[cfg(test)]
+        mod differential_tests;
+    } else if #[cfg(target_arch = "x86_64")] {
+        // Plain `x86-64`, without `sse4.2`, takes the portable backend. The `sse42` and `fma`
+        // backends are compiled only as those of the tokens `V2` and `V3` (`src/simd/token.rs`).
+        mod generic;
+        pub(crate) use generic::*;
+
+        #[allow(dead_code, unused_imports)] // Only what the tokens' copies call is used.
+        mod x86_64;
         #[cfg(test)]
         mod differential_tests;
     } else {

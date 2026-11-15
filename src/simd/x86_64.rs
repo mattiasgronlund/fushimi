@@ -4,161 +4,197 @@ pub(crate) const HAS_MAXIMUM: bool = false;
 
 pub(crate) type F64X2 = __m128d;
 
+#[inline(always)]
 pub(crate) fn abs(x: F64X2) -> F64X2 {
     // Drop sign bits.
     unsafe { _mm_andnot_pd(splat(-0.0), x) }
 }
 
 /// `add_rn([x0, x1], [y0, y1]) = [x0 + y0, x1 + y1]` rounded to nearest.
+#[inline(always)]
 pub(crate) fn add_rn(x: F64X2, y: F64X2) -> F64X2 {
     unsafe { _mm_add_pd(x, y) }
 }
 
+#[inline(always)]
 pub(crate) fn all(x: F64X2) -> bool {
     bitmask(x) == 3
 }
 
+#[inline(always)]
 pub(crate) fn and(x: F64X2, y: F64X2) -> F64X2 {
     unsafe { _mm_and_pd(x, y) }
 }
 
+#[inline(always)]
 pub(crate) fn any(x: F64X2) -> bool {
     bitmask(x) != 0
 }
 
+#[inline(always)]
 pub(crate) fn bitmask(x: F64X2) -> u32 {
     unsafe { _mm_movemask_pd(x) as u32 }
 }
 
+#[inline(always)]
 pub(crate) fn ceil(x: F64X2) -> F64X2 {
     unsafe { _mm_ceil_pd(x) }
 }
 
+#[inline(always)]
 pub(crate) fn constant(x: f64, y: f64) -> F64X2 {
     unsafe { transmute([x, y]) }
 }
 
+#[inline(always)]
 pub(crate) fn eq(x: F64X2, y: F64X2) -> F64X2 {
     unsafe { _mm_cmpeq_pd(x, y) }
 }
 
+#[inline(always)]
 pub(crate) fn extract(x: F64X2) -> [f64; 2] {
     unsafe { transmute::<F64X2, [f64; 2]>(x) }
 }
 
+#[inline(always)]
 pub(crate) fn extract0(x: F64X2) -> f64 {
     unsafe { transmute::<F64X2, [f64; 2]>(x)[0] }
 }
 
 // This is slower than extract0, which usually turns into a no-op.
+#[inline(always)]
 pub(crate) fn extract1(x: F64X2) -> f64 {
     unsafe { transmute::<F64X2, [f64; 2]>(x)[1] }
 }
 
+#[inline(always)]
 pub(crate) fn floor(x: F64X2) -> F64X2 {
     unsafe { _mm_floor_pd(x) }
 }
 
+#[inline(always)]
 pub(crate) fn ge(x: F64X2, y: F64X2) -> F64X2 {
     unsafe { _mm_cmpge_pd(x, y) }
 }
 
+#[inline(always)]
 pub(crate) fn gt(x: F64X2, y: F64X2) -> F64X2 {
     unsafe { _mm_cmpgt_pd(x, y) }
 }
 
 /// `hadd_rn([x0, x1], [y0, y1]) = [x0 + x1, y0 + y1]` rounded to nearest.
+#[inline(always)]
 pub(crate) fn hadd_rn(x: F64X2, y: F64X2) -> F64X2 {
     unsafe { _mm_hadd_pd(x, y) }
 }
 
+#[inline(always)]
 pub(crate) fn le(x: F64X2, y: F64X2) -> F64X2 {
     unsafe { _mm_cmple_pd(x, y) }
 }
 
+#[inline(always)]
 pub(crate) fn lt(x: F64X2, y: F64X2) -> F64X2 {
     unsafe { _mm_cmplt_pd(x, y) }
 }
 
 // The vector version of the `maximumNumber` operation defined in IEEE 754-2019,
 // which does not propagate NaNs.
+#[inline(always)]
 pub(crate) fn max(x: F64X2, y: F64X2) -> F64X2 {
     unsafe { _mm_max_pd(x, y) }
 }
 
 // The vector version of the `maximum` operation defined in IEEE 754-2019,
 // which propagates NaNs.
+#[inline(always)]
 pub(crate) fn maximum(_x: F64X2, _y: F64X2) -> F64X2 {
     unimplemented!()
 }
 
+#[inline(always)]
 pub(crate) fn min(x: F64X2, y: F64X2) -> F64X2 {
     unsafe { _mm_min_pd(x, y) }
 }
 
+#[inline(always)]
 pub(crate) fn minimum(_x: F64X2, _y: F64X2) -> F64X2 {
     unimplemented!()
 }
 
+#[inline(always)]
 pub(crate) fn neg(x: F64X2) -> F64X2 {
     xor(splat(-0.0), x)
 }
 
+#[inline(always)]
 pub(crate) fn neg0(x: F64X2) -> F64X2 {
     unsafe { xor(x, _mm_set_sd(-0.0)) }
 }
 
+#[inline(always)]
 pub(crate) fn or(x: F64X2, y: F64X2) -> F64X2 {
     unsafe { _mm_or_pd(x, y) }
 }
 
 // This one is hard to implement correctly.
 // https://www.cockroachlabs.com/blog/rounding-implementations-in-go/
+#[inline(always)]
 pub(crate) fn round(x: F64X2) -> F64X2 {
     constant(extract0(x).round(), extract1(x).round())
 }
 
+#[inline(always)]
 pub(crate) fn round_ties_even(x: F64X2) -> F64X2 {
     unsafe { _mm_round_pd(x, _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC) }
 }
 
 /// `shuffle02([x0, x1], [x2, x3]) = [x0, x2]`
+#[inline(always)]
 pub(crate) fn shuffle02(x: F64X2, y: F64X2) -> F64X2 {
     unsafe { _mm_shuffle_pd(x, y, 0) }
 }
 
 /// `shuffle03([x0, x1], [x2, x3]) = [x0, x3]`
+#[inline(always)]
 pub(crate) fn shuffle03(x: F64X2, y: F64X2) -> F64X2 {
     unsafe { _mm_shuffle_pd(x, y, 2) }
 }
 
 /// `shuffle13([x0, x1], [x2, x3]) = [x1, x3]`
+#[inline(always)]
 pub(crate) fn shuffle13(x: F64X2, y: F64X2) -> F64X2 {
     unsafe { _mm_shuffle_pd(x, y, 3) }
 }
 
+#[inline(always)]
 pub(crate) fn splat(x: f64) -> F64X2 {
     unsafe { transmute([x, x]) }
 }
 
 /// `sub_rn([x0, x1], [y0, y1]) = [x0 - y0, x1 - y1]` rounded to nearest.
+#[inline(always)]
 pub(crate) fn sub_rn(x: F64X2, y: F64X2) -> F64X2 {
     unsafe { _mm_sub_pd(x, y) }
 }
 
+#[inline(always)]
 pub(crate) fn swap(x: F64X2) -> F64X2 {
     shuffle12(x, x)
 }
 
+#[inline(always)]
 pub(crate) fn trunc(x: F64X2) -> F64X2 {
     unsafe { _mm_round_pd(x, _MM_FROUND_TO_ZERO | _MM_FROUND_NO_EXC) }
 }
 
 /// `shuffle12([x0, x1], [x2, x3]) = [x1, x2]`
+#[inline(always)]
 fn shuffle12(x: F64X2, y: F64X2) -> F64X2 {
     unsafe { _mm_shuffle_pd(x, y, 1) }
 }
 
+#[inline(always)]
 fn xor(x: F64X2, y: F64X2) -> F64X2 {
     unsafe { _mm_xor_pd(x, y) }
 }
@@ -175,8 +211,40 @@ cfg_if::cfg_if! {
         mod lanewise;
         mod sse42;
         pub(crate) use sse42::*;
+
+        // The backend of the token `V3` (`src/simd/token.rs`), whose copies of the functions
+        // below compile it with the target features of `x86-64-v3`.
+        #[allow(dead_code, unused_imports)] // Only what those copies call is used.
+        pub(super) mod fma;
+
+        // The vectors of this build are those of the backends: the copies take them as they are.
+        #[inline(always)]
+        pub(super) fn to_m128d(x: F64X2) -> __m128d {
+            x
+        }
+
+        #[inline(always)]
+        pub(super) fn from_m128d(x: __m128d) -> F64X2 {
+            x
+        }
     } else {
-        // `src/simd.rs` selects this module only for targets with `sse4.2`.
-        compile_error!("the x86-64 backends need the target feature `sse4.2`");
+        // Plain `x86-64`, without `sse4.2`: `src/simd.rs` takes the portable backend, and
+        // compiles this module only as the backends of the tokens `V2` and `V3`
+        // (`src/simd/token.rs`), whose copies of the functions below compile them with the
+        // target features of `x86-64-v2` and `x86-64-v3`.
+        mod lanewise;
+        pub(super) mod sse42;
+        pub(super) mod fma;
+
+        // The vectors of this build, `[f64; 2]`, to and from those of the backends.
+        #[inline(always)]
+        pub(super) fn to_m128d(x: [f64; 2]) -> __m128d {
+            constant(x[0], x[1])
+        }
+
+        #[inline(always)]
+        pub(super) fn from_m128d(x: __m128d) -> [f64; 2] {
+            extract(x)
+        }
     }
 }

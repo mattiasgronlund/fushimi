@@ -6709,6 +6709,19 @@ Definition quadrants (pt : point) (a b : f64) : f64 * f64 :=
     [shuffle02], [shuffle03], [shuffle13], [swap], [add_rn], [sub_rn],
     [hadd_rn], [add_ru], [sub_ru], [mul_ru], [div_ru], [mul_add_ru],
     [sqrt1_ru] and [sqrt_rd_ru], which are the ones in [Generic] here.
+    [x + y], [x - y], [x / y], [Interval::mul_add],
+    [Interval::recip], [Interval::sqr] and [Interval::sqrt] are
+    [add_with], [sub_with], [div_with], [mul_add_with], [recip_with],
+    [sqr_with] and [sqrt_with] of [impl Interval] called with the token
+    [Baseline], whose backend is the build's (see [src/simd/token.rs]),
+    [x * y] is the body of [mul_with] with [Baseline] for its token (see
+    [mul] below), and [mul_rev_to_pair] calls the divisions of
+    [div_with] with [Baseline] too. These methods and divisions call the
+    backend of their token [s], as in [s.add_ru(x, y)], and are
+    transcribed here for an [s] whose backend is the portable one. Such
+    an [s] exists only in a build whose backend is the portable one, so
+    the functions that they call without [s], such as [classify2], are
+    the portable backend's there too.
     The elementary functions also compute bounds with the functions that
     are the argument [pt] here: those of the dyadic kernel in the library,
     and in the tests those of MPFR too (see the record [point] above).
@@ -7568,7 +7581,9 @@ Definition sign (self : Interval) : Interval :=
     let r := Generic.or one_or_zero m_one_or_zero in
     {| rep := r |}.
 
-(** [pub fn sqrt(self) -> Self]. Its [sqrt1_ru] and [sqrt_rd_ru] call
+(** [pub fn sqrt_with<S: Simd>(self, s: S) -> Self], for an [s] whose
+    backend is the portable one; [pub fn sqrt(self) -> Self] is
+    [self.sqrt_with(Baseline)]. Its [s.sqrt1_ru] and [s.sqrt_rd_ru] call
     [sqrt1_ru_impl::<HAS_FMA>] and [sqrt1_rd_impl::<HAS_FMA>], so
     [has_fma] is an argument, as for [mul]. Each [return] is the value of
     an [if] whose [else] holds the rest of the body, and [0.0] is +0. *)
@@ -7593,14 +7608,20 @@ Definition trunc (self : Interval) : Interval :=
 Definition neg (self : Interval) : Interval :=
   {| rep := Generic.swap (rep self) |}.
 
-(** [fn add(self, rhs: Self) -> Self] of [impl Add for Interval] *)
+(** [pub fn add_with<S: Simd>(self, s: S, rhs: Self) -> Self] of
+    [impl Interval], for an [s] whose backend is the portable one;
+    [fn add(self, rhs: Self) -> Self] of [impl Add for Interval] is
+    [self.add_with(Baseline, rhs)] *)
 Definition add (self rhs : Interval) : option Interval :=
   let x := rep self in
   let y := rep rhs in
   let* r := Generic.add_ru x y in
   Some {| rep := r |}.
 
-(** [fn sub(self, rhs: Self) -> Self] of [impl Sub for Interval] *)
+(** [pub fn sub_with<S: Simd>(self, s: S, rhs: Self) -> Self] of
+    [impl Interval], for an [s] whose backend is the portable one;
+    [fn sub(self, rhs: Self) -> Self] of [impl Sub for Interval] is
+    [self.sub_with(Baseline, rhs)] *)
 Definition sub (self rhs : Interval) : option Interval :=
   let x := rep self in
   let y := Generic.swap (rep rhs) in
@@ -7656,10 +7677,12 @@ Definition cancel_plus (self rhs : Interval) : option Interval :=
     [div] come after [zero], which they call. *)
 Definition zero : Interval := {| rep := Generic.splat zero |}.
 
-(** [pub fn sqr(self) -> Self]. Its [mul_ru] calls [mul_ru_impl::<HAS_FMA>],
-    so [has_fma] is an argument, as for [mul]. [Self::zero()] is [zero],
-    and [0.0] is the float [Model.zero], i.e. +0, which [zero] shadows
-    here. *)
+(** [pub fn sqr_with<S: Simd>(self, s: S) -> Self], for an [s] whose
+    backend is the portable one; [pub fn sqr(self) -> Self] is
+    [self.sqr_with(Baseline)]. Its [s.mul_ru] calls
+    [mul_ru_impl::<HAS_FMA>], so [has_fma] is an argument, as for [mul].
+    [Self::zero()] is [zero], and [0.0] is the float [Model.zero], i.e. +0,
+    which [zero] shadows here. *)
 Definition sqr (has_fma : bool) (self : Interval) : option Interval :=
   let* c := classify self in
   match c with
@@ -7682,8 +7705,15 @@ Definition sqr (has_fma : bool) (self : Interval) : option Interval :=
       Some {| rep := r |}
   end.
 
-(** [fn mul(self, rhs: Self) -> Self] of [impl Mul for Interval]. Its
-    [mul_ru] calls [mul_ru_impl::<HAS_FMA>], and [HAS_FMA] depends on the
+(** [pub fn mul_with<S: Simd>(self, s: S, rhs: Self) -> Self] of
+    [impl Interval], for an [s] whose backend is the portable one: its
+    body is [mul_with_body!(self, s, rhs)], which binds [lhs], [s] and
+    [rhs] to its arguments; [fn mul(self, rhs: Self) -> Self] of
+    [impl Mul for Interval] is [mul_with_body!(self, Baseline, rhs)],
+    the same body with [Baseline] for [s], whose methods there are those
+    of [TokenMethods], each of which calls the method of the same name of
+    [Baseline] through the bound [S: Simd]. Its [s.mul_ru] calls
+    [mul_ru_impl::<HAS_FMA>], and [HAS_FMA] depends on the
     target, so it is an argument, as for [Generic.mul_ru]. The variant
     [X_Y] of [IntervalClass2] is the pair [(X, Y)], as in
     [transmute_class2], and [Self::zero()] is [zero]. *)
@@ -7751,8 +7781,11 @@ Definition mul (has_fma : bool) (self rhs : Interval) : option Interval :=
       Some {| rep := r |}
   end.
 
-(** [pub fn mul_add(self, rhs: Self, addend: Self) -> Self] in
-    [src/basic.rs]. Its [mul_add_ru] calls [mul_add_ru_impl::<HAS_FMA>], so
+(** [pub fn mul_add_with<S: Simd>(self, s: S, rhs: Self, addend: Self) -> Self]
+    of [impl Interval] in [src/basic.rs], for an [s] whose backend is the
+    portable one; [pub fn mul_add(self, rhs: Self, addend: Self) -> Self] is
+    [self.mul_add_with(Baseline, rhs, addend)]. Its [s.mul_add_ru] calls
+    [mul_add_ru_impl::<HAS_FMA>], so
     [has_fma] is an argument, as for [mul], and the variants of
     [IntervalClass2] are as in [mul]. The [return] is the value of an [if]
     whose [else] holds the rest of the body. *)
@@ -7822,9 +7855,10 @@ Definition mul_add (has_fma : bool) (self rhs addend : Interval) : option Interv
         Some {| rep := r |}
     end.
 
-(** [pub(crate) fn div_m_n1(self, rhs: Self) -> Self] and the other
-    divisions of [[a, b]] by [[c, d]] in [src/basic.rs], one for each case
-    of [div] below. Their [div_ru] calls [div_ru_impl::<HAS_FMA>], so
+(** [pub(crate) fn div_m_n1<S: Simd>(self, s: S, rhs: Self) -> Self] and the
+    other divisions of [[a, b]] by [[c, d]] in [src/basic.rs], one for each
+    case of [div] below, for an [s] whose backend is the portable one. Their
+    [s.div_ru] calls [div_ru_impl::<HAS_FMA>], so
     [has_fma] is an argument, as for [mul], and [f64::INFINITY] is
     [infinity]. *)
 Definition div_m_n1 (has_fma : bool) (self rhs : Interval) : option Interval :=
@@ -7835,7 +7869,7 @@ Definition div_m_n1 (has_fma : bool) (self rhs : Interval) : option Interval :=
   let* r := Generic.div_ru has_fma x y in
   Some {| rep := r |}.
 
-(** [pub(crate) fn div_m_p1(self, rhs: Self) -> Self] *)
+(** [pub(crate) fn div_m_p1<S: Simd>(self, s: S, rhs: Self) -> Self] *)
 Definition div_m_p1 (has_fma : bool) (self rhs : Interval) : option Interval :=
   let x := rep self in
   let y := Generic.neg0 (rep rhs) in
@@ -7843,14 +7877,14 @@ Definition div_m_p1 (has_fma : bool) (self rhs : Interval) : option Interval :=
   let* r := Generic.div_ru has_fma x y in
   Some {| rep := r |}.
 
-(** [pub(crate) fn div_n_n0(self, rhs: Self) -> Self] *)
+(** [pub(crate) fn div_n_n0<S: Simd>(self, s: S, rhs: Self) -> Self] *)
 Definition div_n_n0 (has_fma : bool) (self rhs : Interval) : option Interval :=
   let x := Generic.swap (rep self) in
   let y := rep rhs in
   let* r := Generic.div_ru has_fma x y in
   Some {| rep := Generic.shuffle02 r (Generic.splat infinity) |}.
 
-(** [pub(crate) fn div_n_n1(self, rhs: Self) -> Self] *)
+(** [pub(crate) fn div_n_n1<S: Simd>(self, s: S, rhs: Self) -> Self] *)
 Definition div_n_n1 (has_fma : bool) (self rhs : Interval) : option Interval :=
   let x := Generic.neg0 (rep self) in
   let x := Generic.swap x in
@@ -7858,28 +7892,28 @@ Definition div_n_n1 (has_fma : bool) (self rhs : Interval) : option Interval :=
   let* r := Generic.div_ru has_fma x y in
   Some {| rep := r |}.
 
-(** [pub(crate) fn div_n_p0(self, rhs: Self) -> Self] *)
+(** [pub(crate) fn div_n_p0<S: Simd>(self, s: S, rhs: Self) -> Self] *)
 Definition div_n_p0 (has_fma : bool) (self rhs : Interval) : option Interval :=
   let x := rep self in
   let y := rep rhs in
   let* r := Generic.div_ru has_fma x y in
   Some {| rep := Generic.shuffle03 (Generic.splat infinity) r |}.
 
-(** [pub(crate) fn div_n_p1(self, rhs: Self) -> Self] *)
+(** [pub(crate) fn div_n_p1<S: Simd>(self, s: S, rhs: Self) -> Self] *)
 Definition div_n_p1 (has_fma : bool) (self rhs : Interval) : option Interval :=
   let x := rep self in
   let y := Generic.neg0 (rep rhs) in
   let* r := Generic.div_ru has_fma x y in
   Some {| rep := r |}.
 
-(** [pub(crate) fn div_p_n0(self, rhs: Self) -> Self] *)
+(** [pub(crate) fn div_p_n0<S: Simd>(self, s: S, rhs: Self) -> Self] *)
 Definition div_p_n0 (has_fma : bool) (self rhs : Interval) : option Interval :=
   let x := rep self in
   let y := rep rhs in
   let* r := Generic.div_ru has_fma x y in
   Some {| rep := Generic.shuffle02 (Generic.splat infinity) r |}.
 
-(** [pub(crate) fn div_p_n1(self, rhs: Self) -> Self] *)
+(** [pub(crate) fn div_p_n1<S: Simd>(self, s: S, rhs: Self) -> Self] *)
 Definition div_p_n1 (has_fma : bool) (self rhs : Interval) : option Interval :=
   let x := Generic.swap (rep self) in
   let x := Generic.neg0 x in
@@ -7887,14 +7921,14 @@ Definition div_p_n1 (has_fma : bool) (self rhs : Interval) : option Interval :=
   let* r := Generic.div_ru has_fma x y in
   Some {| rep := r |}.
 
-(** [pub(crate) fn div_p_p0(self, rhs: Self) -> Self] *)
+(** [pub(crate) fn div_p_p0<S: Simd>(self, s: S, rhs: Self) -> Self] *)
 Definition div_p_p0 (has_fma : bool) (self rhs : Interval) : option Interval :=
   let x := rep self in
   let y := Generic.swap (rep rhs) in
   let* r := Generic.div_ru has_fma x y in
   Some {| rep := Generic.shuffle02 r (Generic.splat infinity) |}.
 
-(** [pub(crate) fn div_p_p1(self, rhs: Self) -> Self] *)
+(** [pub(crate) fn div_p_p1<S: Simd>(self, s: S, rhs: Self) -> Self] *)
 Definition div_p_p1 (has_fma : bool) (self rhs : Interval) : option Interval :=
   let x := rep self in
   let y := Generic.neg0 (rep rhs) in
@@ -7902,8 +7936,10 @@ Definition div_p_p1 (has_fma : bool) (self rhs : Interval) : option Interval :=
   let* r := Generic.div_ru has_fma x y in
   Some {| rep := r |}.
 
-(** [pub fn recip(self) -> Self], with [has_fma] as for the divisions
-    above. [-1.0] is [opp (of_u64 1)], as in [sign]. *)
+(** [pub fn recip_with<S: Simd>(self, s: S) -> Self], for an [s] whose
+    backend is the portable one; [pub fn recip(self) -> Self] is
+    [self.recip_with(Baseline)]. [has_fma] is as for the divisions above,
+    and [-1.0] is [opp (of_u64 1)], as in [sign]. *)
 Definition recip (has_fma : bool) (self : Interval) : option Interval :=
   let* c := classify self in
   match c with
@@ -7931,9 +7967,12 @@ Definition recip (has_fma : bool) (self : Interval) : option Interval :=
       Some {| rep := r |}
   end.
 
-(** [fn div(self, rhs: Self) -> Self] of [impl Div for Interval], with
-    [has_fma] as for the divisions above, and the variants of
-    [IntervalClass2] and [Self::zero()] as in [mul]. *)
+(** [pub fn div_with<S: Simd>(self, s: S, rhs: Self) -> Self] of
+    [impl Interval], for an [s] whose backend is the portable one;
+    [fn div(self, rhs: Self) -> Self] of [impl Div for Interval] is
+    [self.div_with(Baseline, rhs)]. [has_fma] is as for the divisions
+    above, and the variants of [IntervalClass2] and [Self::zero()] are as
+    in [mul]. *)
 Definition div (has_fma : bool) (self rhs : Interval) : option Interval :=
   let* c := classify2 self rhs in
   match c with
@@ -7960,8 +7999,8 @@ Definition div (has_fma : bool) (self rhs : Interval) : option Interval :=
 
 (** [pub fn mul_rev_to_pair(self, numerator: Self) -> [Self; 2]], with the
     array [[u, v]] as the pair [(u, v)], [has_fma] as for the divisions
-    above, the variants of [IntervalClass2] and [Self::zero()] as in [mul],
-    and [f64::INFINITY] as [infinity]. *)
+    above, which it calls with [Baseline], the variants of [IntervalClass2]
+    and [Self::zero()] as in [mul], and [f64::INFINITY] as [infinity]. *)
 Definition mul_rev_to_pair (has_fma : bool) (self numerator : Interval) :
     option (Interval * Interval) :=
   let* c := classify2 numerator self in

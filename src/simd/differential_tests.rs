@@ -3,6 +3,8 @@
 // (`avx512f`), which rounds with embedded rounding; otherwise (`fma`, `sse42`
 // and, on wasm32, `wasm32`), the backend that vectorizes the fast paths of the
 // generic one, and is compared with it.
+// In a build that compiles the copies of the backend functions of the tokens `V2`
+// and `V3` (`src/simd/token.rs`), `mod tokens` compares those in the same way.
 // Both the FMA and the Dekker (no FMA) variants of the generic backend are tested.
 // On wasm32, `f64::mul_add` is a software routine, but still correctly rounded.
 // NaNs compare equal regardless of their sign and payload, which inari does not
@@ -16,11 +18,15 @@ use std::fmt::Write;
 
 cfg_if::cfg_if! {
     // `fma` and `sse42` take their square root from the generic backend, so it
-    // is compared with the one that switches the rounding mode instead.
+    // is compared with the one that switches the rounding mode instead. A plain
+    // `x86-64` build, without `sse4.2`, compiles `sse42` only as the backend of the
+    // token `V2` (`src/simd/token.rs`), and takes that one from there.
     if #[cfg(target_feature = "avx512f")] {
         use super::{sqrt1_rd as hw_sqrt1_rd, sqrt1_ru as hw_sqrt1_ru};
-    } else if #[cfg(target_arch = "x86_64")] {
+    } else if #[cfg(target_feature = "sse4.2")] {
         use super::{sqrt1_rd_mxcsr as hw_sqrt1_rd, sqrt1_ru_mxcsr as hw_sqrt1_ru};
+    } else if #[cfg(target_arch = "x86_64")] {
+        use super::x86_64::sse42::{sqrt1_rd_mxcsr as hw_sqrt1_rd, sqrt1_ru_mxcsr as hw_sqrt1_ru};
     }
 }
 
@@ -136,8 +142,14 @@ struct Report {
 
 impl Report {
     fn check(&mut self, name: &str, args: &[f64], expected: f64, actual: f64) {
+        self.record(name, args, expected, actual, same(expected, actual));
+    }
+
+    // Counts a case, and a mismatch unless `ok`, which is shown if it is one of
+    // the first 10.
+    fn record(&mut self, name: &str, args: &[f64], expected: f64, actual: f64, ok: bool) {
         self.cases += 1;
-        if !same(expected, actual) {
+        if !ok {
             self.mismatches += 1;
             if self.mismatches <= 10 {
                 writeln!(
@@ -176,6 +188,22 @@ type Binary = fn(generic::F64X2, generic::F64X2) -> generic::F64X2;
 type Ternary = fn(generic::F64X2, generic::F64X2, generic::F64X2) -> generic::F64X2;
 type Unary1 = fn(f64) -> f64;
 
+// The functions that `compare` checks, each named after its operation in
+// `regressions`, with the variant of the generic backend after a `/`. In
+// `binary`, `ternary` and `unary`, a function under test and its reference, as
+// `check_binary`, `check_ternary` and `check_unary` take them; in `unary1`, a
+// reference and a function under test.
+struct Ops {
+    binary: Vec<(&'static str, HwBinary, Binary)>,
+    ternary: Vec<(&'static str, HwTernary, Ternary)>,
+    unary: Vec<(&'static str, HwUnary, Unary)>,
+    unary1: Vec<(&'static str, Unary1, Unary1)>,
+}
+
+// The lists below and the tests `differential` and `round_ties_even` are those of
+// the build's backend. A plain `x86-64` build, without `sse4.2`, has the generic
+// one, which they would compare with itself, so they are left out there.
+#[cfg(any(target_arch = "wasm32", target_feature = "sse4.2"))]
 fn binary_ops() -> Vec<(&'static str, HwBinary, Binary)> {
     vec![
         ("add_ru", super::add_ru, generic::add_ru),
@@ -196,6 +224,7 @@ fn binary_ops() -> Vec<(&'static str, HwBinary, Binary)> {
     ]
 }
 
+#[cfg(any(target_arch = "wasm32", target_feature = "sse4.2"))]
 fn sub1_ru_as_binary(x: super::F64X2, y: super::F64X2) -> super::F64X2 {
     let (x, y) = (super::extract(x), super::extract(y));
     super::constant(super::sub1_ru(x[0], y[0]), super::sub1_ru(x[1], y[1]))
@@ -205,6 +234,7 @@ fn sub1_ru_as_binary_generic(x: generic::F64X2, y: generic::F64X2) -> generic::F
     [generic::sub1_ru(x[0], y[0]), generic::sub1_ru(x[1], y[1])]
 }
 
+#[cfg(any(target_arch = "wasm32", target_feature = "sse4.2"))]
 fn ternary_ops() -> Vec<(&'static str, HwTernary, Ternary)> {
     let mul_add_ru: HwTernary = super::mul_add_ru;
     vec![
@@ -221,6 +251,7 @@ fn ternary_ops() -> Vec<(&'static str, HwTernary, Ternary)> {
     ]
 }
 
+#[cfg(any(target_arch = "wasm32", target_feature = "sse4.2"))]
 fn unary_ops() -> Vec<(&'static str, HwUnary, Unary)> {
     vec![("sqrt_rd_ru", super::sqrt_rd_ru, sqrt_rd_ru_reference)]
 }
@@ -247,7 +278,7 @@ fn unary1_ops() -> Vec<(&'static str, Unary1, Unary1)> {
     vec![]
 }
 
-#[cfg(target_arch = "x86_64")]
+#[cfg(all(target_arch = "x86_64", target_feature = "sse4.2"))]
 fn unary1_ops() -> Vec<(&'static str, Unary1, Unary1)> {
     vec![
         ("sqrt1_ru/fma", hw_sqrt1_ru, generic::sqrt1_ru_impl::<true>),
@@ -543,8 +574,9 @@ fn mul_ru_tie() -> (f64, f64) {
 // after a `/`) and its arguments. Each comment says why the case is here (what
 // it broke or would break, or the step it exercises) and where it was found.
 // Every mismatch that a random test or a fuzzer finds goes here, so that it
-// stays tested when the random draw or `adversarial` changes. `differential`
-// checks these cases against the generic backend on every backend that it tests.
+// stays tested when the random draw or `adversarial` changes. `compare` checks
+// these cases against the generic backend on every backend that `differential`
+// tests, and on the backends of the tokens that `mod tokens` tests.
 // Except under AVX-512F, the backend under test mostly computes with the
 // algorithm of the generic one, so `differential` misses a mistake that they
 // share. `regressions_generic` therefore also checks every case in the generic
@@ -625,8 +657,22 @@ fn in_lanes(cases: Vec<Vec<f64>>) -> Vec<(Vec<f64>, Vec<f64>)> {
     lanes
 }
 
+#[cfg(any(target_arch = "wasm32", target_feature = "sse4.2"))]
 #[test]
 fn differential() {
+    let ops = Ops {
+        binary: binary_ops(),
+        ternary: ternary_ops(),
+        unary: unary_ops(),
+        unary1: unary1_ops(),
+    };
+    compare(ops, &[]);
+}
+
+// Compares the functions of `ops` on `adversarial` cases, on the cases of
+// `regressions` and on random ones, and fails on any mismatch. `absent` names the
+// operations of `regressions` that `ops` leaves out on purpose.
+fn compare(ops: Ops, absent: &[&str]) {
     let n = random_cases();
     let mut rng = Rng(0x1788_2015);
     let mut summary = String::new();
@@ -634,19 +680,25 @@ fn differential() {
 
     // A case of `regressions` whose operation is not compared here would be
     // skipped without notice.
-    let names: Vec<&str> = binary_ops()
+    let names: Vec<&str> = ops
+        .binary
         .iter()
         .map(|op| op.0)
-        .chain(ternary_ops().iter().map(|op| op.0))
-        .chain(unary_ops().iter().map(|op| op.0))
-        .chain(unary1_ops().iter().map(|op| op.0))
+        .chain(ops.ternary.iter().map(|op| op.0))
+        .chain(ops.unary.iter().map(|op| op.0))
+        .chain(ops.unary1.iter().map(|op| op.0))
         .collect();
     for (op, args) in regressions() {
         let compared = names.iter().any(|&name| operation(name) == op);
-        assert!(compared, "nothing compares {}{:?}", op, args);
+        assert!(
+            compared || absent.contains(&op),
+            "nothing compares {}{:?}",
+            op,
+            args
+        );
     }
 
-    for (name, hw, gen) in binary_ops() {
+    for (name, hw, gen) in ops.binary {
         let mut r = Report::default();
         let v = adversarial(true);
         for (i, &x) in v.iter().enumerate() {
@@ -674,7 +726,7 @@ fn differential() {
         total_mismatches += r.mismatches;
     }
 
-    for (name, hw, gen) in ternary_ops() {
+    for (name, hw, gen) in ops.ternary {
         let mut r = Report::default();
         let v = adversarial(false);
         for (i, &a) in v.iter().enumerate() {
@@ -704,7 +756,7 @@ fn differential() {
         total_mismatches += r.mismatches;
     }
 
-    for (name, hw, gen) in unary_ops() {
+    for (name, hw, gen) in ops.unary {
         let mut r = Report::default();
         let v = adversarial(true);
         // Every ordered pair, so that each value is seen in both lanes, and the
@@ -732,7 +784,7 @@ fn differential() {
         total_mismatches += r.mismatches;
     }
 
-    for (name, hw, gen) in unary1_ops() {
+    for (name, hw, gen) in ops.unary1 {
         let mut r = Report::default();
         for &x in &adversarial(true) {
             r.check(name, &[x], hw(x), gen(x));
@@ -1015,6 +1067,7 @@ fn regressions_generic() {
     assert_eq!(total_mismatches, 0, "\n{}", summary);
 }
 
+#[cfg(any(target_arch = "wasm32", target_feature = "sse4.2"))]
 #[test]
 fn round_ties_even() {
     let mut rng = Rng(1);
@@ -1069,4 +1122,192 @@ fn mul_add_rn_emulated() {
         r.cases, r.mismatches
     );
     assert_eq!(r.mismatches, 0, "\n{}", r.examples);
+}
+
+// The tokens whose backend functions are copies compiled with their target
+// features (`src/simd/token.rs`), compared as `differential` compares the build's
+// backend: `V3` in the x86-64 builds that have neither both `avx` and `fma` nor
+// `avx512f`, and `V2` in those that also lack `sse4.2`, a plain `x86-64` build. In
+// the other x86-64 builds with a SIMD backend, a token's backend is the build's,
+// which `differential` compares. A test whose token the CPU lacks is skipped, with
+// a note on stderr.
+#[cfg(all(
+    target_arch = "x86_64",
+    not(all(target_feature = "avx", target_feature = "fma")),
+    not(target_feature = "avx512f")
+))]
+mod tokens {
+    use super::*;
+    #[cfg(not(target_feature = "sse4.2"))]
+    use crate::simd::V2;
+    use crate::simd::{constant, extract, Simd, F64X2, V3};
+
+    // A token made without an argument, as the functions of `Ops` are pointers,
+    // which cannot capture one. A test calls them only after `try_new` has
+    // returned `Some`, and std caches what it detects.
+    trait Token: Simd {
+        // The name of the token's `sqrt1_ru` in `ops`, with the variant of the
+        // generic backend that it runs.
+        const SQRT1_RU: &'static str;
+
+        fn token() -> Self;
+    }
+
+    // `V2` takes the `sqrt1_ru` of `Baseline`, which in a build without `sse4.2`
+    // is the generic one without the FMA.
+    #[cfg(not(target_feature = "sse4.2"))]
+    impl Token for V2 {
+        const SQRT1_RU: &'static str = "sqrt1_ru/dekker";
+
+        fn token() -> Self {
+            V2::try_new().unwrap()
+        }
+    }
+
+    // `V3` also takes the `sqrt1_ru` of `Baseline` (`src/simd/token.rs`), which in
+    // the builds of these tests is the generic one without the FMA: they lack `fma`,
+    // as `fma` enables `avx`.
+    impl Token for V3 {
+        const SQRT1_RU: &'static str = "sqrt1_ru/dekker";
+
+        fn token() -> Self {
+            V3::try_new().unwrap()
+        }
+    }
+
+    fn add_ru<S: Token>(x: F64X2, y: F64X2) -> F64X2 {
+        S::token().add_ru(x, y)
+    }
+
+    fn div_ru<S: Token>(x: F64X2, y: F64X2) -> F64X2 {
+        S::token().div_ru(x, y)
+    }
+
+    fn mul_add_ru<S: Token>(x: F64X2, y: F64X2, z: F64X2) -> F64X2 {
+        S::token().mul_add_ru(x, y, z)
+    }
+
+    fn mul_ru<S: Token>(x: F64X2, y: F64X2) -> F64X2 {
+        S::token().mul_ru(x, y)
+    }
+
+    fn sqrt_rd_ru<S: Token>(x: F64X2) -> F64X2 {
+        S::token().sqrt_rd_ru(x)
+    }
+
+    fn sqrt1_ru<S: Token>(x: f64) -> f64 {
+        S::token().sqrt1_ru(x)
+    }
+
+    // The operations of `regressions` that no token has: `Interval::sub_with`
+    // adds the swapped right-hand side with `add_ru` (`src/arith.rs`).
+    const ABSENT: [&str; 2] = ["sub_ru", "sub1_ru"];
+
+    // The backend functions of `S` other than the thin layers, against the same
+    // references as in the lists of `differential`.
+    fn ops<S: Token>() -> Ops {
+        let mul_ru: HwBinary = mul_ru::<S>;
+        let div_ru: HwBinary = div_ru::<S>;
+        let mul_add_ru: HwTernary = mul_add_ru::<S>;
+        Ops {
+            binary: vec![
+                ("add_ru", add_ru::<S>, generic::add_ru),
+                ("mul_ru/fma", mul_ru, generic::mul_ru_impl::<true>),
+                ("mul_ru/dekker", mul_ru, generic::mul_ru_impl::<false>),
+                ("div_ru/fma", div_ru, generic::div_ru_impl::<true>),
+                ("div_ru/dekker", div_ru, generic::div_ru_impl::<false>),
+            ],
+            ternary: vec![
+                (
+                    "mul_add_ru/fma",
+                    mul_add_ru,
+                    generic::mul_add_ru_impl::<true>,
+                ),
+                (
+                    "mul_add_ru/dekker",
+                    mul_add_ru,
+                    generic::mul_add_ru_impl::<false>,
+                ),
+            ],
+            unary: vec![("sqrt_rd_ru", sqrt_rd_ru::<S>, sqrt_rd_ru_reference)],
+            unary1: vec![(S::SQRT1_RU, hw_sqrt1_ru, sqrt1_ru::<S>)],
+        }
+    }
+
+    // As `Report::check` on both lanes, but bit for bit, NaNs included.
+    fn check_bits(r: &mut Report, name: &str, args: &[f64], expected: [f64; 2], actual: F64X2) {
+        let actual = extract(actual);
+        for i in 0..2 {
+            let ok = expected[i].to_bits() == actual[i].to_bits();
+            r.record(name, args, expected[i], actual[i], ok);
+        }
+    }
+
+    // The thin layers of the backend of `s` against those of the generic backend,
+    // on the vectors of `adversarial(true)` values that `compare` gives the binary
+    // operations, bit for bit, as they only move and flip bits. Under `V2` and
+    // `V3`, `max` is `_mm_max_pd`, which returns its second argument where either
+    // is NaN or both are zeros. Generic `max` returns the first where only the
+    // second is NaN, and +0 for zeros of opposite signs. So `max` is checked only
+    // on lanes without a NaN, with zeros of either sign equal.
+    fn check_thin_layers<S: Simd>(s: S) {
+        let mut r = Report::default();
+        let v = adversarial(true);
+        for (i, &x0) in v.iter().enumerate() {
+            check_bits(&mut r, "splat", &[x0], generic::splat(x0), s.splat(x0));
+            for (j, &y0) in v.iter().enumerate() {
+                // Pair each case with another one in the other lane.
+                let (x, y) = ([x0, v[(i + 7) % v.len()]], [y0, v[(j + 13) % v.len()]]);
+                let (vx, vy) = (constant(x[0], x[1]), constant(y[0], y[1]));
+                let args = [x[0], x[1], y[0], y[1]];
+                let shuffles = [
+                    ("shuffle02", generic::shuffle02(x, y), s.shuffle02(vx, vy)),
+                    ("shuffle03", generic::shuffle03(x, y), s.shuffle03(vx, vy)),
+                    ("shuffle13", generic::shuffle13(x, y), s.shuffle13(vx, vy)),
+                ];
+                for (name, expected, actual) in shuffles {
+                    check_bits(&mut r, name, &args, expected, actual);
+                }
+                check_bits(&mut r, "neg0", &x, generic::neg0(x), s.neg0(vx));
+                check_bits(&mut r, "swap", &x, generic::swap(x), s.swap(vx));
+
+                let (expected, actual) = (generic::max(x, y), extract(s.max(vx, vy)));
+                for k in 0..2 {
+                    if !x[k].is_nan() && !y[k].is_nan() {
+                        let (e, a) = (expected[k], actual[k]);
+                        let ok = e.to_bits() == a.to_bits() || e == 0.0 && a == 0.0;
+                        r.record("max", &[x[k], y[k]], e, a, ok);
+                    }
+                }
+            }
+        }
+        println!(
+            "{:18} {:>10} cases, {} mismatches",
+            "thin layers", r.cases, r.mismatches
+        );
+        assert_eq!(r.mismatches, 0, "\n{}", r.examples);
+    }
+
+    #[cfg(not(target_feature = "sse4.2"))]
+    #[test]
+    fn differential_v2() {
+        match V2::try_new() {
+            Some(s) => {
+                compare(ops::<V2>(), &ABSENT);
+                check_thin_layers(s);
+            }
+            None => eprintln!("differential_v2: skipped, as the CPU lacks a feature of `V2`"),
+        }
+    }
+
+    #[test]
+    fn differential_v3() {
+        match V3::try_new() {
+            Some(s) => {
+                compare(ops::<V3>(), &ABSENT);
+                check_thin_layers(s);
+            }
+            None => eprintln!("differential_v3: skipped, as the CPU lacks a feature of `V3`"),
+        }
+    }
 }
