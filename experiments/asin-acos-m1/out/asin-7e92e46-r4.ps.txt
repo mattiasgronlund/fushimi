@@ -1,0 +1,6 @@
+ %CPU COMM
+ 12.6 /sbin/launchd
+ 11.9 /usr/sbin/systemstats
+  3.5 claude
+  2.3 claude
+  0.9 /usr/libexec/searchpartyd

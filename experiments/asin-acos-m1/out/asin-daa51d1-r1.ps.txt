@@ -1,0 +1,6 @@
+ %CPU COMM
+  8.5 /System/Library/CoreServices/loginwindow.app/Contents/MacOS/loginwindow
+  7.6 /System/Library/CoreServices/Finder.app/Contents/MacOS/Finder
+  3.8 /System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer
+  2.2 /Library/Application Support/org.pqrs/Karabiner-DriverKit-VirtualHIDDevice/Applications/Karabiner-VirtualHIDDevice-Daemon.app/Contents/MacOS/Karabiner-VirtualHIDDevice-Daemon
+  1.5 /usr/sbin/systemstats

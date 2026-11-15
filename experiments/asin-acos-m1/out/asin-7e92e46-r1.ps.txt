@@ -1,0 +1,6 @@
+ %CPU COMM
+  3.7 /usr/libexec/runningboardd
+  2.2 /System/Library/CoreServices/Finder.app/Contents/MacOS/Finder
+  1.1 /Library/Application Support/Logitech.localized/LogiOptionsPlus/logioptionsplus_agent.app/Contents/MacOS/logioptionsplus_agent
+  1.0 /Library/Application Support/org.pqrs/Karabiner-DriverKit-VirtualHIDDevice/Applications/Karabiner-VirtualHIDDevice-Daemon.app/Contents/MacOS/Karabiner-VirtualHIDDevice-Daemon
+  0.6 /usr/sbin/mDNSResponder

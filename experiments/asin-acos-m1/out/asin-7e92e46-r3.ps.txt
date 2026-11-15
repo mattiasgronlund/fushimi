@@ -1,0 +1,6 @@
+ %CPU COMM
+ 98.2 /Applications/OneDrive.app/Contents/MacOS/OneDrive
+  1.0 /usr/libexec/searchpartyd
+  0.6 /System/Library/ExtensionKit/Extensions/WallpaperAerialsExtension.appex/Contents/MacOS/WallpaperAerialsExtension
+  0.5 /usr/sbin/systemstats
+  0.3 claude
