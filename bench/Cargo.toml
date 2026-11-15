@@ -33,6 +33,10 @@ harness = false
 name = "trig"
 harness = false
 
+[[bench]]
+name = "asin_acos"
+harness = false
+
 [profile.bench]
 codegen-units = 1
 lto = "fat"
