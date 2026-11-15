@@ -61,10 +61,16 @@ cfg_if::cfg_if! {
         mod aarch64;
         pub(crate) use aarch64::*;
 
-        // The generic backend provides `round_up_exact`, which `src/parse.rs` and
-        // `src/dyadic.rs` call, and `two_prod_err` and `HAS_FMA`, which the fast paths of
-        // `src/dyadic` use, and is tested against `aarch64`.
-        #[allow(dead_code)] // Only these and the functions that they call are used.
+        // The generic backend provides the slow paths and the scalar operations of
+        // `aarch64`, and is tested against it. `src/parse.rs` and `src/dyadic.rs` call its
+        // `round_up_exact`, and the fast paths of `src/dyadic` its `two_prod_err` and
+        // `HAS_FMA`.
+        //
+        // Only part of it is used: the functions that `aarch64` calls (`add_ru`, `div_ru`,
+        // `mul_add_ru`, `mul_ru`, `sqrt_rd_ru`, `sqrt1_rd`, `sqrt1_ru` and `sub1_ru`) and the
+        // functions these call, among them `round_up_exact`, `pow2` and `two_prod_err`; the
+        // tests also use `round_ties_even` and `sub_ru`.
+        #[allow(dead_code)]
         mod generic;
         pub(crate) use generic::{round_up_exact, two_prod_err, HAS_FMA};
         #[cfg(test)]

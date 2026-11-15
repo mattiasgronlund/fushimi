@@ -274,21 +274,26 @@ pub fn dispatch<W: WithLevel>(w: W) -> W::Output {
 // A function that a user's crate can inline or instantiate, such as `add_with`, can call only
 // functions that the crate exports, and Rust passes the vector arguments of an exported function
 // in memory. Inside the crate, LLVM passes them in registers. So `add_ru`, `div_ru` and `mul_ru`,
-// which the crate's operations call out of line, are called here from methods without
-// `#[inline]`, which the crate exports in their place. LLVM inlines these small methods into the
-// crate's operations, which then call the backend functions as before. The backend functions are
-// `#[inline(never)]`, as otherwise LLVM would inline each into its only caller, the method.
-// `mul_add_ru` and `sqrt_rd_ru` have one caller each in the crate's operations, which inlines
-// them, and are `#[inline(always)]`, except `mul_add_ru` where `sse42` is the backend, which the
-// crate calls out of line, as `add_ru`. (`src/__bench.rs`, compiled only with the feature
-// `__bench`, for the benchmarks, also calls `mul_add_ru`.)
+// which the crate's operations call out of line (on aarch64 only `mul_ru`, see below), are called
+// here from methods without `#[inline]`, which the crate exports in their place. LLVM inlines
+// these small methods into the crate's operations, which then call the backend functions as
+// before. The backend functions are `#[inline(never)]`, as otherwise LLVM would inline each into
+// its only caller, the method. On aarch64 only `mul_ru` is: there LLVM inlines `add_ru` and
+// `div_ru` into the methods and into the crate's operations, which then take fewer instructions
+// (counted under QEMU), whereas inlining `mul_ru` gives `Interval::mul` a stack frame and more
+// instructions. `mul_add_ru` and `sqrt_rd_ru` have one caller each in the crate's operations,
+// which inlines them, and are `#[inline(always)]`, except `mul_add_ru` where `sse42` is the
+// backend, which the crate calls out of line, as `add_ru`. (`src/__bench.rs`, compiled only with
+// the feature `__bench`, for the benchmarks, also calls `mul_add_ru`.)
 //
 // The other functions that a `*_with` method reaches, and that rustc would not by itself inline
 // into a user's crate on some target, are marked for it, apart from the backend functions that
 // round upward or downward (`sqrt1_ru` as well as those above, and the copies of `V2` and `V3`
 // below, of which those that a build for their level inlines are `#[inline]`) and the functions
-// that they call: `bitmask`, `ge`, `le` and `max` on aarch64 and the thin layers of `wasm32.rs`
-// that a `*_with` method reaches are `#[inline(always)]`, and `Interval::classify`, `classify2`,
+// that they call: `add_rn`, `all`, `and`, `bitmask`, `eq`, `ge`, `gt`, `le`, `lt`, `max`, `or` and
+// `sub_rn` on aarch64, with the helpers of `aarch64/lanewise.rs` and `aarch64/fma.rs` that
+// `mul_add_ru` and `sqrt_rd_ru` call on their fast paths, and the thin layers of `wasm32.rs` that
+// a `*_with` method reaches are `#[inline(always)]`, and `Interval::classify`, `classify2`,
 // `inf_raw`, `sup_raw`, `with_infsup_raw`, `zero` and `is_empty` are `#[inline]`. So a `*_with`
 // method instantiated in a user's crate calls out of line only functions that round upward or
 // downward, and functions that they call.

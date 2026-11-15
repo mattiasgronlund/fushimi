@@ -21,7 +21,11 @@ The following CPUs are supported and continuously tested:
 
 - **AArch64 (ARM64)**
 
+  The backend for AArch64 (`aarch64`) uses NEON (Advanced SIMD) instructions, which Rust's AArch64 targets for Linux and macOS enable, so it needs no `RUSTFLAGS` or target features. Like `fma` on x86-64, it does not change the rounding mode: it computes the directed roundings with error-free transformations and the fused multiply-add, and leaves the inputs that fail its checks to the portable backend (see below).
+
 Other architectures, such as 32-bit x86 (`i686`), WebAssembly (`wasm32`) and RISC-V (`riscv64`), are supported by a portable backend (experimental). It only relies on floating-point arithmetic in the default rounding mode, and requires no target features, but it is slower than the backends for x86-64 and AArch64. It uses fused multiply-add instructions where the target has them. On WebAssembly, building with `RUSTFLAGS='-Ctarget-feature=+simd128'` selects a faster variant that uses 128-bit SIMD instructions.
+
+Every backend assumes the default floating-point environment: rounding to nearest, with ties to even, and subnormal numbers not flushed to zero.
 
 Interval literals, formatting and the elementary functions need neither GMP nor MPFR, nor a Cargo feature: inari computes them with code of its own, a multi-precision kernel for the elementary functions. CI tests x86-64 Linux, x86-64 Windows with MSVC (`x86_64-pc-windows-msvc`), AArch64 macOS, AArch64 Linux (`aarch64-unknown-linux-gnu`) under QEMU's user-mode emulation, where it runs only the unit tests, 32-bit x86 Linux (`i686-unknown-linux-gnu`) and WebAssembly (`wasm32-wasip1`, with and without `simd128`), and only builds for `wasm32-unknown-unknown` and `riscv64gc-unknown-linux-gnu`. On 64-bit Linux and macOS, the tests also compare inari's results with MPFR's, through the dev-dependencies `rug` and [`gmp-mpfr-sys`](https://crates.io/crates/gmp-mpfr-sys); on the other targets, they run without these comparisons.
 
@@ -65,7 +69,7 @@ The module also has `cbrt`, `hypot` (of two `f64`s) and `sqrt` in the same three
 ## Cargo Features
 
 - `gmp` - Deprecated, and does nothing; to be removed in the next major release. It used to be enabled by default, and to enable interval literals, formatting and the elementary functions, which need neither GMP nor MPFR now (see above). The features `gmp-mpfr-sys`, `nom` and `rug`, which Cargo used to derive from the optional dependencies of `gmp`, are deprecated and do nothing too.
-- `force-generic` - Uses the portable backend (see above) on x86-64, AArch64 and WebAssembly with `simd128` too, and at every token of `inari::simd`. It is slower. Unlike the AArch64 backend, it does not change the rounding mode, and on x86-64 it also keeps the multi-precision kernel from detecting the CPU at run time (see [Building for Several x86-64 Levels](#building-for-several-x86-64-levels)): the kernel then uses FMA instructions only where the target CPU has FMA.
+- `force-generic` - Uses the portable backend (see above) on x86-64, AArch64 and WebAssembly with `simd128` too, and at every token of `inari::simd`. It is slower. On x86-64 it also keeps the multi-precision kernel from detecting the CPU at run time (see [Building for Several x86-64 Levels](#building-for-several-x86-64-levels)): the kernel then uses FMA instructions only where the target CPU has FMA.
 
 ## [Changelog](CHANGELOG.md)
 

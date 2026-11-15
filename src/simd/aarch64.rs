@@ -1,7 +1,4 @@
-use std::{
-    arch::{aarch64::*, asm},
-    mem::transmute,
-};
+use std::{arch::aarch64::*, mem::transmute};
 
 pub(crate) const HAS_MAXIMUM: bool = true;
 
@@ -11,14 +8,23 @@ pub(crate) fn abs(x: F64X2) -> F64X2 {
     unsafe { vabsq_f64(x) }
 }
 
+// Inlined, as the crate's operations inline it, where `mul_add_ru` or `sqrt_rd_ru` calls it
+// (see `aarch64/fma.rs`). Those two are `#[inline(always)]` (see `Baseline` in
+// `src/simd/token.rs`), so without this, a `*_with` method instantiated in another crate calls
+// it out of line. The same holds for `all`, `and`, `eq`, `gt`, `lt`, `or` and `sub_rn`.
+#[inline(always)]
 pub(crate) fn add_rn(x: F64X2, y: F64X2) -> F64X2 {
     unsafe { vaddq_f64(x, y) }
 }
 
+// Inlined, as `add_rn` is.
+#[inline(always)]
 pub(crate) fn all(x: F64X2) -> bool {
     unsafe { transmute::<uint32x2_t, u64>(vmovn_u64(transmute::<F64X2, uint64x2_t>(x))) == !0u64 }
 }
 
+// Inlined, as `add_rn` is.
+#[inline(always)]
 pub(crate) fn and(x: F64X2, y: F64X2) -> F64X2 {
     unsafe {
         transmute(vandq_u64(
@@ -62,6 +68,8 @@ pub(crate) fn constant(x: f64, y: f64) -> F64X2 {
     unsafe { transmute([x, y]) }
 }
 
+// Inlined, as `add_rn` is.
+#[inline(always)]
 pub(crate) fn eq(x: F64X2, y: F64X2) -> F64X2 {
     unsafe { transmute(vceqq_f64(x, y)) }
 }
@@ -90,6 +98,8 @@ pub(crate) fn ge(x: F64X2, y: F64X2) -> F64X2 {
     unsafe { transmute(vcgeq_f64(x, y)) }
 }
 
+// Inlined, as `add_rn` is.
+#[inline(always)]
 pub(crate) fn gt(x: F64X2, y: F64X2) -> F64X2 {
     unsafe { transmute(vcgtq_f64(x, y)) }
 }
@@ -104,6 +114,8 @@ pub(crate) fn le(x: F64X2, y: F64X2) -> F64X2 {
     unsafe { transmute(vcleq_f64(x, y)) }
 }
 
+// Inlined, as `add_rn` is.
+#[inline(always)]
 pub(crate) fn lt(x: F64X2, y: F64X2) -> F64X2 {
     unsafe { transmute(vcltq_f64(x, y)) }
 }
@@ -136,6 +148,8 @@ pub(crate) fn neg0(x: F64X2) -> F64X2 {
     constant(-extract0(x), extract1(x))
 }
 
+// Inlined, as `add_rn` is.
+#[inline(always)]
 pub(crate) fn or(x: F64X2, y: F64X2) -> F64X2 {
     unsafe {
         transmute(vorrq_u64(
@@ -169,12 +183,8 @@ pub(crate) fn splat(x: f64) -> F64X2 {
     unsafe { transmute([x, x]) }
 }
 
-/// `sqrt_rd_ru([x0, x1]) = [√x0, √x1]`, the first rounded toward -∞ and the
-/// second toward +∞.
-pub(crate) fn sqrt_rd_ru(x: F64X2) -> F64X2 {
-    constant(sqrt1_rd(extract0(x)), sqrt1_ru(extract1(x)))
-}
-
+// Inlined, as `add_rn` is.
+#[inline(always)]
 pub(crate) fn sub_rn(x: F64X2, y: F64X2) -> F64X2 {
     unsafe { vsubq_f64(x, y) }
 }
@@ -191,66 +201,10 @@ fn shuffle12(x: F64X2, y: F64X2) -> F64X2 {
     constant(extract1(x), extract0(y))
 }
 
-macro_rules! impl_op_round {
-    ($t:ty, $f:ident ($x:ident $(,$y:ident)*), $inst:literal, rd) => {
-        impl_op_round!($t, $f ($x $(,$y)*), $inst, 0x800000);
-    };
-
-    ($t:ty, $f:ident ($x:ident $(,$y:ident)*), $inst:literal, ru) => {
-        impl_op_round!($t, $f ($x $(,$y)*), $inst, 0x400000);
-    };
-
-    ($t:ty, $f:ident ($x:ident $(,$y:ident)*), $inst:literal, $fpcr:literal) => {
-        pub(crate) fn $f(mut $x: $t, $($y: $t,)*) -> $t {
-            unsafe {
-                asm!(
-                    "mrs {fpcr_bak}, fpcr",
-                    "msr fpcr, {fpcr:x}",
-                    $inst,
-                    "msr fpcr, {fpcr_bak}",
-                    $x = inout(vreg) $x,
-                    $($y = in(vreg) $y,)*
-                    fpcr = in(reg) $fpcr,
-                    fpcr_bak = out(reg) _,
-                    options(pure, nomem, nostack, preserves_flags)
-                );
-            }
-            $x
-        }
-    };
-}
-
-impl_op_round!(f64, sqrt1_rd(x), "fsqrt {x:d}, {x:d}", rd);
-impl_op_round!(f64, sqrt1_ru(x), "fsqrt {x:d}, {x:d}", ru);
-impl_op_round!(f64, sub1_ru(x, y), "fsub {x:d}, {x:d}, {y:d}", ru);
-impl_op_round!(F64X2, add_ru(x, y), "fadd.2d {x:v}, {x:v}, {y:v}", ru);
-impl_op_round!(F64X2, sub_ru(x, y), "fsub.2d {x:v}, {x:v}, {y:v}", ru);
-impl_op_round!(F64X2, mul_ru(x, y), "fmul.2d {x:v}, {x:v}, {y:v}", ru);
-impl_op_round!(F64X2, div_ru(x, y), "fdiv.2d {x:v}, {x:v}, {y:v}", ru);
-
-pub(crate) fn mul_add_ru(x: F64X2, y: F64X2, mut z: F64X2) -> F64X2 {
-    unsafe {
-        asm!(
-            "mrs {fpcr_bak}, fpcr",
-            "msr fpcr, {fpcr:x}",
-            "fmla.2d {z:v}, {x:v}, {y:v}",
-            "msr fpcr, {fpcr_bak}",
-            x = in(vreg) x,
-            y = in(vreg) y,
-            z = inout(vreg) z,
-            fpcr = in(reg) 0x400000,
-            fpcr_bak = out(reg) _,
-            options(pure, nomem, nostack, preserves_flags)
-        );
-    }
-    z
-}
-
-// The references of the `/fpcr` entries of the differential tests: the operations
-// themselves, which round in hardware with the rounding mode switched in FPCR.
-#[cfg(test)]
-pub(crate) use self::{
-    add_ru as add_ru_fpcr, div_ru as div_ru_fpcr, mul_add_ru as mul_add_ru_fpcr,
-    mul_ru as mul_ru_fpcr, sqrt1_rd as sqrt1_rd_fpcr, sqrt1_ru as sqrt1_ru_fpcr,
-    sub1_ru as sub1_ru_fpcr, sub_ru as sub_ru_fpcr,
-};
+// The operations that round toward +∞ (and `sqrt_rd_ru` toward -∞ as well)
+// compute the rounding explicitly, as `fma` on x86-64 does: see `aarch64/fma.rs`.
+// The rounding mode in FPCR is never switched, except by the references of the
+// differential tests (`impl_op_round!` in `aarch64/lanewise.rs`).
+mod fma;
+mod lanewise;
+pub(crate) use fma::*;
