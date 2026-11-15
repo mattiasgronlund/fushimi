@@ -1,11 +1,15 @@
 // Compares the rounding functions of the generic backend bit for bit with the
 // backend of the target: on x86-64 with AVX-512F, the hardware backend
-// (`avx512f`), which rounds with embedded rounding; otherwise (`fma`, `sse42`
-// and, on wasm32, `wasm32`), the backend that vectorizes the fast paths of the
-// generic one, and is compared with it.
+// (`avx512f`), which rounds with embedded rounding; otherwise (`fma`, `sse42`,
+// and the `aarch64` and `wasm32` backends), the backend that vectorizes the fast
+// paths of the generic one, and is compared with it.
 // In a build that compiles the copies of the backend functions of the tokens `V2`
 // and `V3` (`src/simd/token.rs`), `mod tokens` compares those in the same way.
 // Both the FMA and the Dekker (no FMA) variants of the generic backend are tested.
+// On aarch64, the generic backend is also compared with the hardware's rounding,
+// with the rounding mode switched in FPCR (the `_fpcr` functions of `aarch64`:
+// the entries named `<op>/fpcr` below, and the references of the square roots),
+// a reference that shares no rounding code with either backend.
 // On wasm32, `f64::mul_add` is a software routine, but still correctly rounded.
 // NaNs compare equal regardless of their sign and payload, which inari does not
 // depend on (x86 returns a negative default NaN, the generic backend does not).
@@ -27,6 +31,10 @@ cfg_if::cfg_if! {
         use super::{sqrt1_rd_mxcsr as hw_sqrt1_rd, sqrt1_ru_mxcsr as hw_sqrt1_ru};
     } else if #[cfg(target_arch = "x86_64")] {
         use super::x86_64::sse42::{sqrt1_rd_mxcsr as hw_sqrt1_rd, sqrt1_ru_mxcsr as hw_sqrt1_ru};
+    } else if #[cfg(target_arch = "aarch64")] {
+        // `aarch64` takes its scalar square root from the generic backend too, so it
+        // is compared with the one that switches the rounding mode in FPCR.
+        use super::{sqrt1_rd_fpcr as hw_sqrt1_rd, sqrt1_ru_fpcr as hw_sqrt1_ru};
     }
 }
 
@@ -118,8 +126,8 @@ const SPECIAL: [f64; 9] = [
 ];
 
 // Exponents around the thresholds of the fast paths and of the format. Below
-// 2^-1075, a product rounds to ±0, which `mul_ru_tiny` in the `fma`, `sse42` and
-// `wasm32` backends and `generic::mul1_ru_tiny` handle separately.
+// 2^-1075, a product rounds to ±0, which `mul_ru_tiny` in the `fma`, `sse42`,
+// `aarch64` and `wasm32` backends and `generic::mul1_ru_tiny` handle separately.
 const BOUNDARY_EXPONENTS: [i32; 15] = [
     -1075, -1074, -1022, -1021, -1020, -970, -968, -967, -966, 0, 995, 996, 1021, 1022, 1023,
 ];
@@ -168,9 +176,10 @@ impl Report {
     }
 
     // As `check`, with the oracle as expected: on `avx512f`, the target backend,
-    // which rounds with embedded rounding; on `fma`, `sse42` and `wasm32`, the
-    // generic backend, whose fast paths they port and whose functions in
-    // `binary_ops` and `ternary_ops` are proved correct in `rocq/`.
+    // which rounds with embedded rounding; on `fma`, `sse42`, `aarch64` and
+    // `wasm32`, the generic backend, whose fast paths they port and whose
+    // functions in `binary_ops` and `ternary_ops` are proved correct in `rocq/`.
+    // On aarch64, `target` is the FPCR reference in the `/fpcr` entries.
     fn check_target(&mut self, name: &str, args: &[f64], target: f64, generic: f64) {
         if cfg!(target_feature = "avx512f") {
             self.check(name, args, target, generic);
@@ -203,9 +212,13 @@ struct Ops {
 // The lists below and the tests `differential` and `round_ties_even` are those of
 // the build's backend. A plain `x86-64` build, without `sse4.2`, has the generic
 // one, which they would compare with itself, so they are left out there.
-#[cfg(any(target_arch = "wasm32", target_feature = "sse4.2"))]
+#[cfg(any(
+    target_arch = "aarch64",
+    target_arch = "wasm32",
+    target_feature = "sse4.2"
+))]
 fn binary_ops() -> Vec<(&'static str, HwBinary, Binary)> {
-    vec![
+    let mut ops: Vec<(&'static str, HwBinary, Binary)> = vec![
         ("add_ru", super::add_ru, generic::add_ru),
         ("sub_ru", super::sub_ru, generic::sub_ru),
         ("sub1_ru", sub1_ru_as_binary, sub1_ru_as_binary_generic),
@@ -221,23 +234,68 @@ fn binary_ops() -> Vec<(&'static str, HwBinary, Binary)> {
             super::div_ru,
             generic::div_ru_impl::<false>,
         ),
+    ];
+    ops.extend(binary_fpcr_ops());
+    ops
+}
+
+// The FPCR references, against the generic backend as aarch64 builds it, with
+// the FMA. `binary_ops` compares both of its variants with `aarch64`.
+#[cfg(target_arch = "aarch64")]
+fn binary_fpcr_ops() -> Vec<(&'static str, HwBinary, Binary)> {
+    vec![
+        ("add_ru/fpcr", super::add_ru_fpcr, generic::add_ru),
+        ("sub_ru/fpcr", super::sub_ru_fpcr, generic::sub_ru),
+        (
+            "sub1_ru/fpcr",
+            sub1_ru_fpcr_as_binary,
+            sub1_ru_as_binary_generic,
+        ),
+        ("mul_ru/fpcr", super::mul_ru_fpcr, generic::mul_ru),
+        ("div_ru/fpcr", super::div_ru_fpcr, generic::div_ru),
     ]
 }
 
-#[cfg(any(target_arch = "wasm32", target_feature = "sse4.2"))]
+// Only aarch64 has FPCR references.
+#[cfg(all(
+    not(target_arch = "aarch64"),
+    any(target_arch = "wasm32", target_feature = "sse4.2")
+))]
+fn binary_fpcr_ops() -> Vec<(&'static str, HwBinary, Binary)> {
+    vec![]
+}
+
+#[cfg(any(
+    target_arch = "aarch64",
+    target_arch = "wasm32",
+    target_feature = "sse4.2"
+))]
 fn sub1_ru_as_binary(x: super::F64X2, y: super::F64X2) -> super::F64X2 {
     let (x, y) = (super::extract(x), super::extract(y));
     super::constant(super::sub1_ru(x[0], y[0]), super::sub1_ru(x[1], y[1]))
+}
+
+#[cfg(target_arch = "aarch64")]
+fn sub1_ru_fpcr_as_binary(x: super::F64X2, y: super::F64X2) -> super::F64X2 {
+    let (x, y) = (super::extract(x), super::extract(y));
+    super::constant(
+        super::sub1_ru_fpcr(x[0], y[0]),
+        super::sub1_ru_fpcr(x[1], y[1]),
+    )
 }
 
 fn sub1_ru_as_binary_generic(x: generic::F64X2, y: generic::F64X2) -> generic::F64X2 {
     [generic::sub1_ru(x[0], y[0]), generic::sub1_ru(x[1], y[1])]
 }
 
-#[cfg(any(target_arch = "wasm32", target_feature = "sse4.2"))]
+#[cfg(any(
+    target_arch = "aarch64",
+    target_arch = "wasm32",
+    target_feature = "sse4.2"
+))]
 fn ternary_ops() -> Vec<(&'static str, HwTernary, Ternary)> {
     let mul_add_ru: HwTernary = super::mul_add_ru;
-    vec![
+    let mut ops: Vec<(&'static str, HwTernary, Ternary)> = vec![
         (
             "mul_add_ru/fma",
             mul_add_ru,
@@ -248,10 +306,34 @@ fn ternary_ops() -> Vec<(&'static str, HwTernary, Ternary)> {
             mul_add_ru,
             generic::mul_add_ru_impl::<false>,
         ),
-    ]
+    ];
+    ops.extend(ternary_fpcr_ops());
+    ops
 }
 
-#[cfg(any(target_arch = "wasm32", target_feature = "sse4.2"))]
+// As `binary_fpcr_ops`.
+#[cfg(target_arch = "aarch64")]
+fn ternary_fpcr_ops() -> Vec<(&'static str, HwTernary, Ternary)> {
+    vec![(
+        "mul_add_ru/fpcr",
+        super::mul_add_ru_fpcr,
+        generic::mul_add_ru,
+    )]
+}
+
+#[cfg(all(
+    not(target_arch = "aarch64"),
+    any(target_arch = "wasm32", target_feature = "sse4.2")
+))]
+fn ternary_fpcr_ops() -> Vec<(&'static str, HwTernary, Ternary)> {
+    vec![]
+}
+
+#[cfg(any(
+    target_arch = "aarch64",
+    target_arch = "wasm32",
+    target_feature = "sse4.2"
+))]
 fn unary_ops() -> Vec<(&'static str, HwUnary, Unary)> {
     vec![("sqrt_rd_ru", super::sqrt_rd_ru, sqrt_rd_ru_reference)]
 }
@@ -259,9 +341,9 @@ fn unary_ops() -> Vec<(&'static str, HwUnary, Unary)> {
 // A reference for `sqrt_rd_ru`: on x86-64, the square root that the hardware
 // rounds, with the rounding mode switched under `fma` and `sse42`, and with
 // embedded rounding under `avx512f`, whose `sqrt_rd_ru` calls the same two
-// functions; on wasm32, the generic backend, whose fast paths the `wasm32` one
-// vectorizes.
-#[cfg(target_arch = "x86_64")]
+// functions; on aarch64, the square root with the rounding mode switched in FPCR;
+// on wasm32, the generic backend, whose fast paths the `wasm32` one vectorizes.
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 fn sqrt_rd_ru_reference(x: generic::F64X2) -> generic::F64X2 {
     [hw_sqrt1_rd(x[0]), hw_sqrt1_ru(x[1])]
 }
@@ -278,7 +360,10 @@ fn unary1_ops() -> Vec<(&'static str, Unary1, Unary1)> {
     vec![]
 }
 
-#[cfg(all(target_arch = "x86_64", target_feature = "sse4.2"))]
+#[cfg(any(
+    all(target_arch = "x86_64", target_feature = "sse4.2"),
+    target_arch = "aarch64"
+))]
 fn unary1_ops() -> Vec<(&'static str, Unary1, Unary1)> {
     vec![
         ("sqrt1_ru/fma", hw_sqrt1_ru, generic::sqrt1_ru_impl::<true>),
@@ -579,7 +664,8 @@ fn mul_ru_tie() -> (f64, f64) {
 // tests, and on the backends of the tokens that `mod tokens` tests.
 // Except under AVX-512F, the backend under test mostly computes with the
 // algorithm of the generic one, so `differential` misses a mistake that they
-// share. `regressions_generic` therefore also checks every case in the generic
+// share, unless an FPCR reference (aarch64) checks the operation.
+// `regressions_generic` therefore also checks every case in the generic
 // backend against its slow paths, which `rocq/theories/` proves correct for all
 // arguments, wherever `differential` runs.
 fn regressions() -> Vec<(&'static str, Vec<f64>)> {
@@ -595,8 +681,9 @@ fn regressions() -> Vec<(&'static str, Vec<f64>)> {
         // is directed, and as a difference, by `sub_ru` and `sub1_ru`. Except
         // under AVX-512F, the backend under test hands these cases to the generic
         // one, so there `differential` checks only that its own fast path, if it
-        // has one, rejects them, and `regressions_generic` checks the generic
-        // result against `generic::add1_ru_slow`.
+        // has one, rejects them (and, on aarch64, the generic result against the
+        // FPCR references), and `regressions_generic` checks the generic result
+        // against `generic::add1_ru_slow`.
         ("add_ru", vec![-f64::MAX, 3.0 * p(970)]),
         ("add_ru", vec![f64::MAX, -3.0 * p(970)]),
         ("sub_ru", vec![-f64::MAX, -3.0 * p(970)]),
@@ -608,11 +695,27 @@ fn regressions() -> Vec<(&'static str, Vec<f64>)> {
         // a6650cb removed it, as the FMA alone gives c there. Not known to have
         // failed. With its negation. Both paths of the generic backend return
         // `mul_add1_special` for these cases, so `regressions_generic` cannot see
-        // a mistake in it. `differential` can, under `fma` and `avx512f`, which
-        // take the result from the FMA alone, but not under `sse42` and `wasm32`
-        // if their `special_r` shares the mistake.
+        // a mistake in it. `differential` can, under `fma`, `avx512f` and
+        // `aarch64`, which take the result from the FMA alone (and on aarch64
+        // with `mul_add_ru/fpcr` too), but not under `sse42` and `wasm32` if
+        // their `special_r` shares the mistake.
         ("mul_add_ru", vec![f64::MAX, 2.0, f64::NEG_INFINITY]),
         ("mul_add_ru", vec![-f64::MAX, 2.0, f64::INFINITY]),
+        // a * b = (1 + 2^-26 + 2^-54) 2^-968, so u1 = (1 + 2^-26) 2^-968 and
+        // u2 = r1 = 2^-1022: the lower end of the band [2^-1022, b), with
+        // b = 2^-1022 (1 + 2^-32) from `splat_tiny_bound` in `aarch64/fma.rs`,
+        // which the underflow check of `aarch64`'s `mul_add_ru` hands to the
+        // generic backend, while the generic fast path takes it. Chosen by hand
+        // for that check, as the random cases reach the band but `adversarial`
+        // misses it. Not known to have failed.
+        (
+            "mul_add_ru",
+            vec![
+                1.0 + p(-27),
+                (1.0 + p(-27)) * p(-968),
+                -(1.0 + p(-26)) * p(-968),
+            ],
+        ),
         // `mul_ru_tie`: rs / 2^128 is a tie, -2^-1075, and rounds to the result,
         // -0. Chosen by hand for `generic::mul1_ru_tiny` in 6fa4f83, which got
         // it right.
@@ -621,7 +724,7 @@ fn regressions() -> Vec<(&'static str, Vec<f64>)> {
 }
 
 // The operation of `name`: the part before any `/`. The part after it names a
-// variant of the generic backend.
+// variant of the generic backend, or, as `fpcr`, the FPCR reference on aarch64.
 fn operation(name: &str) -> &str {
     name.split('/').next().unwrap()
 }
@@ -657,7 +760,11 @@ fn in_lanes(cases: Vec<Vec<f64>>) -> Vec<(Vec<f64>, Vec<f64>)> {
     lanes
 }
 
-#[cfg(any(target_arch = "wasm32", target_feature = "sse4.2"))]
+#[cfg(any(
+    target_arch = "aarch64",
+    target_arch = "wasm32",
+    target_feature = "sse4.2"
+))]
 #[test]
 fn differential() {
     let ops = Ops {
@@ -816,7 +923,8 @@ fn compare(ops: Ops, absent: &[&str]) {
 // which `rocq/theories/MulRu.v` proves correct for all inputs. Except under
 // AVX-512F, `differential` compares the generic backend with SIMD backends that
 // round tiny products with the algorithm of `mul1_ru_tiny`, so a mistake in the
-// algorithm they share could go unnoticed there.
+// algorithm they share could go unnoticed there, except by `mul_ru/fpcr` on
+// aarch64.
 #[test]
 fn mul_ru_tiny_generic() {
     let n = random_cases();
@@ -1005,7 +1113,8 @@ fn regression_variants(name: &str, arity: usize) -> Vec<Vec<f64>> {
 // `rocq/theories/` proves correct for all arguments, as `mul_ru_tiny_generic`
 // does for `mul_ru`. Except under AVX-512F, `differential` compares the generic
 // backend with backends that mostly compute with its algorithm, so a mistake
-// that they share would go unnoticed there. The slow paths are the oracle, so
+// that they share would go unnoticed there, except on aarch64 by the `/fpcr`
+// entries. The slow paths are the oracle, so
 // this test does not see a mistake in what the generic backend runs on a case as
 // they do: a slow path that its fast path hands the case to, or a function that
 // both paths call (see the cases of `add_ru` and `mul_add_ru` in `regressions`).
@@ -1067,7 +1176,11 @@ fn regressions_generic() {
     assert_eq!(total_mismatches, 0, "\n{}", summary);
 }
 
-#[cfg(any(target_arch = "wasm32", target_feature = "sse4.2"))]
+#[cfg(any(
+    target_arch = "aarch64",
+    target_arch = "wasm32",
+    target_feature = "sse4.2"
+))]
 #[test]
 fn round_ties_even() {
     let mut rng = Rng(1);

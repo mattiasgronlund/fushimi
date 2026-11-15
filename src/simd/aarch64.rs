@@ -245,3 +245,12 @@ pub(crate) fn mul_add_ru(x: F64X2, y: F64X2, mut z: F64X2) -> F64X2 {
     }
     z
 }
+
+// The references of the `/fpcr` entries of the differential tests: the operations
+// themselves, which round in hardware with the rounding mode switched in FPCR.
+#[cfg(test)]
+pub(crate) use self::{
+    add_ru as add_ru_fpcr, div_ru as div_ru_fpcr, mul_add_ru as mul_add_ru_fpcr,
+    mul_ru as mul_ru_fpcr, sqrt1_rd as sqrt1_rd_fpcr, sqrt1_ru as sqrt1_ru_fpcr,
+    sub1_ru as sub1_ru_fpcr, sub_ru as sub_ru_fpcr,
+};

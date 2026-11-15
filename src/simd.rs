@@ -63,10 +63,12 @@ cfg_if::cfg_if! {
 
         // The generic backend provides `round_up_exact`, which `src/parse.rs` and
         // `src/dyadic.rs` call, and `two_prod_err` and `HAS_FMA`, which the fast paths of
-        // `src/dyadic` use.
+        // `src/dyadic` use, and is tested against `aarch64`.
         #[allow(dead_code)] // Only these and the functions that they call are used.
         mod generic;
         pub(crate) use generic::{round_up_exact, two_prod_err, HAS_FMA};
+        #[cfg(test)]
+        mod differential_tests;
     } else if #[cfg(all(target_arch = "x86_64", target_feature = "sse4.2"))] {
         // Plain `x86-64`, without `sse4.2`, takes the portable backend below. On every x86-64
         // target without `fma`, among them `x86-64-v2`, which takes this backend, the kernel
