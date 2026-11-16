@@ -1,0 +1,63 @@
+diff --git a/src/simd/aarch64/fma.rs b/src/simd/aarch64/fma.rs
+index 29878bc..053cf94 100644
+--- a/src/simd/aarch64/fma.rs
++++ b/src/simd/aarch64/fma.rs
+@@ -25,7 +25,7 @@
+ 
+ use super::lanewise::{
+     add_i64, andnot, div_rn, exponent_in, gt_i64, is_finite, is_special, lane0, mul_rn, not,
+-    or_generic, select, splat_i64, sqrt_rn, step_up_where, sub_i64, two_sum_err, zero,
++    or_generic, select, splat_i64, sqrt_rn, step_up_all, step_up_where, sub_i64, two_sum_err, zero,
+ };
+ use super::{add_rn, all, and, eq, extract, gt, lt, or, splat, sub_rn, F64X2};
+ use crate::simd::generic;
+@@ -158,15 +158,19 @@ pub(crate) fn mul_add_ru(a: F64X2, b: F64X2, c: F64X2) -> F64X2 {
+     //   infinite term, which is > 0 exactly where gamma > -alpha2.
+     // neg_alpha2 is -alpha2 up to the sign of a zero, which `fcmgt` ignores.
+     let up = gt(gamma, neg_alpha2);
+-    // `step_up_where` needs r1 finite and not -0 where err > 0. Up is false in
+-    // the special lanes, and in the others that pass `ok`, r1 is finite and
+-    // a * b + c = r1 + gamma + alpha2 exactly [BM11, Theorem 2], so err > 0
+-    // means a * b + c > r1: r1 is inexact, so a * b + c is nonzero. It is a
+-    // multiple of 2^-1074, so |r1| >= 2^-1074: c is one, as every float is, and
+-    // so is a * b, as a = A * 2^i and b = B * 2^j with integers |A|, |B| < 2^53
+-    // and |a * b| > 2^-969 (from |u1| >= 2^-968) give i + j > -1075. If a lane
+-    // fails `ok`, the generic backend recomputes both.
+-    let r = step_up_where(up, r1);
++    // `step_up_all` steps r1 up in every lane and waits only for r1, so the path
++    // through gamma ends in `fcmgt` and one select, in place of the two
++    // operations of `step_up_where` that wait for up (an `eor` and a `sub`). The
++    // step is used only where up is set, so the precondition is unchanged: r1
++    // finite and not -0 where err > 0. Up is false in the special lanes, and in
++    // the others that pass `ok`, r1 is finite and a * b + c = r1 + gamma +
++    // alpha2 exactly [BM11, Theorem 2], so err > 0 means a * b + c > r1: r1 is
++    // inexact, so a * b + c is nonzero. It is a multiple of 2^-1074, so |r1| >=
++    // 2^-1074: c is one, as every float is, and so is a * b, as a = A * 2^i and
++    // b = B * 2^j with integers |A|, |B| < 2^53 and |a * b| > 2^-969 (from |u1|
++    // >= 2^-968) give i + j > -1075. If a lane fails `ok`, the generic backend
++    // recomputes both.
++    let r = select(up, step_up_all(r1), r1);
+     or_generic(ok, r, move || {
+         generic::mul_add_ru(extract(a), extract(b), extract(c))
+     })
+diff --git a/src/simd/aarch64/lanewise.rs b/src/simd/aarch64/lanewise.rs
+index c2ae525..c32521c 100644
+--- a/src/simd/aarch64/lanewise.rs
++++ b/src/simd/aarch64/lanewise.rs
+@@ -348,6 +348,16 @@ pub(super) fn step_up_where(m: F64X2, x: F64X2) -> F64X2 {
+     add_i64(sub_i64(x, xor(m, n)), n)
+ }
+ 
++/// Returns the successors of the lanes of x: `step_up_where` with m set in every
++/// lane. The lanes whose result is used must be finite and must not be -0; the
++/// others get some bit pattern, as the integer operations cannot trap.
++#[inline(always)]
++pub(super) fn step_up_all(x: F64X2) -> F64X2 {
++    // `step_up_where` with m = -1, where m ^ n = !n.
++    let n = lt(x, zero());
++    add_i64(sub_i64(x, not(n)), n)
++}
++
+ /// Returns the error e = (x + y) - s, where s = RN(x + y). See `generic::two_sum_err`.
+ #[inline(always)]
+ pub(super) fn two_sum_err(x: F64X2, y: F64X2, s: F64X2) -> F64X2 {

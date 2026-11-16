@@ -1,0 +1,47 @@
+diff --git a/src/simd/aarch64.rs b/src/simd/aarch64.rs
+index 68aca63..8ef6b57 100644
+--- a/src/simd/aarch64.rs
++++ b/src/simd/aarch64.rs
+@@ -11,7 +11,7 @@ pub(crate) fn abs(x: F64X2) -> F64X2 {
+ // Inlined, as the crate's operations inline it, where `mul_add_ru` or `sqrt_rd_ru` calls it
+ // (see `aarch64/fma.rs`). Those two are `#[inline(always)]` (see `Baseline` in
+ // `src/simd/token.rs`), so without this, a `*_with` method instantiated in another crate calls
+-// it out of line. The same holds for `all`, `and`, `eq`, `gt`, `lt`, `or` and `sub_rn`.
++// it out of line. The same holds for `all`, `and`, `any`, `eq`, `gt`, `lt`, `or` and `sub_rn`.
+ #[inline(always)]
+ pub(crate) fn add_rn(x: F64X2, y: F64X2) -> F64X2 {
+     unsafe { vaddq_f64(x, y) }
+@@ -34,6 +34,8 @@ pub(crate) fn and(x: F64X2, y: F64X2) -> F64X2 {
+     }
+ }
+ 
++// Inlined, as `add_rn` is.
++#[inline(always)]
+ pub(crate) fn any(x: F64X2) -> bool {
+     unsafe { transmute::<uint32x2_t, u64>(vmovn_u64(transmute::<F64X2, uint64x2_t>(x))) != 0u64 }
+ }
+diff --git a/src/simd/aarch64/fma.rs b/src/simd/aarch64/fma.rs
+index 29878bc..0221c0b 100644
+--- a/src/simd/aarch64/fma.rs
++++ b/src/simd/aarch64/fma.rs
+@@ -27,7 +27,7 @@ use super::lanewise::{
+     add_i64, andnot, div_rn, exponent_in, gt_i64, is_finite, is_special, lane0, mul_rn, not,
+     or_generic, select, splat_i64, sqrt_rn, step_up_where, sub_i64, two_sum_err, zero,
+ };
+-use super::{add_rn, all, and, eq, extract, gt, lt, or, splat, sub_rn, F64X2};
++use super::{add_rn, all, and, any, eq, extract, gt, lt, or, splat, sub_rn, F64X2};
+ use crate::simd::generic;
+ use std::arch::aarch64::*;
+ 
+@@ -166,7 +166,10 @@ pub(crate) fn mul_add_ru(a: F64X2, b: F64X2, c: F64X2) -> F64X2 {
+     // so is a * b, as a = A * 2^i and b = B * 2^j with integers |A|, |B| < 2^53
+     // and |a * b| > 2^-969 (from |u1| >= 2^-968) give i + j > -1075. If a lane
+     // fails `ok`, the generic backend recomputes both.
+-    let r = step_up_where(up, r1);
++    // Where up is clear in both lanes, `step_up_where` returns r1 as it is, so
++    // the branch returns the same in every case. Where it is predicted, the
++    // result waits only for r1 in that arm, not for gamma.
++    let r = if any(up) { step_up_where(up, r1) } else { r1 };
+     or_generic(ok, r, move || {
+         generic::mul_add_ru(extract(a), extract(b), extract(c))
+     })
