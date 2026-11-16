@@ -6761,10 +6761,24 @@ Definition quadrants (pt : point) (a b : f64) : f64 * f64 :=
     [mul] below), and [mul_rev_to_pair] calls the divisions of
     [div_with] with [Baseline] too. These methods and divisions call the
     backend of their token [s], as in [s.add_ru(x, y)], and are
-    transcribed here for an [s] whose backend is the portable one. Such
-    an [s] exists only in a build whose backend is the portable one, so
-    the functions that they call without [s], such as [classify2], are
-    the portable backend's there too.
+    transcribed here for an [s] whose backend is the portable one.
+    [add_with], [sub_with], [mul_with], [div_with], [mul_add_with],
+    [recip_with], [sqr_with] and [sqrt_with] of [impl DecInterval] call
+    those of [impl Interval] with their token [s], and are transcribed
+    here for such an [s] too. Such an [s] exists only in a build whose
+    backend is the portable one, so the functions that they call without
+    [s], such as [classify2], are the portable backend's there too. The
+    bodies of these eight methods of [impl DecInterval] are the macros
+    [dec_add_sub_mul_with_body!] and [dec_div_with_body!] of
+    [src/arith.rs] and [dec_mul_add_with_body!], [dec_recip_with_body!],
+    [dec_sqr_with_body!] and [dec_sqrt_with_body!] of [src/basic.rs]. The
+    decorated [x + y], [x - y], [x * y], [x / y], [DecInterval::mul_add],
+    [DecInterval::recip], [DecInterval::sqr] and [DecInterval::sqrt]
+    expand the same macros with the operation of intervals without a
+    token in place of the call with [s], such as [self.x() + rhs.x()] for
+    [self.x().add_with(s, rhs.x())], and with [set_dec], which calls
+    [set_dec_impl], in place of [set_dec_impl] (see [set_dec] and [add] of
+    [DecInterval] below).
     The elementary functions also compute bounds with the functions that
     are the argument [pt] here: those of the dyadic kernel in the library,
     and in the tests those of MPFR too (see the record [point] above).
@@ -8511,7 +8525,12 @@ Definition is_nai (self : DecInterval) : bool := dec_eqb (dec self) Ill.
 Definition new_unchecked (x : Interval) (d : Decoration) : DecInterval :=
   {| itv := x; dec := d |}.
 
-(** [pub fn set_dec(x: Interval, d: Decoration) -> Self] *)
+(** [pub fn set_dec(x: Interval, d: Decoration) -> Self], whose body is
+    [Self::set_dec_impl(x, d)]: this is the body of
+    [pub(crate) fn set_dec_impl(x: Interval, d: Decoration) -> Self],
+    which [add_with], [sub_with], [mul_with], [div_with], [mul_add_with],
+    [recip_with], [sqr_with] and [sqrt_with] of [impl DecInterval] call in
+    place of [set_dec] *)
 Definition set_dec (x : Interval) (d : Decoration) : DecInterval :=
   if dec_eqb d Ill then NAI
   else if Interval.is_empty x then EMPTY
@@ -8732,18 +8751,32 @@ Definition round_ties_even : DecInterval -> DecInterval :=
 Definition sign : DecInterval -> DecInterval :=
   impl_dec Interval.sign (fun x y => eq (Interval.inf_raw x) zero).
 
-(** [pub fn sqr(self) -> Self], where [self.x().sqr()] is
-    [Interval.sqr has_fma (itv self)], with the [has_fma] of
-    [Interval.sqr] as an argument here too. *)
+(** [pub fn sqr_with<S: Simd>(self, s: S) -> Self] of [impl DecInterval],
+    for an [s] whose backend is the portable one: its body is the macro
+    [dec_sqr_with_body!] with [self.x().sqr_with(s)] for the interval,
+    which it evaluates only if [self] is not NaI, and with
+    [Self::set_dec_impl], which [set_dec] transcribes, where
+    [self.x().sqr_with(s)] is [Interval.sqr has_fma (itv self)], with the
+    [has_fma] of [Interval.sqr] as an argument here too;
+    [pub fn sqr(self) -> Self] expands the same macro with
+    [self.x().sqr()], which is [self.x().sqr_with(Baseline)], and with
+    [Self::set_dec], which calls [Self::set_dec_impl]. *)
 Definition sqr (has_fma : bool) (self : DecInterval) : option DecInterval :=
   if is_nai self then Some self
   else
     let* x := Interval.sqr has_fma (itv self) in
     Some (set_dec x (dec self)).
 
-(** [pub fn sqrt(self) -> Self], where [self.x().sqrt()] is
-    [Interval.sqrt has_fma (itv self)], with the [has_fma] of
-    [Interval.sqrt] as an argument here too, and [0.0] is +0. *)
+(** [pub fn sqrt_with<S: Simd>(self, s: S) -> Self] of [impl DecInterval],
+    for an [s] whose backend is the portable one: its body is the macro
+    [dec_sqrt_with_body!] with [self.x().sqrt_with(s)] for the interval,
+    which it evaluates only if [self] is not NaI, and with
+    [Self::set_dec_impl], which [set_dec] transcribes, where
+    [self.x().sqrt_with(s)] is [Interval.sqrt has_fma (itv self)], with
+    the [has_fma] of [Interval.sqrt] as an argument here too, and [0.0]
+    is +0; [pub fn sqrt(self) -> Self] expands the same macro with
+    [self.x().sqrt()], which is [self.x().sqrt_with(Baseline)], and with
+    [Self::set_dec], which calls [Self::set_dec_impl]. *)
 Definition sqrt (has_fma : bool) (self : DecInterval) : option DecInterval :=
   if is_nai self then Some self
   else
@@ -8771,34 +8804,75 @@ Definition neg (self : DecInterval) : DecInterval :=
   if is_nai self then self
   else set_dec (Interval.neg (itv self)) (dec self).
 
-(** [fn add(self, rhs: Self) -> Self] of [impl Add for DecInterval] and
-    [fn sub(self, rhs: Self) -> Self] of [impl Sub for DecInterval] *)
+(** [pub fn add_with<S: Simd>(self, s: S, rhs: Self) -> Self] of
+    [impl DecInterval], for an [s] whose backend is the portable one: its
+    body is the macro [dec_add_sub_mul_with_body!] with
+    [self.x().add_with(s, rhs.x())] for the interval, which it evaluates
+    only if neither [self] nor [rhs] is NaI, and with
+    [Self::set_dec_impl], which [set_dec] transcribes, where
+    [self.x().add_with(s, rhs.x())] is [Interval.add (itv self) (itv rhs)];
+    [fn add(self, rhs: Self) -> Self] of [impl Add for DecInterval]
+    expands the same macro with [self.x() + rhs.x()], which is
+    [self.x().add_with(Baseline, rhs.x())], and with [Self::set_dec],
+    which calls [Self::set_dec_impl]. *)
 Definition add (self rhs : DecInterval) : option DecInterval :=
   if is_nai self || is_nai rhs then Some NAI
   else
     let* x := Interval.add (itv self) (itv rhs) in
     Some (set_dec x (dec_min (dec self) (dec rhs))).
+
+(** [pub fn sub_with<S: Simd>(self, s: S, rhs: Self) -> Self] of
+    [impl DecInterval], for an [s] whose backend is the portable one: its
+    body is the macro [dec_add_sub_mul_with_body!] with
+    [self.x().sub_with(s, rhs.x())] for the interval, which it evaluates
+    only if neither [self] nor [rhs] is NaI, and with
+    [Self::set_dec_impl], which [set_dec] transcribes, where
+    [self.x().sub_with(s, rhs.x())] is [Interval.sub (itv self) (itv rhs)];
+    [fn sub(self, rhs: Self) -> Self] of [impl Sub for DecInterval]
+    expands the same macro with [self.x() - rhs.x()], which is
+    [self.x().sub_with(Baseline, rhs.x())], and with [Self::set_dec],
+    which calls [Self::set_dec_impl]. *)
 Definition sub (self rhs : DecInterval) : option DecInterval :=
   if is_nai self || is_nai rhs then Some NAI
   else
     let* x := Interval.sub (itv self) (itv rhs) in
     Some (set_dec x (dec_min (dec self) (dec rhs))).
 
-(** [fn mul(self, rhs: Self) -> Self] of [impl Mul for DecInterval], where
-    [self.x() * rhs.x()] is [Interval.mul has_fma (itv self) (itv rhs)], with
-    the [has_fma] of [Interval.mul] as an argument here too. *)
+(** [pub fn mul_with<S: Simd>(self, s: S, rhs: Self) -> Self] of
+    [impl DecInterval], for an [s] whose backend is the portable one: its
+    body is the macro [dec_add_sub_mul_with_body!] with
+    [self.x().mul_with(s, rhs.x())] for the interval, which it evaluates
+    only if neither [self] nor [rhs] is NaI, and with
+    [Self::set_dec_impl], which [set_dec] transcribes, where
+    [self.x().mul_with(s, rhs.x())] is
+    [Interval.mul has_fma (itv self) (itv rhs)], with the [has_fma] of
+    [Interval.mul] as an argument here too;
+    [fn mul(self, rhs: Self) -> Self] of [impl Mul for DecInterval]
+    expands the same macro with [self.x() * rhs.x()], which is the body
+    of [self.x().mul_with(s, rhs.x())] with [Baseline] for [s] (see
+    [Interval.mul]), and with [Self::set_dec], which calls
+    [Self::set_dec_impl]. *)
 Definition mul (has_fma : bool) (self rhs : DecInterval) : option DecInterval :=
   if is_nai self || is_nai rhs then Some NAI
   else
     let* x := Interval.mul has_fma (itv self) (itv rhs) in
     Some (set_dec x (dec_min (dec self) (dec rhs))).
 
-(** [pub fn mul_add(self, rhs: Self, addend: Self) -> Self], where
-    [self.x().mul_add(rhs.x(), addend.x())] is
+(** [pub fn mul_add_with<S: Simd>(self, s: S, rhs: Self, addend: Self) -> Self]
+    of [impl DecInterval], for an [s] whose backend is the portable one:
+    its body is the macro [dec_mul_add_with_body!] with
+    [self.x().mul_add_with(s, rhs.x(), addend.x())] for the interval,
+    which it evaluates only if none of [self], [rhs] and [addend] is NaI,
+    and with [Self::set_dec_impl], which [set_dec] transcribes, where
+    [self.x().mul_add_with(s, rhs.x(), addend.x())] is
     [Interval.mul_add has_fma (itv self) (itv rhs) (itv addend)], with the
     [has_fma] of [Interval.mul_add] as an argument here too, and
     [self.d().min(rhs.d().min(addend.d()))] is
-    [dec_min (dec self) (dec_min (dec rhs) (dec addend))]. *)
+    [dec_min (dec self) (dec_min (dec rhs) (dec addend))];
+    [pub fn mul_add(self, rhs: Self, addend: Self) -> Self] expands the
+    same macro with [self.x().mul_add(rhs.x(), addend.x())], which is
+    [self.x().mul_add_with(Baseline, rhs.x(), addend.x())], and with
+    [Self::set_dec], which calls [Self::set_dec_impl]. *)
 Definition mul_add (has_fma : bool) (self rhs addend : DecInterval) :
     option DecInterval :=
   if is_nai self || is_nai rhs || is_nai addend then Some NAI
@@ -8806,9 +8880,16 @@ Definition mul_add (has_fma : bool) (self rhs addend : DecInterval) :
     let* x := Interval.mul_add has_fma (itv self) (itv rhs) (itv addend) in
     Some (set_dec x (dec_min (dec self) (dec_min (dec rhs) (dec addend)))).
 
-(** [pub fn recip(self) -> Self], where [self.x().recip()] is
-    [Interval.recip has_fma (itv self)], with the [has_fma] of
-    [Interval.recip] as an argument here too, and [0.0] is +0. *)
+(** [pub fn recip_with<S: Simd>(self, s: S) -> Self] of [impl DecInterval],
+    for an [s] whose backend is the portable one: its body is the macro
+    [dec_recip_with_body!] with [self.x().recip_with(s)] for the interval,
+    which it evaluates only if [self] is not NaI, and with
+    [Self::set_dec_impl], which [set_dec] transcribes, where
+    [self.x().recip_with(s)] is [Interval.recip has_fma (itv self)], with
+    the [has_fma] of [Interval.recip] as an argument here too, and [0.0]
+    is +0; [pub fn recip(self) -> Self] expands the same macro with
+    [self.x().recip()], which is [self.x().recip_with(Baseline)], and with
+    [Self::set_dec], which calls [Self::set_dec_impl]. *)
 Definition recip (has_fma : bool) (self : DecInterval) : option DecInterval :=
   if is_nai self then Some self
   else
@@ -8816,10 +8897,19 @@ Definition recip (has_fma : bool) (self : DecInterval) : option DecInterval :=
     let* x := Interval.recip has_fma (itv self) in
     Some (set_dec x d).
 
-(** [fn div(self, rhs: Self) -> Self] of [impl Div for DecInterval], where
-    [self.x() / rhs.x()] is [Interval.div has_fma (itv self) (itv rhs)], with
-    the [has_fma] of [Interval.div] as an argument here too, and [0.0] is
-    +0. *)
+(** [pub fn div_with<S: Simd>(self, s: S, rhs: Self) -> Self] of
+    [impl DecInterval], for an [s] whose backend is the portable one: its
+    body is the macro [dec_div_with_body!] with
+    [self.x().div_with(s, rhs.x())] for the interval, which it evaluates
+    only if neither [self] nor [rhs] is NaI, and with
+    [Self::set_dec_impl], which [set_dec] transcribes, where
+    [self.x().div_with(s, rhs.x())] is
+    [Interval.div has_fma (itv self) (itv rhs)], with the [has_fma] of
+    [Interval.div] as an argument here too, and [0.0] is +0;
+    [fn div(self, rhs: Self) -> Self] of [impl Div for DecInterval]
+    expands the same macro with [self.x() / rhs.x()], which is
+    [self.x().div_with(Baseline, rhs.x())], and with [Self::set_dec],
+    which calls [Self::set_dec_impl]. *)
 Definition div (has_fma : bool) (self rhs : DecInterval) : option DecInterval :=
   if is_nai self || is_nai rhs then Some NAI
   else

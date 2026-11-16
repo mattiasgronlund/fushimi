@@ -24,6 +24,10 @@ impl Interval {
     /// assert!(!Interval::ENTIRE.contains(f64::NEG_INFINITY));
     /// assert!(!Interval::ENTIRE.contains(f64::NAN));
     /// ```
+    // `#[inline]` lets `DecInterval::div_with` and `DecInterval::recip_with` instantiated in a
+    // user's crate inline this function. Without it, both called with a `V3` inside its
+    // `vectorize` in a user's crate built for `haswell` or `x86-64-v2` call it out of line.
+    #[inline]
     pub fn contains(self, rhs: f64) -> bool {
         // `rocq/theories/Model.v` transcribes this function for the proofs of
         // `DecInterval::div`, `DecInterval::mul_rev_to_pair` and `DecInterval::recip`.
@@ -132,6 +136,11 @@ impl Interval {
     /// assert!(!Interval::EMPTY.is_common_interval());
     /// assert!(!Interval::ENTIRE.is_common_interval());
     /// ```
+    // `#[inline]` lets each `*_with` method of `DecInterval` instantiated in a user's crate
+    // inline this function, which it reaches through `DecInterval::set_dec_impl`. Without it,
+    // each of them called with a `V3` inside its `vectorize` in a user's crate built for
+    // `haswell` or `x86-64-v2` calls it out of line.
+    #[inline]
     pub fn is_common_interval(self) -> bool {
         // `rocq/theories/Model.v` transcribes this function for the proofs of
         // `DecInterval::abs`, `DecInterval::add`, `(Dec)Interval::cancel_minus`,

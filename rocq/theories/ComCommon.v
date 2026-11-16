@@ -19,8 +19,9 @@
     the one in [const_dec_interval!]. So every [DecInterval] comes from
     [const_dec_interval!] or from one of the callers of [new_unchecked]:
     - [DecInterval::new] ([new_com_common]);
-    - [DecInterval::set_dec] ([set_dec_com_common]), for any interval and
-      decoration, so for every caller, such as [x * y];
+    - [DecInterval::set_dec_impl], the body of [DecInterval::set_dec]
+      ([set_dec_com_common]), for any interval and decoration, so for
+      every caller of either, such as [x * y] and [mul_with];
     - the constants [EMPTY], [NAI] and [ENTIRE] ([constants_com_common]),
       and those that [def_com!] defines ([def_com_com_common], with
       [def_com_ok_bounds] for its hypotheses);

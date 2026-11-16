@@ -2,14 +2,16 @@
 //!
 //! Without a token, interval arithmetic such as `x + y` runs the backend that inari picks when
 //! it is compiled, from the target of the build, its target features and the feature
-//! `force-generic`. The `*_with` operations of [`Interval`](crate::Interval), such as
-//! [`Interval::add_with`](crate::Interval::add_with), take a token of a level, a value of a type
-//! that implements [`Simd`], and run the backend that the token gives: [`Baseline`], on every
-//! target, gives the build's, and on x86-64, `V2` and `V3`, whose `try_new` checks that the CPU
-//! has their target features, give the `sse42` and the `fma` backend in the builds that the last
-//! paragraph names. Every token gives the same intervals, since these operations return the
-//! tightest results (see [Conformance to the standard](crate::_docs::conformance)); only the
-//! speed differs.
+//! `force-generic`. The `*_with` operations of [`Interval`](crate::Interval) and
+//! [`DecInterval`](crate::DecInterval), such as [`Interval::add_with`](crate::Interval::add_with)
+//! and [`DecInterval::add_with`](crate::DecInterval::add_with), take a token of a level, a value
+//! of a type that implements [`Simd`], and run the backend that the token gives: [`Baseline`], on
+//! every target, gives the build's, and on x86-64, `V2` and `V3`, whose `try_new` checks that the
+//! CPU has their target features, give the `sse42` and the `fma` backend in the builds that the
+//! last paragraph names. Every token gives the same intervals, since these operations return the
+//! tightest results (see [Conformance to the standard](crate::_docs::conformance)), and the same
+//! decorations, since those of `DecInterval` compute them from the arguments and these intervals
+//! alone; only the speed differs.
 //!
 //! To run a loop at the highest level of a token that the CPU has, implement [`WithLevel`] for
 //! a type whose [`with_level`](WithLevel::with_level) runs the loop, and call [`dispatch`] once,

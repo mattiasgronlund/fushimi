@@ -271,6 +271,20 @@ impl DecInterval {
     /// | Unbounded            | [`Decoration::Dac`], [`Decoration::Def`], [`Decoration::Trv`], [`Decoration::Ill`]                      |
     /// | Empty                | [`Decoration::Trv`], [`Decoration::Ill`]                                                                |
     pub fn set_dec(x: Interval, d: Decoration) -> Self {
+        // This function is not `#[inline]`, unlike `set_dec_impl`: with `#[inline]` on it, some
+        // of the operations of `DecInterval` without a token, which call it, took more
+        // instructions or branches per call in a plain x86-64 build of the library: 6 more
+        // instructions for `+`, 3 more for `-` and `mul_add` and 4 to 6 more for `sqrt`, and one
+        // more branch for `recip` of a positive or a negative interval (seen with rustc 1.98).
+        Self::set_dec_impl(x, d)
+    }
+
+    // The body of `set_dec`, which the `*_with` methods of `DecInterval` call in place of it.
+    // `#[inline]` lets such a method instantiated in a user's crate inline this function.
+    // Without it, each of them called with a `V3` inside its `vectorize` in a user's crate built
+    // for plain `x86-64` calls it out of line.
+    #[inline]
+    pub(crate) fn set_dec_impl(x: Interval, d: Decoration) -> Self {
         // `rocq/theories/Model.v` transcribes this function for the proofs of
         // `DecInterval::abs`, `DecInterval::add`, `DecInterval::cancel_minus`,
         // `DecInterval::cancel_plus`, `DecInterval::ceil`, `DecInterval::div`,

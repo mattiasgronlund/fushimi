@@ -776,6 +776,89 @@ impl Interval {
     }
 }
 
+// The body of `DecInterval::mul_add_with`, with `$lhs` for `self`, `$rhs` for `rhs`, `$addend` for
+// `addend`, `$x` for the interval of the result, which it evaluates only if none of `$lhs`,
+// `$rhs` and `$addend` is NaI, and `$set_dec` for the function that decorates it. `mul_add_with`
+// expands it with `self.x().mul_add_with(s, rhs.x(), addend.x())` and with
+// `Self::set_dec_impl`, which is `#[inline]`. `DecInterval::mul_add` expands it with
+// `self.x().mul_add(rhs.x(), addend.x())` and with `Self::set_dec`, which is not, rather than
+// calling `mul_add_with` with `Baseline`, which would inline the body of
+// `Interval::mul_add_with` into it. In a plain x86-64 build of the library that took 7 to 56
+// more instructions per call, as `DecInterval::mul_add` then called `generic::mul_add_ru_impl`
+// and `generic::max` out of line (seen with rustc 1.98).
+macro_rules! dec_mul_add_with_body {
+    ($lhs:ident, $rhs:ident, $addend:ident, $x:expr, $set_dec:path) => {{
+        if $lhs.is_nai() || $rhs.is_nai() || $addend.is_nai() {
+            return Self::NAI;
+        }
+
+        $set_dec($x, $lhs.d().min($rhs.d().min($addend.d())))
+    }};
+}
+
+// The body of `DecInterval::recip_with`, with `$lhs` for `self`, `$x` for the interval of the
+// result, which it evaluates only if `$lhs` is not NaI, and `$set_dec` for the function that
+// decorates it. `recip_with` expands it with `self.x().recip_with(s)` and with
+// `Self::set_dec_impl`, which is `#[inline]`. `DecInterval::recip` expands it with
+// `self.x().recip()` and with `Self::set_dec`, which is not, rather than calling `recip_with`
+// with `Baseline`. With that call, `DecInterval::recip` took one more branch per call for a
+// positive or a negative interval in a plain x86-64 build of the library, though 12 fewer
+// instructions (seen with rustc 1.98).
+macro_rules! dec_recip_with_body {
+    ($lhs:ident, $x:expr, $set_dec:path) => {{
+        if $lhs.is_nai() {
+            return $lhs;
+        }
+
+        let d = if $lhs.x().contains(0.0) {
+            Decoration::Trv
+        } else {
+            $lhs.d()
+        };
+        $set_dec($x, d)
+    }};
+}
+
+// The body of `DecInterval::sqr_with`, with `$lhs`, `$x` and `$set_dec` as in
+// `dec_recip_with_body!`. `DecInterval::sqr` expands it with `self.x().sqr()` and with
+// `Self::set_dec` rather than calling `sqr_with` with `Baseline`. With every operation of
+// `DecInterval` without a token calling its `*_with` method with `Baseline`, `Interval::sqr`,
+// whose source is the same either way, took 5 more instructions per call for a positive or a
+// mixed interval in a plain x86-64 build of the library (seen with rustc 1.98).
+macro_rules! dec_sqr_with_body {
+    ($lhs:ident, $x:expr, $set_dec:path) => {{
+        if $lhs.is_nai() {
+            return $lhs;
+        }
+
+        $set_dec($x, $lhs.d())
+    }};
+}
+
+// The body of `DecInterval::sqrt_with`, with `$lhs`, `$x` and `$set_dec` as in
+// `dec_recip_with_body!`. `DecInterval::sqrt` expands it with `self.x().sqrt()` and with
+// `Self::set_dec` rather than calling `sqrt_with` with `Baseline`. With that call, and with
+// `Interval::contains` and `Interval::is_common_interval` not `#[inline]`, `DecInterval::sqrt`
+// took two more branches per call for a positive interval in a haswell build of the library.
+// With them `#[inline]`, and with every operation of `DecInterval` without a token calling its
+// `*_with` method with `Baseline`, it took no more instructions or branches per call there, and
+// up to 6 fewer instructions per call in a plain x86-64 build (seen with rustc 1.98). That call
+// in `DecInterval::sqrt` alone, with the other operations as they are, was not counted.
+macro_rules! dec_sqrt_with_body {
+    ($lhs:ident, $x:expr, $set_dec:path) => {{
+        if $lhs.is_nai() {
+            return $lhs;
+        }
+
+        let d = if $lhs.x().inf_raw() < 0.0 {
+            Decoration::Trv
+        } else {
+            $lhs.d()
+        };
+        $set_dec($x, d)
+    }};
+}
+
 impl DecInterval {
     /// The decorated version of [`Interval::mul_rev_to_pair`].
     ///
@@ -833,18 +916,68 @@ impl DecInterval {
     /// A NaI is returned if `self`, `rhs` or `addend` is NaI.
     #[must_use]
     pub fn mul_add(self, rhs: Self, addend: Self) -> Self {
-        // Proved correct in `rocq/theories/MulAdd.v` for the portable backend if `self` and
-        // `rhs` are `com` only when `self.x()` and `rhs.x()` are common, which
-        // `rocq/theories/ComCommon.v` proves of every `DecInterval` that the library makes.
-        // `rocq/theories/Model.v` transcribes this function, so it has to be updated
-        // along with it.
-        if self.is_nai() || rhs.is_nai() || addend.is_nai() {
-            return Self::NAI;
-        }
-
-        Self::set_dec(
+        // Proved correct in `rocq/theories/MulAdd.v` for the portable backend, as
+        // `mul_add_with` called with `Baseline`, if `self` and `rhs` are `com` only when
+        // `self.x()` and `rhs.x()` are common, which `rocq/theories/ComCommon.v` proves of
+        // every `DecInterval` that the library makes: this is the body of `mul_add_with`,
+        // `dec_mul_add_with_body!`, with `self.x().mul_add(rhs.x(), addend.x())`, which is
+        // `self.x().mul_add_with(Baseline, rhs.x(), addend.x())`, for the interval, and with
+        // `Self::set_dec`, which calls `Self::set_dec_impl` (see the comment on the macro).
+        // `rocq/theories/Model.v` transcribes this, so it has to be updated along with it.
+        dec_mul_add_with_body!(
+            self,
+            rhs,
+            addend,
             self.x().mul_add(rhs.x(), addend.x()),
-            self.d().min(rhs.d().min(addend.d())),
+            Self::set_dec
+        )
+    }
+
+    /// The decorated version of [`Interval::mul_add_with`].
+    ///
+    /// A NaI is returned if `self`, `rhs` or `addend` is NaI.
+    ///
+    /// The result has the same `interval()` and `decoration()` as `self.mul_add(rhs, addend)` for
+    /// every `s`, as the interval that [`Interval::mul_add_with`] returns is the same for every
+    /// `s`, and the decoration depends only on `self`, `rhs`, `addend` and that interval.
+    ///
+    /// This method is `#[inline(always)]`, so that it gets the target features of the level of
+    /// `s` where it is inlined into the function inside which
+    /// [`s.vectorize`](crate::simd::Simd::vectorize) calls its closure: where it is called in the
+    /// closure, and the closure is inlined into that function.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use inari::{const_dec_interval as c, simd::{Baseline, Simd}};
+    /// let x = c!(1.0, 2.0);
+    /// let y = c!(-3.0, 0.5);
+    /// let z = c!(0.1, 0.2);
+    /// let w = x.mul_add(y, z);
+    /// let r = Baseline.vectorize(|| x.mul_add_with(Baseline, y, z));
+    /// assert_eq!((r.interval(), r.decoration()), (w.interval(), w.decoration()));
+    /// #[cfg(target_arch = "x86_64")]
+    /// {
+    ///     if let Some(s) = inari::simd::V3::try_new() {
+    ///         let r = s.vectorize(|| x.mul_add_with(s, y, z));
+    ///         assert_eq!((r.interval(), r.decoration()), (w.interval(), w.decoration()));
+    ///     }
+    /// }
+    /// ```
+    #[inline(always)]
+    #[must_use]
+    pub fn mul_add_with<S: Simd>(self, s: S, rhs: Self, addend: Self) -> Self {
+        // Proved correct in `rocq/theories/MulAdd.v` for an `s` whose backend is the portable
+        // one if `self` and `rhs` are `com` only when `self.x()` and `rhs.x()` are common,
+        // which `rocq/theories/ComCommon.v` proves of every `DecInterval` that the library
+        // makes. `rocq/theories/Model.v` transcribes this function for such an `s`, so it has
+        // to be updated along with it and with `dec_mul_add_with_body!`, which is its body.
+        dec_mul_add_with_body!(
+            self,
+            rhs,
+            addend,
+            self.x().mul_add_with(s, rhs.x(), addend.x()),
+            Self::set_dec_impl
         )
     }
 
@@ -853,21 +986,54 @@ impl DecInterval {
     /// A NaI is returned if `self` is NaI.
     #[must_use]
     pub fn recip(self) -> Self {
-        // Proved correct in `rocq/theories/Recip.v` for the portable backend if `self` is
-        // `com` only when `self.x()` is common, which `rocq/theories/ComCommon.v` proves of
-        // every `DecInterval` that the library makes.
-        // `rocq/theories/Model.v` transcribes this function, so it has to be updated
-        // along with it.
-        if self.is_nai() {
-            return self;
-        }
+        // Proved correct in `rocq/theories/Recip.v` for the portable backend, as `recip_with`
+        // called with `Baseline`, if `self` is `com` only when `self.x()` is common, which
+        // `rocq/theories/ComCommon.v` proves of every `DecInterval` that the library makes:
+        // this is the body of `recip_with`, `dec_recip_with_body!`, with `self.x().recip()`,
+        // which is `self.x().recip_with(Baseline)`, for the interval, and with `Self::set_dec`,
+        // which calls `Self::set_dec_impl` (see the comment on the macro).
+        // `rocq/theories/Model.v` transcribes this, so it has to be updated along with it.
+        dec_recip_with_body!(self, self.x().recip(), Self::set_dec)
+    }
 
-        let d = if self.x().contains(0.0) {
-            Decoration::Trv
-        } else {
-            self.d()
-        };
-        Self::set_dec(self.x().recip(), d)
+    /// The decorated version of [`Interval::recip_with`].
+    ///
+    /// A NaI is returned if `self` is NaI.
+    ///
+    /// The result has the same `interval()` and `decoration()` as `self.recip()` for every `s`, as
+    /// the interval that [`Interval::recip_with`] returns is the same for every `s`, and the
+    /// decoration depends only on `self` and that interval.
+    ///
+    /// This method is `#[inline(always)]`, so that it gets the target features of the level of
+    /// `s` where it is inlined into the function inside which
+    /// [`s.vectorize`](crate::simd::Simd::vectorize) calls its closure: where it is called in the
+    /// closure, and the closure is inlined into that function.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use inari::{const_dec_interval as c, simd::{Baseline, Simd}};
+    /// let x = c!(3.0, 4.0);
+    /// let w = x.recip();
+    /// let r = Baseline.vectorize(|| x.recip_with(Baseline));
+    /// assert_eq!((r.interval(), r.decoration()), (w.interval(), w.decoration()));
+    /// #[cfg(target_arch = "x86_64")]
+    /// {
+    ///     if let Some(s) = inari::simd::V3::try_new() {
+    ///         let r = s.vectorize(|| x.recip_with(s));
+    ///         assert_eq!((r.interval(), r.decoration()), (w.interval(), w.decoration()));
+    ///     }
+    /// }
+    /// ```
+    #[inline(always)]
+    #[must_use]
+    pub fn recip_with<S: Simd>(self, s: S) -> Self {
+        // Proved correct in `rocq/theories/Recip.v` for an `s` whose backend is the portable
+        // one if `self` is `com` only when `self.x()` is common, which
+        // `rocq/theories/ComCommon.v` proves of every `DecInterval` that the library makes.
+        // `rocq/theories/Model.v` transcribes this function for such an `s`, so it has to be
+        // updated along with it and with `dec_recip_with_body!`, which is its body.
+        dec_recip_with_body!(self, self.x().recip_with(s), Self::set_dec_impl)
     }
 
     /// The decorated version of [`Interval::sqr`].
@@ -875,14 +1041,50 @@ impl DecInterval {
     /// A NaI is returned if `self` is NaI.
     #[must_use]
     pub fn sqr(self) -> Self {
-        // Proved correct in `rocq/theories/Sqr.v` for the portable backend.
-        // `rocq/theories/Model.v` transcribes this function, so it has to be updated
-        // along with it.
-        if self.is_nai() {
-            return self;
-        }
+        // Proved correct in `rocq/theories/Sqr.v` for the portable backend, as `sqr_with`
+        // called with `Baseline`: this is the body of `sqr_with`, `dec_sqr_with_body!`, with
+        // `self.x().sqr()`, which is `self.x().sqr_with(Baseline)`, for the interval, and with
+        // `Self::set_dec`, which calls `Self::set_dec_impl` (see the comment on the macro).
+        // `rocq/theories/Model.v` transcribes this, so it has to be updated along with it.
+        dec_sqr_with_body!(self, self.x().sqr(), Self::set_dec)
+    }
 
-        Self::set_dec(self.x().sqr(), self.d())
+    /// The decorated version of [`Interval::sqr_with`].
+    ///
+    /// A NaI is returned if `self` is NaI.
+    ///
+    /// The result has the same `interval()` and `decoration()` as `self.sqr()` for every `s`, as
+    /// the interval that [`Interval::sqr_with`] returns is the same for every `s`, and the
+    /// decoration depends only on `self` and that interval.
+    ///
+    /// This method is `#[inline(always)]`, so that it gets the target features of the level of
+    /// `s` where it is inlined into the function inside which
+    /// [`s.vectorize`](crate::simd::Simd::vectorize) calls its closure: where it is called in the
+    /// closure, and the closure is inlined into that function.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use inari::{const_dec_interval as c, simd::{Baseline, Simd}};
+    /// let x = c!(-3.0, 0.1);
+    /// let w = x.sqr();
+    /// let r = Baseline.vectorize(|| x.sqr_with(Baseline));
+    /// assert_eq!((r.interval(), r.decoration()), (w.interval(), w.decoration()));
+    /// #[cfg(target_arch = "x86_64")]
+    /// {
+    ///     if let Some(s) = inari::simd::V3::try_new() {
+    ///         let r = s.vectorize(|| x.sqr_with(s));
+    ///         assert_eq!((r.interval(), r.decoration()), (w.interval(), w.decoration()));
+    ///     }
+    /// }
+    /// ```
+    #[inline(always)]
+    #[must_use]
+    pub fn sqr_with<S: Simd>(self, s: S) -> Self {
+        // Proved correct in `rocq/theories/Sqr.v` for an `s` whose backend is the portable one.
+        // `rocq/theories/Model.v` transcribes this function for such an `s`, so it has to be
+        // updated along with it and with `dec_sqr_with_body!`, which is its body.
+        dec_sqr_with_body!(self, self.x().sqr_with(s), Self::set_dec_impl)
     }
 
     /// The decorated version of [`Interval::sqrt`].
@@ -890,19 +1092,50 @@ impl DecInterval {
     /// A NaI is returned if `self` is NaI.
     #[must_use]
     pub fn sqrt(self) -> Self {
-        // Proved correct in `rocq/theories/Sqrt.v` for the portable backend.
-        // `rocq/theories/Model.v` transcribes this function, so it has to be updated
-        // along with it.
-        if self.is_nai() {
-            return self;
-        }
+        // Proved correct in `rocq/theories/Sqrt.v` for the portable backend, as `sqrt_with`
+        // called with `Baseline`: this is the body of `sqrt_with`, `dec_sqrt_with_body!`, with
+        // `self.x().sqrt()`, which is `self.x().sqrt_with(Baseline)`, for the interval, and with
+        // `Self::set_dec`, which calls `Self::set_dec_impl` (see the comment on the macro).
+        // `rocq/theories/Model.v` transcribes this, so it has to be updated along with it.
+        dec_sqrt_with_body!(self, self.x().sqrt(), Self::set_dec)
+    }
 
-        let d = if self.x().inf_raw() < 0.0 {
-            Decoration::Trv
-        } else {
-            self.d()
-        };
-        Self::set_dec(self.x().sqrt(), d)
+    /// The decorated version of [`Interval::sqrt_with`].
+    ///
+    /// A NaI is returned if `self` is NaI.
+    ///
+    /// The result has the same `interval()` and `decoration()` as `self.sqrt()` for every `s`, as
+    /// the interval that [`Interval::sqrt_with`] returns is the same for every `s`, and the
+    /// decoration depends only on `self` and that interval.
+    ///
+    /// This method is `#[inline(always)]`, so that it gets the target features of the level of
+    /// `s` where it is inlined into the function inside which
+    /// [`s.vectorize`](crate::simd::Simd::vectorize) calls its closure: where it is called in the
+    /// closure, and the closure is inlined into that function.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use inari::{const_dec_interval as c, simd::{Baseline, Simd}};
+    /// let x = c!(2.0, 3.0);
+    /// let w = x.sqrt();
+    /// let r = Baseline.vectorize(|| x.sqrt_with(Baseline));
+    /// assert_eq!((r.interval(), r.decoration()), (w.interval(), w.decoration()));
+    /// #[cfg(target_arch = "x86_64")]
+    /// {
+    ///     if let Some(s) = inari::simd::V3::try_new() {
+    ///         let r = s.vectorize(|| x.sqrt_with(s));
+    ///         assert_eq!((r.interval(), r.decoration()), (w.interval(), w.decoration()));
+    ///     }
+    /// }
+    /// ```
+    #[inline(always)]
+    #[must_use]
+    pub fn sqrt_with<S: Simd>(self, s: S) -> Self {
+        // Proved correct in `rocq/theories/Sqrt.v` for an `s` whose backend is the portable
+        // one. `rocq/theories/Model.v` transcribes this function for such an `s`, so it has to
+        // be updated along with it and with `dec_sqrt_with_body!`, which is its body.
+        dec_sqrt_with_body!(self, self.x().sqrt_with(s), Self::set_dec_impl)
     }
 }
 

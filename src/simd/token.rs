@@ -1,5 +1,5 @@
 // The tokens of the levels of the CPU, and the backend that each one gives the `*_with`
-// operations of `Interval` (`src/arith.rs` and `src/basic.rs`) in each build.
+// operations of `Interval` and `DecInterval` (`src/arith.rs` and `src/basic.rs`) in each build.
 //
 // A token of a level above `Baseline` exists only once its `try_new` has detected each target
 // feature in its list, which is what makes it safe to call the functions compiled with those
@@ -26,13 +26,14 @@ use std::fmt::Debug;
 mod sealed {
     use crate::simd::F64X2;
 
-    // The functions of the backend that the `*_with` operations of `Interval` call. Each method
-    // computes what the function of the same name computes in the backend that the token gives
-    // (the table above). `src/simd/generic.rs` says what its functions compute. The other
-    // backends need not compute the same on every argument: where an argument is a NaN, or the
-    // arguments are zeros of opposite signs, `max` of `src/simd/x86_64.rs` (`_mm_max_pd`) can
-    // return another value than `max` of `src/simd/generic.rs`. A user can call the methods
-    // through the bound `S: Simd`, but cannot name the trait.
+    // The functions of the backend that the `*_with` operations of `Interval` and `DecInterval`
+    // call (those of `DecInterval` through those of `Interval`). Each method computes what the
+    // function of the same name computes in the backend that the token gives (the table above).
+    // `src/simd/generic.rs` says what its functions compute. The other backends need not compute
+    // the same on every argument: where an argument is a NaN, or the arguments are zeros of
+    // opposite signs, `max` of `src/simd/x86_64.rs` (`_mm_max_pd`) can return another value than
+    // `max` of `src/simd/generic.rs`. A user can call the methods through the bound `S: Simd`, but
+    // cannot name the trait.
     pub trait Backend {
         fn add_ru(self, x: F64X2, y: F64X2) -> F64X2;
         fn div_ru(self, x: F64X2, y: F64X2) -> F64X2;
@@ -51,13 +52,16 @@ mod sealed {
 }
 
 /// A token of a level of the CPU: it gives the backend that the `*_with` operations of
-/// [`Interval`](crate::Interval) run, such as [`Interval::add_with`](crate::Interval::add_with),
-/// and the target features of its [`vectorize`](Simd::vectorize).
+/// [`Interval`](crate::Interval) and [`DecInterval`](crate::DecInterval) run, such as
+/// [`Interval::add_with`](crate::Interval::add_with), and the target features of its
+/// [`vectorize`](Simd::vectorize).
 ///
 /// The tokens are [`Baseline`], on every target, and on x86-64 `V2` and `V3`, whose `try_new`
 /// returns one only on a CPU that has their target features. Only inari implements `Simd`.
 /// Every token gives the same intervals, since these operations return the tightest results
-/// (see [Conformance to the standard](crate::_docs::conformance)); only the speed differs.
+/// (see [Conformance to the standard](crate::_docs::conformance)), and the same decorations,
+/// since those of `DecInterval` compute them from the arguments and these intervals alone; only
+/// the speed differs.
 ///
 /// A function generic over `S: Simd` runs the operations at the level of the token that it is
 /// given:
@@ -90,11 +94,11 @@ pub trait Simd: sealed::Backend + Copy + Debug + Send + Sync + 'static {
     /// region), and returns what `f` returns.
     ///
     /// The code of `f` gets those features only where the compiler inlines it into the region.
-    /// The `*_with` operations of [`Interval`](crate::Interval) are `#[inline(always)]`, so
-    /// they are inlined into their caller. Mark a closure that is more than a few operations
-    /// `#[inline(always)]`, and the functions between it and the operations too. Code that is
-    /// not inlined into the region computes the same intervals, but can be slower. For
-    /// [`Baseline`], `vectorize` only calls `f`.
+    /// The `*_with` operations of [`Interval`](crate::Interval) and
+    /// [`DecInterval`](crate::DecInterval) are `#[inline(always)]`, so they are inlined into their
+    /// caller. Mark a closure that is more than a few operations `#[inline(always)]`, and the
+    /// functions between it and the operations too. Code that is not inlined into the region
+    /// computes the same results, but can be slower. For [`Baseline`], `vectorize` only calls `f`.
     ///
     /// ```
     /// use inari::{simd::{Baseline, Simd}, *};
@@ -119,8 +123,8 @@ pub trait Simd: sealed::Backend + Copy + Debug + Send + Sync + 'static {
 }
 
 /// The token of the level of the build's target CPU: its backend is the build's, which the
-/// operations of [`Interval`](crate::Interval) without a token run (`x + y` is
-/// `x.add_with(Baseline, y)`).
+/// operations of [`Interval`](crate::Interval) and [`DecInterval`](crate::DecInterval) without a
+/// token run (for an `Interval` `x`, `x + y` is `x.add_with(Baseline, y)`).
 ///
 /// It exists on every target.
 ///
@@ -268,8 +272,9 @@ pub fn dispatch<W: WithLevel>(w: W) -> W::Output {
     Baseline.vectorize(|| w.with_level(Baseline))
 }
 
-// The build's backend, which the operations of `Interval` that take no token call through
-// `Baseline` (`x + y` is `x.add_with(Baseline, y)`).
+// The build's backend, which the operations of `Interval` and `DecInterval` that have a `*_with`
+// form call through `Baseline` when they take no token (for an `Interval` `x`, `x + y` is
+// `x.add_with(Baseline, y)`).
 //
 // A function that a user's crate can inline or instantiate, such as `add_with`, can call only
 // functions that the crate exports, and Rust's ABI passes the vector arguments and result of an
@@ -297,15 +302,16 @@ pub fn dispatch<W: WithLevel>(w: W) -> W::Output {
 // (`src/__bench.rs`, compiled only with the feature `__bench`, for the benchmarks, also calls
 // `mul_add_ru`.)
 //
-// The other functions that a `*_with` method reaches, and that rustc would not by itself inline
-// into a user's crate on some target, are marked for it, apart from the backend functions that
-// round upward or downward (`sqrt1_ru` as well as those above, and the copies of `V2` and `V3`
-// below, of which those that a build for their level inlines are `#[inline]`) and the functions
-// that they call: `add_rn`, `all`, `and`, `bitmask`, `eq`, `ge`, `gt`, `le`, `lt`, `max`, `or` and
-// `sub_rn` on aarch64, with the helpers of `aarch64/lanewise.rs` and `aarch64/fma.rs` that
-// `mul_add_ru` and `sqrt_rd_ru` call on their fast paths, and the thin layers of `wasm32.rs` that
-// a `*_with` method reaches are `#[inline(always)]`, and `Interval::classify`, `classify2`,
-// `inf_raw`, `sup_raw`, `with_infsup_raw`, `zero` and `is_empty` are `#[inline]`. So a `*_with`
+// The other functions that a `*_with` method of `Interval` or `DecInterval` reaches, and that
+// rustc would not by itself inline into a user's crate on some target, are marked for it, apart
+// from the backend functions that round upward or downward (`sqrt1_ru` as well as those above,
+// and the copies of `V2` and `V3` below, of which those that a build for their level inlines are
+// `#[inline]`) and the functions that they call: `add_rn`, `all`, `and`, `bitmask`, `eq`, `ge`,
+// `gt`, `le`, `lt`, `max`, `or` and `sub_rn` on aarch64, with the helpers of `aarch64/lanewise.rs`
+// and `aarch64/fma.rs` that `mul_add_ru` and `sqrt_rd_ru` call on their fast paths, and the thin
+// layers of `wasm32.rs` that a `*_with` method reaches are `#[inline(always)]`, and
+// `Interval::classify`, `classify2`, `inf_raw`, `sup_raw`, `with_infsup_raw`, `zero`, `is_empty`,
+// `contains`, `is_common_interval` and `DecInterval::set_dec_impl` are `#[inline]`. So a `*_with`
 // method instantiated in a user's crate calls out of line only functions that round upward or
 // downward, and functions that they call.
 impl sealed::Backend for Baseline {
@@ -699,10 +705,10 @@ level! {
     /// also has `cmpxchg16b` and LAHF-SAHF, which `V2` neither checks nor enables.
     ///
     /// Unless the feature `force-generic` is on, the `*_with` operations of
-    /// [`Interval`](crate::Interval) at `V2` run the `sse42` backend in a build without the
-    /// target feature `sse4.2`, such as one for `x86-64`, the default of
-    /// `x86_64-unknown-linux-gnu`. In other builds, and with `force-generic`, they run the
-    /// build's backend, that of [`Baseline`].
+    /// [`Interval`](crate::Interval) and [`DecInterval`](crate::DecInterval) at `V2` run the
+    /// `sse42` backend in a build without the target feature `sse4.2`, such as one for `x86-64`,
+    /// the default of `x86_64-unknown-linux-gnu`. In other builds, and with `force-generic`, they
+    /// run the build's backend, that of [`Baseline`].
     ///
     /// ```
     /// use inari::{simd::{Simd, V2}, *};
@@ -732,14 +738,14 @@ level! {
     /// which std checks as part of `avx`.
     ///
     /// Unless the feature `force-generic` is on, the `*_with` operations of
-    /// [`Interval`](crate::Interval) at `V3` run the `fma` backend in a build that has neither
-    /// the target feature `avx512f` nor both `avx` and `fma`, such as one for `x86-64` or
-    /// `x86-64-v2`. There, the parts that the `fma` backend takes from the portable backend, its
-    /// slow paths, compute without the FMA, as those of the build's backend do. In other builds,
-    /// such as one for `x86-64-v3` or `haswell`, and with `force-generic`, the operations run the
-    /// build's backend, that of [`Baseline`]. inari has no token of `x86-64-v4`: enabling the
-    /// AVX-512 target features in a function needs Rust 1.89, and inari also builds with Rust
-    /// 1.86.
+    /// [`Interval`](crate::Interval) and [`DecInterval`](crate::DecInterval) at `V3` run the `fma`
+    /// backend in a build that has neither the target feature `avx512f` nor both `avx` and `fma`,
+    /// such as one for `x86-64` or `x86-64-v2`. There, the parts that the `fma` backend takes from
+    /// the portable backend, its slow paths, compute without the FMA, as those of the build's
+    /// backend do. In other builds, such as one for `x86-64-v3` or `haswell`, and with
+    /// `force-generic`, the operations run the build's backend, that of [`Baseline`]. inari has no
+    /// token of `x86-64-v4`: enabling the AVX-512 target features in a function needs Rust 1.89,
+    /// and inari also builds with Rust 1.86.
     ///
     /// ```
     /// use inari::{simd::{Simd, V3}, *};

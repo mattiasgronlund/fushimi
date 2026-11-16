@@ -12,16 +12,17 @@
 // throughout. The scalar operations are those of the generic backend.
 //
 // The thin layers over `std::arch::wasm32` that a `*_with` operation of `Interval`
-// reaches, other than through the backend functions that round upward or downward
-// (`add_ru`, `div_ru`, `mul_add_ru`, `mul_ru`, `sqrt_rd_ru` and `sqrt1_ru`), are
-// `#[inline(always)]` (see `Baseline` in `src/simd/token.rs`), so they are inlined
-// into the operation as the crate's own operations inline them. Without this, those
-// calls make the crate export them, and an operation instantiated in another crate
-// calls them out of line. Some are reached through other functions: `select` and
-// `is_nan` through `max`, `constant` through `neg0` and
-// `Interval::with_infsup_raw`, `bitmask`, `ge` and `le` through
-// `Interval::classify`, `extract0` through `Interval::is_empty` and `inf_raw`, and
-// `extract1` through `Interval::sup_raw`.
+// or `DecInterval` reaches, other than through the backend functions that round
+// upward or downward (`add_ru`, `div_ru`, `mul_add_ru`, `mul_ru`, `sqrt_rd_ru` and
+// `sqrt1_ru`), are `#[inline(always)]` (see `Baseline` in `src/simd/token.rs`), so
+// they are inlined into the operation as the crate's own operations inline them.
+// Without this, those calls make the crate export them, and an operation
+// instantiated in another crate calls them out of line. Some are reached through
+// other functions: `select` and `is_nan` through `max`, `constant` through `neg0`
+// and `Interval::with_infsup_raw`, `bitmask`, `ge` and `le` through
+// `Interval::classify`, `extract0` through `Interval::is_empty` and `inf_raw`,
+// `extract1` through `Interval::sup_raw`, `all` through `Interval::contains` and
+// `is_common_interval`, and `lt` through `Interval::is_common_interval`.
 
 use super::generic;
 use std::arch::wasm32::*;
@@ -58,6 +59,8 @@ pub(crate) fn add_ru(x: F64X2, y: F64X2) -> F64X2 {
     })
 }
 
+// Inlined, see the top of this file.
+#[inline(always)]
 pub(crate) fn all(x: F64X2) -> bool {
     bitmask(x) == 3
 }
@@ -153,6 +156,8 @@ pub(crate) fn le(x: F64X2, y: F64X2) -> F64X2 {
     f64x2_le(x, y)
 }
 
+// Inlined, see the top of this file.
+#[inline(always)]
 pub(crate) fn lt(x: F64X2, y: F64X2) -> F64X2 {
     f64x2_lt(x, y)
 }

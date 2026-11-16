@@ -1,13 +1,16 @@
-// Tests of the tokens: every `*_with` operation of `Interval` at each level that the CPU has,
-// called directly and inside the level's `vectorize`, and through `dispatch`, against the
-// operation that takes no token. These operations return the tightest results
-// (`src/_docs/conformance.md`), so every level must return the same interval, and `==` on
-// `Interval` is the spec. The backend functions that each level's copies compile are compared
-// with the portable backend's in `src/simd/differential_tests.rs`.
+// Tests of the tokens: every `*_with` operation of `Interval` and of `DecInterval` at each
+// level that the CPU has, called directly and inside the level's `vectorize`, and through
+// `dispatch`, against the operation that takes no token. These operations return the tightest
+// results (`src/_docs/conformance.md`), so every level must return the same interval, and with
+// it the same decoration, which the operations of `DecInterval` compute from their arguments
+// and that interval. `==` on `Interval` is the spec. `==` on `DecInterval` is not: it ignores
+// the decorations and is false if either side is NaI, so the results of `DecInterval` are
+// compared by `interval()` and `decoration()`. The backend functions that each level's copies
+// compile are compared with the portable backend's in `src/simd/differential_tests.rs`.
 
 use super::*;
-use crate::{classify::IntervalClass, Interval};
-use std::any::type_name;
+use crate::{classify::IntervalClass, DecInterval, Decoration, Interval};
+use std::{any::type_name, collections::HashSet, fmt::Debug};
 
 // 2^e, for an e in the range of the exponents of normal numbers.
 fn pow2(e: i32) -> f64 {
@@ -68,6 +71,54 @@ fn addends() -> Vec<Interval> {
     .collect()
 }
 
+// The decorations that `set_dec` keeps for a nonempty bounded interval, apart from `ill`.
+const DECORATIONS: [Decoration; 4] = [
+    Decoration::Com,
+    Decoration::Dac,
+    Decoration::Def,
+    Decoration::Trv,
+];
+
+// Each interval of `intervals()` with each decoration that `set_dec` keeps for it, and NaI.
+// `set_dec` makes an unbounded interval `dac` in place of `com`, and `EMPTY` `trv` whatever the
+// decoration, so the duplicates of each interval are next to each other.
+fn dec_intervals() -> Vec<DecInterval> {
+    let mut xs = Vec::new();
+    for x in intervals() {
+        let mut ys = DECORATIONS.map(|d| DecInterval::set_dec(x, d)).to_vec();
+        ys.dedup_by_key(|y| (y.interval(), y.decoration()));
+        xs.extend(ys);
+    }
+    xs.push(DecInterval::NAI);
+    xs
+}
+
+// `x` with the decoration `DECORATIONS[n % 4]` through `set_dec`, or NaI if `x` is `None`.
+fn decorate(x: Option<Interval>, n: usize) -> DecInterval {
+    x.map_or(DecInterval::NAI, |x| {
+        DecInterval::set_dec(x, DECORATIONS[n % DECORATIONS.len()])
+    })
+}
+
+// A case of an operation of `Interval` or of `DecInterval`: the operation and its arguments.
+trait TestCase: Copy + Debug {
+    // The result of the operation.
+    type Output: Debug;
+
+    // Calls `f` with the cases of each first argument in turn.
+    fn for_each_first(f: impl FnMut(&[Self]));
+
+    // The result of the operation that takes no token.
+    fn expected(&self) -> Self::Output;
+
+    // The result of the operation at the level `s`. Each impl is `#[inline(always)]`, so that
+    // inside a region the operation takes the region's target features.
+    fn with<S: Simd>(&self, s: S) -> Self::Output;
+
+    // Whether `x` and `y` are the same result.
+    fn same(x: &Self::Output, y: &Self::Output) -> bool;
+}
+
 #[derive(Clone, Copy, Debug)]
 enum Case {
     Add(Interval, Interval),
@@ -80,8 +131,17 @@ enum Case {
     Sqrt(Interval),
 }
 
-impl Case {
-    // The result of the operation that takes no token.
+impl TestCase for Case {
+    type Output = Interval;
+
+    fn for_each_first(mut f: impl FnMut(&[Case])) {
+        let xs = intervals();
+        let addends = addends();
+        for &x in &xs {
+            f(&cases(x, &xs, &addends));
+        }
+    }
+
     fn expected(&self) -> Interval {
         match *self {
             Case::Add(x, y) => x + y,
@@ -95,8 +155,6 @@ impl Case {
         }
     }
 
-    // The result of the operation at the level `s`. `#[inline(always)]`, so that inside a region
-    // the operation takes the region's target features.
     #[inline(always)]
     fn with<S: Simd>(&self, s: S) -> Interval {
         match *self {
@@ -109,6 +167,10 @@ impl Case {
             Case::Sqr(x) => x.sqr_with(s),
             Case::Sqrt(x) => x.sqrt_with(s),
         }
+    }
+
+    fn same(x: &Interval, y: &Interval) -> bool {
+        x == y
     }
 }
 
@@ -128,22 +190,108 @@ fn cases(x: Interval, xs: &[Interval], addends: &[Interval]) -> Vec<Case> {
     cases
 }
 
+#[derive(Clone, Copy, Debug)]
+enum DecCase {
+    Add(DecInterval, DecInterval),
+    Sub(DecInterval, DecInterval),
+    Mul(DecInterval, DecInterval),
+    Div(DecInterval, DecInterval),
+    MulAdd(DecInterval, DecInterval, DecInterval),
+    Recip(DecInterval),
+    Sqr(DecInterval),
+    Sqrt(DecInterval),
+}
+
+impl TestCase for DecCase {
+    type Output = DecInterval;
+
+    fn for_each_first(mut f: impl FnMut(&[DecCase])) {
+        let xs = dec_intervals();
+        let ys = intervals();
+        let addends = addends();
+        for (i, &x) in xs.iter().enumerate() {
+            f(&dec_cases(i, x, &xs, &ys, &addends));
+        }
+    }
+
+    fn expected(&self) -> DecInterval {
+        match *self {
+            DecCase::Add(x, y) => x + y,
+            DecCase::Sub(x, y) => x - y,
+            DecCase::Mul(x, y) => x * y,
+            DecCase::Div(x, y) => x / y,
+            DecCase::MulAdd(x, y, z) => x.mul_add(y, z),
+            DecCase::Recip(x) => x.recip(),
+            DecCase::Sqr(x) => x.sqr(),
+            DecCase::Sqrt(x) => x.sqrt(),
+        }
+    }
+
+    #[inline(always)]
+    fn with<S: Simd>(&self, s: S) -> DecInterval {
+        match *self {
+            DecCase::Add(x, y) => x.add_with(s, y),
+            DecCase::Sub(x, y) => x.sub_with(s, y),
+            DecCase::Mul(x, y) => x.mul_with(s, y),
+            DecCase::Div(x, y) => x.div_with(s, y),
+            DecCase::MulAdd(x, y, z) => x.mul_add_with(s, y, z),
+            DecCase::Recip(x) => x.recip_with(s),
+            DecCase::Sqr(x) => x.sqr_with(s),
+            DecCase::Sqrt(x) => x.sqrt_with(s),
+        }
+    }
+
+    // Not `x == y`, which ignores the decorations and is false if either side is NaI.
+    fn same(x: &DecInterval, y: &DecInterval) -> bool {
+        (x.interval(), x.decoration()) == (y.interval(), y.decoration())
+    }
+}
+
+// The cases whose first argument is `x`, the `i`th of `xs`, with each of `xs` as the second
+// argument of the binary operations. Every decoration of the second and third arguments of
+// `mul_add` would make about 23,000,000 cases, so its second argument is each of `ys` and NaI,
+// and its third each of `addends` and NaI, with decorations that cycle with `i` and their
+// indices: as `i` runs through 16 values in a row, each pair of an interval of `ys` and an
+// addend is passed to `set_dec` with each pair of `DECORATIONS`. All the cases at once would be
+// about 5,700,000.
+fn dec_cases(
+    i: usize,
+    x: DecInterval,
+    xs: &[DecInterval],
+    ys: &[Interval],
+    addends: &[Interval],
+) -> Vec<DecCase> {
+    let mut cases = vec![DecCase::Recip(x), DecCase::Sqr(x), DecCase::Sqrt(x)];
+    for &y in xs {
+        cases.extend([
+            DecCase::Add(x, y),
+            DecCase::Sub(x, y),
+            DecCase::Mul(x, y),
+            DecCase::Div(x, y),
+        ]);
+    }
+    for (j, y) in ys.iter().copied().map(Some).chain([None]).enumerate() {
+        let y = decorate(y, i + j);
+        for (k, z) in addends.iter().copied().map(Some).chain([None]).enumerate() {
+            cases.push(DecCase::MulAdd(x, y, decorate(z, i / 4 + j + k)));
+        }
+    }
+    cases
+}
+
 // Calls `f` with the cases of each first argument and their expected results, which are
 // computed here, outside any region.
-fn for_each_x(mut f: impl FnMut(&[Case], &[Interval])) {
-    let xs = intervals();
-    let addends = addends();
-    for &x in &xs {
-        let cases = cases(x, &xs, &addends);
-        let expected = cases.iter().map(Case::expected).collect::<Vec<_>>();
-        f(&cases, &expected);
-    }
+fn for_each_x<C: TestCase>(mut f: impl FnMut(&[C], &[C::Output])) {
+    C::for_each_first(|cases| {
+        let expected = cases.iter().map(C::expected).collect::<Vec<_>>();
+        f(cases, &expected);
+    });
 }
 
 // The results of the cases at the level `s`. A loop of its own rather than `collect`, whose
 // generic internals LLVM can leave out of a region that inlines `run`.
 #[inline(always)]
-fn run<S: Simd>(s: S, cases: &[Case]) -> Vec<Interval> {
+fn run<C: TestCase, S: Simd>(s: S, cases: &[C]) -> Vec<C::Output> {
     let mut results = Vec::with_capacity(cases.len());
     for c in cases {
         results.push(c.with(s));
@@ -152,12 +300,12 @@ fn run<S: Simd>(s: S, cases: &[Case]) -> Vec<Interval> {
 }
 
 // Panics with the cases whose result `got` differs from the expected one.
-fn check(how: &str, cases: &[Case], expected: &[Interval], got: &[Interval]) {
+fn check<C: TestCase>(how: &str, cases: &[C], expected: &[C::Output], got: &[C::Output]) {
     let mismatches = cases
         .iter()
         .zip(expected)
         .zip(got)
-        .filter(|((_, e), g)| e != g)
+        .filter(|((_, e), g)| !C::same(e, g))
         .map(|((c, e), g)| format!("{c:?}: {g:?}, expected {e:?}"))
         .collect::<Vec<_>>();
     assert!(
@@ -169,9 +317,9 @@ fn check(how: &str, cases: &[Case], expected: &[Interval], got: &[Interval]) {
 }
 
 // Checks every case at the level `s`, called directly and inside `s.vectorize`.
-fn check_token<S: Simd>(s: S) {
+fn check_token<C: TestCase, S: Simd>(s: S) {
     let name = type_name::<S>();
-    for_each_x(|cases, expected| {
+    for_each_x::<C>(|cases, expected| {
         check(&format!("{name}, direct"), cases, expected, &run(s, cases));
         // Without `#[inline(always)]`, LLVM can leave the closure out of the region, where it
         // runs without the region's target features, as it did with the loop of `det3/mixed`
@@ -182,6 +330,24 @@ fn check_token<S: Simd>(s: S) {
         );
         check(&format!("{name}, vectorize"), cases, expected, &got);
     });
+}
+
+// Checks every case at `V2`, if the CPU has its target features.
+#[cfg(target_arch = "x86_64")]
+fn check_v2<C: TestCase>() {
+    match V2::try_new() {
+        Some(s) => check_token::<C, _>(s),
+        None => eprintln!("skipped: the CPU does not have the target features of `V2`"),
+    }
+}
+
+// Checks every case at `V3`, if the CPU has its target features.
+#[cfg(target_arch = "x86_64")]
+fn check_v3<C: TestCase>() {
+    match V3::try_new() {
+        Some(s) => check_token::<C, _>(s),
+        None => eprintln!("skipped: the CPU does not have the target features of `V3`"),
+    }
 }
 
 #[test]
@@ -197,36 +363,92 @@ fn intervals_have_every_class() {
 }
 
 #[test]
+fn dec_cases_have_every_decoration_in_each_position() {
+    // The operations, the positions of their arguments and the decorations found there.
+    let mut found = HashSet::new();
+    let mut record = |op: &'static str, args: &[DecInterval]| {
+        for (position, x) in args.iter().enumerate() {
+            found.insert((op, position, x.decoration()));
+        }
+    };
+    DecCase::for_each_first(|cases| {
+        for c in cases {
+            match *c {
+                DecCase::Add(x, y) => record("add", &[x, y]),
+                DecCase::Sub(x, y) => record("sub", &[x, y]),
+                DecCase::Mul(x, y) => record("mul", &[x, y]),
+                DecCase::Div(x, y) => record("div", &[x, y]),
+                DecCase::MulAdd(x, y, z) => record("mul_add", &[x, y, z]),
+                DecCase::Recip(x) => record("recip", &[x]),
+                DecCase::Sqr(x) => record("sqr", &[x]),
+                DecCase::Sqrt(x) => record("sqrt", &[x]),
+            }
+        }
+    });
+    let arities = [
+        ("add", 2),
+        ("sub", 2),
+        ("mul", 2),
+        ("div", 2),
+        ("mul_add", 3),
+        ("recip", 1),
+        ("sqr", 1),
+        ("sqrt", 1),
+    ];
+    for (op, arity) in arities {
+        for position in 0..arity {
+            for d in DECORATIONS.iter().copied().chain([Decoration::Ill]) {
+                assert!(
+                    found.contains(&(op, position, d)),
+                    "no argument {position} of `{op}` with the decoration {d:?}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn baseline() {
-    check_token(Baseline);
+    check_token::<Case, _>(Baseline);
+}
+
+#[test]
+fn dec_baseline() {
+    check_token::<DecCase, _>(Baseline);
 }
 
 #[cfg(target_arch = "x86_64")]
 #[test]
 fn v2() {
-    match V2::try_new() {
-        Some(s) => check_token(s),
-        None => eprintln!("skipped: the CPU does not have the target features of `V2`"),
-    }
+    check_v2::<Case>();
+}
+
+#[cfg(target_arch = "x86_64")]
+#[test]
+fn dec_v2() {
+    check_v2::<DecCase>();
 }
 
 #[cfg(target_arch = "x86_64")]
 #[test]
 fn v3() {
-    match V3::try_new() {
-        Some(s) => check_token(s),
-        None => eprintln!("skipped: the CPU does not have the target features of `V3`"),
-    }
+    check_v3::<Case>();
+}
+
+#[cfg(target_arch = "x86_64")]
+#[test]
+fn dec_v3() {
+    check_v3::<DecCase>();
 }
 
 // The cases, run by `dispatch` at its level.
-struct Run<'a>(&'a [Case]);
+struct Run<'a, C>(&'a [C]);
 
-impl WithLevel for Run<'_> {
-    type Output = Vec<Interval>;
+impl<C: TestCase> WithLevel for Run<'_, C> {
+    type Output = Vec<C::Output>;
 
     #[inline(always)]
-    fn with_level<S: Simd>(self, s: S) -> Vec<Interval> {
+    fn with_level<S: Simd>(self, s: S) -> Vec<C::Output> {
         run(s, self.0)
     }
 }
@@ -255,9 +477,19 @@ fn dispatch_picks_the_highest_level() {
     assert_eq!(dispatch(Level), expected);
 }
 
-#[test]
-fn dispatch_runs_every_case() {
-    for_each_x(|cases, expected| {
+// Checks every case through `dispatch`.
+fn check_dispatch<C: TestCase>() {
+    for_each_x::<C>(|cases, expected| {
         check("dispatch", cases, expected, &dispatch(Run(cases)));
     });
+}
+
+#[test]
+fn dispatch_runs_every_case() {
+    check_dispatch::<Case>();
+}
+
+#[test]
+fn dec_dispatch_runs_every_case() {
+    check_dispatch::<DecCase>();
 }
