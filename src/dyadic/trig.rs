@@ -784,19 +784,57 @@ fn fast_band_eval(q: i64, rh: f64, rl: f64, rr: f64) -> (f64, f64) {
 // sin(x + s π/2) as h + l, from the reduction (n, rh, rl, rr) of `fast_reduce` at an x with
 // n mod 2048 = 0 and n != 0: x is within u/2 (1 + 2^-24) of n u = (n / 2048) π/2. Out of line,
 // as `fast_quad` is inlined into both copies of `sin_dir` and of `cos_dir` and into `sin_near`
-// and `cos_near`, and only these x take it.
-#[inline(never)]
+// and `cos_near`, and only these x take it. In a build with the dispatch (`level.rs`), only its
+// copy without an FMA is out of line, as `fast_band_dekker`, and the one with an FMA is inlined,
+// so that `fma_copy` compiles its products with the target feature `fma`.
+#[cfg_attr(not(inari_kernel_dispatch), inline(never))]
+#[cfg_attr(inari_kernel_dispatch, inline(always))]
 fn fast_band<const FMA: bool>(n: i64, s: i64, rh: f64, rl: f64) -> (f64, f64) {
+    #[cfg(inari_kernel_dispatch)]
+    if !FMA {
+        return fast_band_dekker(n, s, rh, rl);
+    }
+    fast_band_body::<FMA>(n, s, rh, rl)
+}
+
+// The copy of `fast_band` without an FMA in a build with the dispatch.
+#[cfg(inari_kernel_dispatch)]
+#[inline(never)]
+fn fast_band_dekker(n: i64, s: i64, rh: f64, rl: f64) -> (f64, f64) {
+    fast_band_body::<false>(n, s, rh, rl)
+}
+
+// The body of `fast_band`, which `rocq/theories/Model.v` transcribes as `fast_band`.
+#[inline(always)]
+fn fast_band_body<const FMA: bool>(n: i64, s: i64, rh: f64, rl: f64) -> (f64, f64) {
     let (rh, rl, rr) = fast_band_reduce::<FMA>(n, rh, rl);
     fast_band_eval((n >> 11) + s, rh, rl, rr)
 }
 
 // sin(x + s π/2) as h + l, as `fast_band`, for the x where `fast_reduce_big` declines x as
 // n mod 2048 = 0, from the reduction of `fast_reduce_band_big`, and `None` at any other x, such
-// as those where it declines x as |rh| < 2^-65, NaN and the infinities. Out of line, as
-// `fast_band`.
-#[inline(never)]
+// as those where it declines x as |rh| < 2^-65, NaN and the infinities. Out of line, and inlined
+// in `fma_copy`, as `fast_band`.
+#[cfg_attr(not(inari_kernel_dispatch), inline(never))]
+#[cfg_attr(inari_kernel_dispatch, inline(always))]
 fn fast_band_big<const FMA: bool>(x: f64, s: i64) -> Option<(f64, f64)> {
+    #[cfg(inari_kernel_dispatch)]
+    if !FMA {
+        return fast_band_big_dekker(x, s);
+    }
+    fast_band_big_body::<FMA>(x, s)
+}
+
+// The copy of `fast_band_big` without an FMA in a build with the dispatch.
+#[cfg(inari_kernel_dispatch)]
+#[inline(never)]
+fn fast_band_big_dekker(x: f64, s: i64) -> Option<(f64, f64)> {
+    fast_band_big_body::<false>(x, s)
+}
+
+// The body of `fast_band_big`, which `rocq/theories/Model.v` transcribes as `fast_band_big`.
+#[inline(always)]
+fn fast_band_big_body<const FMA: bool>(x: f64, s: i64) -> Option<(f64, f64)> {
     let (n, rh, rl, rr) = fast_reduce_band_big::<FMA>(x)?;
     Some(fast_band_eval((n >> 11) + s, rh, rl, rr))
 }
@@ -887,16 +925,55 @@ fn fast_band_tan<const FMA: bool>(n: i64, rh: f64, rl: f64, rr: f64) -> (f64, f6
 }
 
 // tan x as h + l, as `fast_band` does sin x, from the reduction (n, rh, rl, rr) of
-// `fast_reduce` at an x with n mod 2048 = 0 and n != 0. Out of line, as `fast_band`.
-#[inline(never)]
+// `fast_reduce` at an x with n mod 2048 = 0 and n != 0. Out of line, and inlined in `fma_copy`,
+// as `fast_band`.
+#[cfg_attr(not(inari_kernel_dispatch), inline(never))]
+#[cfg_attr(inari_kernel_dispatch, inline(always))]
 fn fast_tan_band<const FMA: bool>(n: i64, rh: f64, rl: f64) -> (f64, f64) {
+    #[cfg(inari_kernel_dispatch)]
+    if !FMA {
+        return fast_tan_band_dekker(n, rh, rl);
+    }
+    fast_tan_band_body::<FMA>(n, rh, rl)
+}
+
+// The copy of `fast_tan_band` without an FMA in a build with the dispatch.
+#[cfg(inari_kernel_dispatch)]
+#[inline(never)]
+fn fast_tan_band_dekker(n: i64, rh: f64, rl: f64) -> (f64, f64) {
+    fast_tan_band_body::<false>(n, rh, rl)
+}
+
+// The body of `fast_tan_band`, which `rocq/theories/Model.v` transcribes as `fast_tan_band`.
+#[inline(always)]
+fn fast_tan_band_body<const FMA: bool>(n: i64, rh: f64, rl: f64) -> (f64, f64) {
     let (rh, rl, rr) = fast_band_reduce::<FMA>(n, rh, rl);
     fast_band_tan::<FMA>(n, rh, rl, rr)
 }
 
-// tan x as h + l, as `fast_band_big` does sin x. Out of line, as `fast_band`.
-#[inline(never)]
+// tan x as h + l, as `fast_band_big` does sin x. Out of line, and inlined in `fma_copy`, as
+// `fast_band`.
+#[cfg_attr(not(inari_kernel_dispatch), inline(never))]
+#[cfg_attr(inari_kernel_dispatch, inline(always))]
 fn fast_tan_band_big<const FMA: bool>(x: f64) -> Option<(f64, f64)> {
+    #[cfg(inari_kernel_dispatch)]
+    if !FMA {
+        return fast_tan_band_big_dekker(x);
+    }
+    fast_tan_band_big_body::<FMA>(x)
+}
+
+// The copy of `fast_tan_band_big` without an FMA in a build with the dispatch.
+#[cfg(inari_kernel_dispatch)]
+#[inline(never)]
+fn fast_tan_band_big_dekker(x: f64) -> Option<(f64, f64)> {
+    fast_tan_band_big_body::<false>(x)
+}
+
+// The body of `fast_tan_band_big`, which `rocq/theories/Model.v` transcribes as
+// `fast_tan_band_big`.
+#[inline(always)]
+fn fast_tan_band_big_body<const FMA: bool>(x: f64) -> Option<(f64, f64)> {
     let (n, rh, rl, rr) = fast_reduce_band_big::<FMA>(x)?;
     Some(fast_band_tan::<FMA>(n, rh, rl, rr))
 }

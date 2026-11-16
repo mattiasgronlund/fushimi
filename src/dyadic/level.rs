@@ -4,16 +4,19 @@
 // and without the feature `force-generic`, `HAS_FMA` is false, and each entry that
 // `level_entry!` defines calls one of two copies of its body `<f>_with::<FMA>`: on a CPU that has
 // `fma`, `fma_copy`, compiled with that target feature, in which `two_prod_err::<true>` is one
-// FMA instruction; on any other, `dekker_copy`. Every function on the path from `<f>_with` to
-// `two_prod_err` is `#[inline(always)]` under that `cfg`, so that `fma_copy` compiles it with the
-// feature, but for five that stay `#[inline(never)]`: `fast_atan2_dir2` of `atan.rs`, and
-// `fast_band`, `fast_band_big`, `fast_tan_band` and `fast_tan_band_big` of `trig.rs`. Compiled
-// without the feature, their copies with `FMA` true compute `two_prod_err` with a call of the
-// library's `fma`, which rounds as the instruction does. Both copies return the same `f64`s, as
-// `FMA` only chooses how `two_prod_err` computes the error of a product, and the proofs in
-// `rocq/` show that the fast paths return the same with either value of it (`fast_exp_dir_fma`
-// in `rocq/theories/FastExp.v` and the others), and so does `exact_div`, which the rules of
-// atan2 call (`exact_div_fma` in `rocq/theories/AtanExactDiv.v`).
+// FMA instruction; on any other, `dekker_copy`. Every function on the path from
+// `<f>_with::<true>` to `two_prod_err::<true>` is `#[inline(always)]` under that `cfg`, so that
+// `fma_copy` compiles it with the feature, but for `fast_atan2_dir2` of `atan.rs`, which stays
+// `#[inline(never)]`. Compiled without the feature, its copy with `FMA` true computes
+// `two_prod_err` with a call of the library's `fma`, which rounds as the instruction does. The
+// four band helpers of `trig.rs`, `fast_band`, `fast_band_big`, `fast_tan_band` and
+// `fast_tan_band_big`, are `#[inline(never)]` in the other builds. Under that `cfg`, only their
+// copies with `FMA` false are out of line, as `fast_band_dekker` and the others. Both copies of
+// an entry return the same `f64`s, as `FMA` only chooses how `two_prod_err` computes the error
+// of a product, and the proofs in `rocq/` show that the fast paths return the same with either
+// value of it (`fast_exp_dir_fma` in `rocq/theories/FastExp.v` and the others), and so does
+// `exact_div`, which the rules of atan2 call (`exact_div_fma` in
+// `rocq/theories/AtanExactDiv.v`).
 //
 // Every other build compiles each entry once, as `<f>_with::<HAS_FMA>`, and takes no decision at
 // run time.

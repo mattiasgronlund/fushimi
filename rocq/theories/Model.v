@@ -5314,8 +5314,12 @@ Definition fast_band_eval (q : Z) (rh rl rr : f64) : f64 * f64 :=
 
 (** [fn fast_band(n: i64, s: i64, rh: f64, rl: f64) -> (f64, f64)] and [fn
     fast_band_big(x: f64, s: i64) -> Option<(f64, f64)>], where [n >> 11]
-    is [Z.shiftr], as in [fast_quad], and [?] is a [match].
-    [FastTrigCore.v] proves them, with [fast_sin] and the others. *)
+    is [Z.shiftr], as in [fast_quad], and [?] is a [match]. Each calls
+    its body, [fast_band_body] or [fast_band_big_body], which these
+    transcribe, or, in a build with [cfg(inari_kernel_dispatch)] and with
+    [FMA] false, [fast_band_dekker] or [fast_band_big_dekker], which call
+    that body with [false]. [FastTrigCore.v] proves them, with [fast_sin]
+    and the others. *)
 Definition fast_band (fma : bool) (n s : Z) (rh rl : f64) : f64 * f64 :=
   let '(rh, rl, rr) := fast_band_reduce fma n rh rl in
   fast_band_eval (Z.shiftr n 11 + s) rh rl rr.
@@ -5376,7 +5380,9 @@ Definition fast_band_tan (fma : bool) (n : Z) (rh rl rr : f64) : f64 * f64 :=
 
 (** [fn fast_tan_band(n: i64, rh: f64, rl: f64) -> (f64, f64)] and [fn
     fast_tan_band_big(x: f64) -> Option<(f64, f64)>], where [?] is a
-    [match]. [FastTrigCore.v] proves them, with [fast_tan]. *)
+    [match]. Each calls its body, [fast_tan_band_body] or
+    [fast_tan_band_big_body], or its copy without an FMA, as [fast_band]
+    does. [FastTrigCore.v] proves them, with [fast_tan]. *)
 Definition fast_tan_band (fma : bool) (n : Z) (rh rl : f64) : f64 * f64 :=
   let '(rh, rl, rr) := fast_band_reduce fma n rh rl in
   fast_band_tan fma n rh rl rr.
