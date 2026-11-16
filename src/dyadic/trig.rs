@@ -539,8 +539,22 @@ fn fast_reduce_big<const FMA: bool>(x: f64) -> Option<(i64, f64, f64, f64)> {
     let w = |j: usize| (INV2PI[i + j] << f) | ((INV2PI[i + j + 1] >> 1) >> (63 - f));
     // R = m W mod 2^192 = r2 2^128 + r1 2^64 + r0 from the three products; r0 is only the low
     // half of m w(2), whose high half carries into r1 and r2.
-    let p0 = u128::from(m) * u128::from(w(2));
+    // m w(1) comes before m w(2), here and in `fast_reduce_band_big`, whose products LLVM shares
+    // with these where both are inlined. The x86-64 `mul` takes one factor in rax and writes its
+    // product to rdx:rax. In this order the low half of m w(2), which `fast_reduce_band_big`
+    // reads, stays in rax and that of m w(1) is copied out of it instead, and w(1) and w(2) are
+    // formed with one copy of a limb of `INV2PI` fewer. In the `fma_copy` of `sin`, `cos` and
+    // `tan` built for x86-64 or x86-64-v2, the steps from the test |x| >= `LIMIT` to the test of
+    // n mod 2048 then take one instruction fewer, net one `mov`, than with m w(2) first. Each of
+    // the three, in each rounding, then takes 0.95, 1.00 and 0.49 fewer instructions per call
+    // over 4,096 calls of either sign with a magnitude log-uniform in [2^-30, 2^1024), in
+    // [2^60, 2^1024) and in [2^-1074, 2^1024), 0.99 and 0.47 fewer on the `f64`s nearest to the
+    // multiples of π/2 with an exponent from 0 to 1023 and from 0 to 29, and 0.54 to 0.67 fewer
+    // on its hard cases, in a crate that links `cr` (cachegrind, row 144). The Dekker copy then
+    // takes 0.02 to 0.47 fewer on the last three sets and as many as before, or at most 0.001
+    // fewer, on the others, and the haswell build as many as before on each set.
     let p1 = u128::from(m) * u128::from(w(1));
+    let p0 = u128::from(m) * u128::from(w(2));
     let c = (p0 >> 64) + (p1 & u128::from(u64::MAX));
     let r1 = c as u64;
     let r2 = m
@@ -622,8 +636,8 @@ fn fast_reduce_band_big<const FMA: bool>(x: f64) -> Option<(i64, f64, f64, f64)>
     let k = (be - 1011) as usize;
     let (i, f) = (k >> 6, k & 63);
     let w = |j: usize| (INV2PI[i + j] << f) | ((INV2PI[i + j + 1] >> 1) >> (63 - f));
-    let p0 = u128::from(m) * u128::from(w(2));
     let p1 = u128::from(m) * u128::from(w(1));
+    let p0 = u128::from(m) * u128::from(w(2));
     let c = (p0 >> 64) + (p1 & u128::from(u64::MAX));
     let r1 = c as u64;
     let r2 = m

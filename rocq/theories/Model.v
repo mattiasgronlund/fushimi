@@ -5178,8 +5178,8 @@ Definition fast_reduce_big (fma : bool) (x : f64) : option (Z * f64 * f64 * f64)
   if negb ((1039 <=? be) && (be <=? 2046)) then None else
   let m := Z.lor (Z.land b (2^52 - 1)) (2^52) in
   let k := be - 1011 in
-  let p0 := m * big_w k 2 in
   let p1 := m * big_w k 1 in
+  let p0 := m * big_w k 2 in
   let c := Z.shiftr p0 64 + p1 mod 2^64 in
   let r1 := c mod 2^64 in
   let r2 := (m * big_w k 0 + Z.shiftr p1 64 + Z.shiftr c 64) mod 2^64 in
@@ -5223,8 +5223,8 @@ Definition fast_reduce_band_big (fma : bool) (x : f64) : option (Z * f64 * f64 *
   if negb ((1039 <=? be) && (be <=? 2046)) then None else
   let m := Z.lor (Z.land b (2^52 - 1)) (2^52) in
   let k := be - 1011 in
-  let p0 := m * big_w k 2 in
   let p1 := m * big_w k 1 in
+  let p0 := m * big_w k 2 in
   let c := Z.shiftr p0 64 + p1 mod 2^64 in
   let r1 := c mod 2^64 in
   let r2 := (m * big_w k 0 + Z.shiftr p1 64 + Z.shiftr c 64) mod 2^64 in
