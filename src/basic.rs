@@ -470,7 +470,7 @@ impl Interval {
         }
 
         use IntervalClass2::*;
-        match self.classify2(rhs) {
+        match self.classify2_with(s, rhs) {
             E_E | E_M | E_N0 | E_N1 | E_P0 | E_P1 | E_Z | M_E | N0_E | N1_E | P0_E | P1_E | Z_E => {
                 Self::EMPTY
             }
@@ -593,7 +593,7 @@ impl Interval {
         // one. `rocq/theories/Model.v` transcribes this function for such an `s`, so it has to
         // be updated along with it.
         use IntervalClass::*;
-        match self.classify() {
+        match self.classify_with(s) {
             E | Z => Self::EMPTY,
             M => Self::ENTIRE,
             N0 => {
@@ -677,7 +677,7 @@ impl Interval {
         // `rocq/theories/Model.v` transcribes this function for such an `s`, so it has to be
         // updated along with it.
         use IntervalClass::*;
-        match self.classify() {
+        match self.classify_with(s) {
             E => Self::EMPTY,
             Z => Self::zero(),
             M => {

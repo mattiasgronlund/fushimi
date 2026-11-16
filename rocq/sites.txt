@@ -10,11 +10,11 @@ com-struct src/interval/dec_interval.rs: pub(crate) const fn new_unchecked(x: In
 com-struct src/interval/dec_interval.rs: x: Interval,
 com-unchecked src/bytes.rs: Some(Self::new_unchecked(Interval::with_infsup_raw(a, b), dec))
 com-unchecked src/classify.rs: // `classify2_pair` in `rocq/theories/Classify2.v` shows that `transmute` gets the
+com-unchecked src/classify.rs: // `rocq/theories/Abs.v` shows, for the portable backend, that `transmute` gets the
 com-unchecked src/classify.rs: // `rocq/theories/Model.v` transcribes the discriminants in `transmute_class2`, with the
 com-unchecked src/classify.rs: // `rocq/theories/Model.v` transcribes the discriminants in `transmute_class`, for the
-com-unchecked src/classify.rs: // `transmute` gets the discriminant of a variant whenever `self` is `valid`, as the
-com-unchecked src/classify.rs: unsafe { transmute(((self.classify() as u8) << 4) | rhs.classify() as u8) }
-com-unchecked src/classify.rs: unsafe { transmute((le_zero << 2) | ge_zero) }
+com-unchecked src/classify.rs: unsafe { transmute(((self.classify_with(s) as u8) << 4) | rhs.classify_with(s) as u8) }
+com-unchecked src/classify.rs: unsafe { transmute(s.classify_bits(&self.rep)) }
 com-unchecked src/classify.rs: use std::mem::transmute;
 com-unchecked src/constants.rs: Self::new_unchecked(Interval::$c, Decoration::Com)
 com-unchecked src/constants.rs: let [na, b] = unsafe { transmute::<Interval, [f64; 2]>(Interval::$c) };
@@ -69,11 +69,11 @@ valid-raw src/basic.rs: Self::with_infsup_raw(0.0, s.sqrt1_ru(b))
 valid-raw src/bytes.rs: Some(Self::new_unchecked(Interval::with_infsup_raw(a, b), dec))
 valid-raw src/bytes.rs: Some(Self::with_infsup_raw(a, b))
 valid-raw src/classify.rs: // `classify2_pair` in `rocq/theories/Classify2.v` shows that `transmute` gets the
+valid-raw src/classify.rs: // `rocq/theories/Abs.v` shows, for the portable backend, that `transmute` gets the
 valid-raw src/classify.rs: // `rocq/theories/Model.v` transcribes the discriminants in `transmute_class2`, with the
 valid-raw src/classify.rs: // `rocq/theories/Model.v` transcribes the discriminants in `transmute_class`, for the
-valid-raw src/classify.rs: // `transmute` gets the discriminant of a variant whenever `self` is `valid`, as the
-valid-raw src/classify.rs: unsafe { transmute(((self.classify() as u8) << 4) | rhs.classify() as u8) }
-valid-raw src/classify.rs: unsafe { transmute((le_zero << 2) | ge_zero) }
+valid-raw src/classify.rs: unsafe { transmute(((self.classify_with(s) as u8) << 4) | rhs.classify_with(s) as u8) }
+valid-raw src/classify.rs: unsafe { transmute(s.classify_bits(&self.rep)) }
 valid-raw src/classify.rs: use std::mem::transmute;
 valid-raw src/constants.rs: let [na, b] = unsafe { transmute::<Interval, [f64; 2]>(Interval::$c) };
 valid-raw src/constants.rs: pub const EMPTY: Self = unsafe { transmute([f64::NAN, f64::NAN]) };

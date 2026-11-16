@@ -151,7 +151,7 @@ macro_rules! mul_with_body {
         // *1 [min{a*d, b*c}, max{a*c, b*d}]
 
         use IntervalClass2::*;
-        match lhs.classify2(rhs) {
+        match lhs.classify2_with(s, rhs) {
             E_E | E_M | E_N0 | E_N1 | E_P0 | E_P1 | E_Z | M_E | N0_E | N1_E | P0_E | P1_E | Z_E => {
                 Self::EMPTY
             }
@@ -375,7 +375,7 @@ impl Interval {
         //  Z | {0} |    {0}    |     {0}    |    {0}    |     {0}    | ∅
 
         use IntervalClass2::*;
-        match self.classify2(rhs) {
+        match self.classify2_with(s, rhs) {
             E_E | E_M | E_N0 | E_N1 | E_P0 | E_P1 | E_Z | M_E | M_Z | N0_E | N0_Z | N1_E | N1_Z
             | P0_E | P0_Z | P1_E | P1_Z | Z_E | Z_Z => Self::EMPTY,
             M_M | M_N0 | M_P0 | N0_M | N1_M | P0_M | P1_M => Self::ENTIRE,

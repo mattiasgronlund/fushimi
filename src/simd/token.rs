@@ -27,15 +27,20 @@ mod sealed {
     use crate::simd::F64X2;
 
     // The functions of the backend that the `*_with` operations of `Interval` and `DecInterval`
-    // call (those of `DecInterval` through those of `Interval`). Each method computes what the
-    // function of the same name computes in the backend that the token gives (the table above).
+    // call (those of `DecInterval` through those of `Interval`), with `classify_bits`, which
+    // `Interval::classify_with` and `classify2_with` (`src/classify.rs`) call for them. Each
+    // method computes what the function of the same name computes in the backend that the token
+    // gives (the table above), and `classify_bits` what `crate::classify::classify_bits` computes
+    // with the `bitmask`, `ge`, `le` and `splat` of that backend. `classify_bits` takes `x` by
+    // reference, as `crate::classify::classify_bits` does, for the reason given there.
     // `src/simd/generic.rs` says what its functions compute. The other backends need not compute
     // the same on every argument: where an argument is a NaN, or the arguments are zeros of
     // opposite signs, `max` of `src/simd/x86_64.rs` (`_mm_max_pd`) can return another value than
-    // `max` of `src/simd/generic.rs`. A user can call the methods through the bound `S: Simd`, but
-    // cannot name the trait.
+    // `max` of `src/simd/generic.rs`. A user can call the methods through the bound `S: Simd`,
+    // but cannot name the trait.
     pub trait Backend {
         fn add_ru(self, x: F64X2, y: F64X2) -> F64X2;
+        fn classify_bits(self, x: &F64X2) -> u8;
         fn div_ru(self, x: F64X2, y: F64X2) -> F64X2;
         fn max(self, x: F64X2, y: F64X2) -> F64X2;
         fn mul_add_ru(self, x: F64X2, y: F64X2, z: F64X2) -> F64X2;
@@ -310,13 +315,19 @@ pub fn dispatch<W: WithLevel>(w: W) -> W::Output {
 // `gt`, `le`, `lt`, `max`, `or` and `sub_rn` on aarch64, with the helpers of `aarch64/lanewise.rs`
 // and `aarch64/fma.rs` that `mul_add_ru` and `sqrt_rd_ru` call on their fast paths, and the thin
 // layers of `wasm32.rs` that a `*_with` method reaches are `#[inline(always)]`, and
-// `Interval::classify`, `classify2`, `inf_raw`, `sup_raw`, `with_infsup_raw`, `zero`, `is_empty`,
-// `contains`, `is_common_interval` and `DecInterval::set_dec_impl` are `#[inline]`. So a `*_with`
-// method instantiated in a user's crate calls out of line only functions that round upward or
-// downward, and functions that they call.
+// `classify_bits` of `src/classify.rs`, `Interval::classify_with`, `classify2_with`, `inf_raw`,
+// `sup_raw`, `with_infsup_raw`, `zero`, `is_empty`, `contains`, `is_common_interval` and
+// `DecInterval::set_dec_impl` are `#[inline]`.
+// So a `*_with` method instantiated in a user's crate calls out of line only functions that round
+// upward or downward, and functions that they call.
 impl sealed::Backend for Baseline {
     fn add_ru(self, x: F64X2, y: F64X2) -> F64X2 {
         crate::simd::add_ru(x, y)
+    }
+
+    #[inline(always)]
+    fn classify_bits(self, x: &F64X2) -> u8 {
+        crate::classify::classify_bits(x)
     }
 
     fn div_ru(self, x: F64X2, y: F64X2) -> F64X2 {
@@ -387,6 +398,11 @@ macro_rules! baseline_backend {
             #[inline(always)]
             fn add_ru(self, x: F64X2, y: F64X2) -> F64X2 {
                 sealed::Backend::add_ru(Baseline, x, y)
+            }
+
+            #[inline(always)]
+            fn classify_bits(self, x: &F64X2) -> u8 {
+                sealed::Backend::classify_bits(Baseline, x)
             }
 
             #[inline(always)]
@@ -608,6 +624,16 @@ macro_rules! level {
             fn add_ru(self, x: F64X2, y: F64X2) -> F64X2 {
                 // SAFETY: as in `vectorize`, for the target features of the copy.
                 from_m128d(unsafe { $m::add_ru(to_m128d(x), to_m128d(y)) })
+            }
+
+            // `crate::classify::classify_bits` with the thin layers of `src/simd/x86_64.rs`.
+            #[inline(always)]
+            fn classify_bits(self, x: &F64X2) -> u8 {
+                let x = to_m128d(*x);
+                let zero = x86_64::splat(0.0);
+                let ge_zero = x86_64::bitmask(x86_64::ge(x, zero)) as u8;
+                let le_zero = x86_64::bitmask(x86_64::le(x, zero)) as u8;
+                (le_zero << 2) | ge_zero
             }
 
             #[inline(always)]

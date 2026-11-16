@@ -6773,7 +6773,8 @@ Definition quadrants (pt : point) (a b : f64) : f64 * f64 :=
     those of [impl Interval] with their token [s], and are transcribed
     here for such an [s] too. Such an [s] exists only in a build whose
     backend is the portable one, so the functions that they call without
-    [s], such as [classify2], are the portable backend's there too. The
+    [s], such as [is_empty] and [Self::zero()], are the portable backend's
+    there too. The
     bodies of these eight methods of [impl DecInterval] are the macros
     [dec_add_sub_mul_with_body!] and [dec_div_with_body!] of
     [src/arith.rs] and [dec_mul_add_with_body!], [dec_recip_with_body!],
@@ -7549,9 +7550,13 @@ Definition interior (self rhs : Interval) : bool :=
 Definition subset (self rhs : Interval) : bool :=
   is_empty self || Generic.all (Generic.le (rep self) (rep rhs)).
 
-(** [pub(crate) fn classify(self) -> IntervalClass]. The casts
-    [bitmask(...) as u8] keep the value, which is below 4, and are left
-    out. *)
+(** [pub(crate) fn classify_with<S: Simd>(self, s: S) -> IntervalClass],
+    for an [s] whose backend is the portable one, where
+    [s.classify_bits(&self.rep)] is [pub(crate) fn classify_bits(x: &F64X2)
+    -> u8] of [src/classify.rs], written inline here, whose [let x = *x]
+    reads [rep self]; [pub(crate) fn classify(self) -> IntervalClass] is
+    [self.classify_with(Baseline)]. The casts [bitmask(...) as u8] in
+    [classify_bits] keep the value, which is below 4, and are left out. *)
 Definition classify (self : Interval) : option IntervalClass :=
   let zero := Generic.splat zero in
   let ge_zero := Generic.bitmask (Generic.ge (rep self) zero) in
@@ -7559,9 +7564,11 @@ Definition classify (self : Interval) : option IntervalClass :=
   let* l := shl 8 le_zero 2 in
   transmute_class (Z.lor l ge_zero).
 
-(** [pub(crate) fn classify2(self, rhs: Self) -> IntervalClass2], where the
-    casts [self.classify() as u8] and [rhs.classify() as u8] are
-    [class_discriminant]. *)
+(** [pub(crate) fn classify2_with<S: Simd>(self, s: S, rhs: Self) ->
+    IntervalClass2], for an [s] whose backend is the portable one, where the
+    casts [self.classify_with(s) as u8] and [rhs.classify_with(s) as u8] are
+    [class_discriminant]; [pub(crate) fn classify2(self, rhs: Self) ->
+    IntervalClass2] is [self.classify2_with(Baseline, rhs)]. *)
 Definition classify2 (self rhs : Interval) :
     option (IntervalClass * IntervalClass) :=
   let* c1 := classify self in

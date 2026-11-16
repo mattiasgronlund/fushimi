@@ -1,35 +1,80 @@
 use crate::{interval::Interval, simd::*};
 use std::mem::transmute;
 
+// `classify_bits(x) = (bitmask(le(*x, splat(0.0))) << 2) | bitmask(ge(*x, splat(0.0)))`,
+// computed by the build's backend: the code of the class of the interval whose `rep` is `*x` (see
+// `IntervalClass`). Each `bitmask` is below 4, so the casts to `u8` keep the values, and the
+// result is below 16.
+//
+// It is the `classify_bits` of `Baseline` (`src/simd/token.rs`). The body is here, in a function
+// that is not generic, rather than in `Interval::classify_with` with the methods `bitmask`, `ge`
+// and `le` of `Baseline`: in a build for plain `x86-64`, rustc 1.98.1 compiled that generic body
+// with the portable `bitmask`, `ge` and `le` to a mask in a vector register whose sign bits were
+// read back, at 11 more instructions per call of `classify` and 21 more per call of `classify2`
+// than this body, which it compiles to a flag per lane's comparison (`ucomisd` and `setae`).
+//
+// `x` is a reference: with `x: F64X2`, rustc 1.98.1 compiled `<Interval as Mul>::mul` and
+// `<Interval as Div>::div` of a build for plain `x86-64` with the feature `force-generic` so that
+// they copied each operand to the stack and read its lanes from the copy, at 1 to 7 more
+// instructions per call in the classes counted. With `x: &F64X2`, they read the lanes from the
+// operand.
+#[inline]
+pub(crate) fn classify_bits(x: &F64X2) -> u8 {
+    // `rocq/theories/Model.v` transcribes this function in `classify`, its transcription of
+    // `Interval::classify_with`, for the proofs listed on `classify_with`.
+    let x = *x;
+    let zero = splat(0.0);
+    let ge_zero = bitmask(ge(x, zero)) as u8;
+    let le_zero = bitmask(le(x, zero)) as u8;
+    (le_zero << 2) | ge_zero
+}
+
 impl Interval {
-    // `#[inline]` lets a `*_with` method instantiated in a user's crate inline this
-    // function and `classify2`. Without it, a `V3` region (`src/simd/token.rs`) in a
-    // build for plain `x86-64` calls `classify2` out of line in every `mul_with`.
+    // The class of `self`, computed by the backend of `s`, as the `*_with` methods that call it
+    // compute the rest of their result.
+    //
+    // `#[inline]` lets a `*_with` method instantiated in a user's crate inline this function
+    // and `classify2_with`, and with them the backend functions of `s` into a region of
+    // `vectorize` (`src/simd/token.rs`). Without it on `classify` and `classify2`, which took
+    // no token before, a `V3` region in a build for plain `x86-64` called `classify2` out of line
+    // in every `mul_with`.
     #[inline]
-    pub(crate) fn classify(self) -> IntervalClass {
-        // `rocq/theories/Model.v` transcribes this function for the proofs of
-        // `(Dec)Interval::abs`, `(Dec)Interval::atan2`, `(Dec)Interval::div`,
-        // `(Dec)Interval::mul`, `(Dec)Interval::mul_add`, `(Dec)Interval::mul_rev_to_pair`,
-        // `(Dec)Interval::powi`, `(Dec)Interval::recip` and `(Dec)Interval::sqr`.
-        // `classify_defined` in `rocq/theories/Abs.v` shows, for the portable backend, that
-        // `transmute` gets the discriminant of a variant whenever `self` is `valid`, as the
-        // comment on `Interval::rep` defines it.
-        let zero = splat(0.0);
-        let ge_zero = bitmask(ge(self.rep, zero)) as u8;
-        let le_zero = bitmask(le(self.rep, zero)) as u8;
-        unsafe { transmute((le_zero << 2) | ge_zero) }
+    pub(crate) fn classify_with<S: Simd>(self, s: S) -> IntervalClass {
+        // `rocq/theories/Model.v` transcribes this function for an `s` whose backend is the
+        // portable one, with the `classify_bits` above, for the proofs of `(Dec)Interval::abs`,
+        // `(Dec)Interval::atan2`, `(Dec)Interval::div`, `(Dec)Interval::mul`,
+        // `(Dec)Interval::mul_add`, `(Dec)Interval::mul_rev_to_pair`, `(Dec)Interval::powi`,
+        // `(Dec)Interval::recip` and `(Dec)Interval::sqr`. `classify_defined` in
+        // `rocq/theories/Abs.v` shows, for the portable backend, that `transmute` gets the
+        // discriminant of a variant whenever `self` is `valid`, as the comment on
+        // `Interval::rep` defines it.
+        unsafe { transmute(s.classify_bits(&self.rep)) }
     }
 
-    // `#[inline]`, for the reason given on `classify`.
+    // `#[inline]`, for the reason given on `classify_with`.
     #[inline]
-    pub(crate) fn classify2(self, rhs: Self) -> IntervalClass2 {
-        // `rocq/theories/Model.v` transcribes this function for the proofs of
-        // `(Dec)Interval::atan2`, `(Dec)Interval::div`, `(Dec)Interval::mul`,
-        // `(Dec)Interval::mul_add` and `(Dec)Interval::mul_rev_to_pair`.
+    pub(crate) fn classify2_with<S: Simd>(self, s: S, rhs: Self) -> IntervalClass2 {
+        // `rocq/theories/Model.v` transcribes this function for an `s` whose backend is the
+        // portable one, for the proofs of `(Dec)Interval::atan2`, `(Dec)Interval::div`,
+        // `(Dec)Interval::mul`, `(Dec)Interval::mul_add` and `(Dec)Interval::mul_rev_to_pair`.
         // `classify2_pair` in `rocq/theories/Classify2.v` shows that `transmute` gets the
         // discriminant of the variant for the classes of `self` and `rhs` whenever
-        // `classify` is defined on both.
-        unsafe { transmute(((self.classify() as u8) << 4) | rhs.classify() as u8) }
+        // `classify_with` is defined on both.
+        unsafe { transmute(((self.classify_with(s) as u8) << 4) | rhs.classify_with(s) as u8) }
+    }
+
+    // `classify_with` called with `Baseline`, whose backend is the build's, for the operations
+    // that have no `*_with` form, such as `Interval::abs`. `rocq/theories/Model.v` transcribes it
+    // as `classify_with`, so it has to be updated along with it.
+    #[inline]
+    pub(crate) fn classify(self) -> IntervalClass {
+        self.classify_with(Baseline)
+    }
+
+    // `classify2_with` called with `Baseline`, as `classify` calls `classify_with`.
+    #[inline]
+    pub(crate) fn classify2(self, rhs: Self) -> IntervalClass2 {
+        self.classify2_with(Baseline, rhs)
     }
 }
 

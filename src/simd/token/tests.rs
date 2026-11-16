@@ -5,11 +5,17 @@
 // it the same decoration, which the operations of `DecInterval` compute from their arguments
 // and that interval. `==` on `Interval` is the spec. `==` on `DecInterval` is not: it ignores
 // the decorations and is false if either side is NaI, so the results of `DecInterval` are
-// compared by `interval()` and `decoration()`. The backend functions that each level's copies
+// compared by `interval()` and `decoration()`. The tests `classes_*` compare
+// `Interval::classify_with` and `classify2_with`, by which the operations choose their case, at
+// each level that the CPU has, called directly and inside the level's `vectorize`, with
+// `classify` and `classify2`, which take no token. The backend functions that each level's copies
 // compile are compared with the portable backend's in `src/simd/differential_tests.rs`.
 
 use super::*;
-use crate::{classify::IntervalClass, DecInterval, Decoration, Interval};
+use crate::{
+    classify::{IntervalClass, IntervalClass2},
+    DecInterval, Decoration, Interval,
+};
 use std::{any::type_name, collections::HashSet, fmt::Debug};
 
 // 2^e, for an e in the range of the exponents of normal numbers.
@@ -359,6 +365,69 @@ fn intervals_have_every_class() {
             classes.contains(&class),
             "no interval of the class {class:?}"
         );
+    }
+}
+
+// The classes of the intervals `xs` and of every pair of them, computed by the backend of `s`.
+#[inline(always)]
+fn classes<S: Simd>(s: S, xs: &[Interval]) -> (Vec<IntervalClass>, Vec<IntervalClass2>) {
+    let mut classes = Vec::with_capacity(xs.len());
+    let mut pairs = Vec::with_capacity(xs.len() * xs.len());
+    for &x in xs {
+        classes.push(x.classify_with(s));
+        for &y in xs {
+            pairs.push(x.classify2_with(s, y));
+        }
+    }
+    (classes, pairs)
+}
+
+// Checks `classify_with` and `classify2_with` at the level `s`, called directly and inside
+// `s.vectorize`, against `classify` and `classify2`, which take no token, on every interval of
+// `intervals()` and every pair of them.
+fn check_classes<S: Simd>(s: S) {
+    let name = type_name::<S>();
+    let xs = intervals();
+    let expected = (
+        xs.iter().map(|x| x.classify()).collect::<Vec<_>>(),
+        xs.iter()
+            .flat_map(|&x| xs.iter().map(move |&y| x.classify2(y)))
+            .collect::<Vec<_>>(),
+    );
+    assert!(
+        classes(s, &xs) == expected,
+        "{name}, direct: a class differs from that of `classify` or `classify2`"
+    );
+    let got = s.vectorize(
+        #[inline(always)]
+        || classes(s, &xs),
+    );
+    assert!(
+        got == expected,
+        "{name}, vectorize: a class differs from that of `classify` or `classify2`"
+    );
+}
+
+#[test]
+fn classes_baseline() {
+    check_classes(Baseline);
+}
+
+#[cfg(target_arch = "x86_64")]
+#[test]
+fn classes_v2() {
+    match V2::try_new() {
+        Some(s) => check_classes(s),
+        None => eprintln!("skipped: the CPU does not have the target features of `V2`"),
+    }
+}
+
+#[cfg(target_arch = "x86_64")]
+#[test]
+fn classes_v3() {
+    match V3::try_new() {
+        Some(s) => check_classes(s),
+        None => eprintln!("skipped: the CPU does not have the target features of `V3`"),
     }
 }
 
