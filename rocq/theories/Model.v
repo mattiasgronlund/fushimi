@@ -2650,49 +2650,62 @@ Definition fast_tanh_near (fma : bool) (x : f64) : option f64 :=
     The fast path takes [FMA] as the argument [fma]. Each entry of the
     file, such as [exp_dir], [cosh] and [exp_near], is defined by the
     macro [level_entry!] of [src/dyadic/level.rs] from its body, a
-    function such as [exp_dir_with] that takes [FMA], and the definitions
-    below transcribe the bodies. The entry runs its body with [FMA] equal
-    to [HAS_FMA], which depends on the target, or, in a build with
-    [cfg(inari_kernel_dispatch)] (see [build.rs]), with [true] in a copy
-    compiled with the target feature [fma] on a CPU that has [fma], and
-    with [false] on any other. The functions below pass [false]:
+    function such as [exp_dir_with] that takes [FMA]. The definitions
+    below transcribe the bodies; those for [exp], [exp2] and [exp10]
+    first transcribe their test for a tiny [|x|], and then the other
+    tests of the body of the entry. The functions make that test before
+    they call their entry where [TINY_IN_CALLER], which is
+    [!cfg!(inari_kernel_dispatch)], is true, and the body makes it as its
+    first test where it is false, so that the order of the tests is the
+    same in both builds.
+    The entry runs its body with [FMA] equal to [HAS_FMA], which depends
+    on the target, or, in a build with [cfg(inari_kernel_dispatch)] (see
+    [build.rs]), with [true] in a copy compiled with the target feature
+    [fma] on a CPU that has [fma], and with [false] on any other. The
+    functions below pass [false]:
     [FastExp.fast_exp_dir_fma], [FastHyp.fast_sinh_dir_fma] and the others
     show that [true] gives the same result at every argument that reaches
     it. *)
 Section Driver.
 Variable ziv : (nat -> option Dyadic.encl) -> bool -> nat -> option f64.
 
-(** [pub(crate) fn exp(x: f64, up: bool) -> f64], which calls
-    [exp_dir::<true>(x)] if [up] and [exp_dir::<false>(x)] otherwise:
-    this is the body of [fn exp_dir<const UP: bool>(x: f64) -> f64] with
+(** [pub(crate) fn exp(x: f64, up: bool) -> f64], which returns
+    [near_one(x, up)] if [TINY_IN_CALLER && x.abs() < TINY_EXP] and
+    otherwise calls [exp_dir::<true>(x)] if [up] and [exp_dir::<false>(x)]
+    otherwise. The body of [fn exp_dir<const UP: bool>(x: f64) -> f64]
+    first returns [near_one(x, UP)] if
+    [!TINY_IN_CALLER && x.abs() < TINY_EXP], and then makes the other
+    tests. So in both builds (see above) this is the test
+    [x.abs() < TINY_EXP] followed by the other tests of that body, with
     [up] for [UP]. *)
 Definition exp_dir_with (x : f64) (up : bool) : option f64 :=
-  if is_nan x || eq x infinity then Some x
+  if lt (fabs x) tiny_exp then Some (near_one x up)
+  else if is_nan x || eq x infinity then Some x
   else if eq x neg_infinity then Some zero
   else if ge x (from_bits 0x4086300000000000) (* 710.0 *) then Some (overflow up)
   else if le x (from_bits 0xc087500000000000) (* -746.0 *) then Some (underflow up)
-  else if lt (fabs x) tiny_exp then Some (near_one x up)
   else match fast_exp_dir false x up with Some r => Some r | None => ziv (ev_exp x) up 1 end.
 
 (** [pub(crate) fn exp2(x: f64, up: bool) -> f64], with [exp2_dir] as
     [exp_dir] in [exp]. *)
 Definition exp2_dir_with (x : f64) (up : bool) : option f64 :=
-  if is_nan x || eq x infinity then Some x
+  if lt (fabs x) tiny_exp then Some (near_one x up)
+  else if is_nan x || eq x infinity then Some x
   else if eq x neg_infinity then Some zero
   else if ge x (from_bits 0x4090000000000000) (* 1024.0 *) then Some (overflow up)
   else if lt x (from_bits 0xc090cc0000000000) (* -1075.0 *) then Some (underflow up)
-  else if lt (fabs x) tiny_exp then Some (near_one x up)
   else match fast_exp2_dir false x up with Some r => Some r | None => ziv (ev_exp2 x) up 1 end.
 
-(** [pub(crate) fn exp10(x: f64, up: bool) -> f64], with [exp10_dir] as
-    [exp_dir] in [exp], where [(1.0..=22.0).contains(&x)] is [1.0 <= x &&
-    x <= 22.0], and [x as usize], for such an integer [x], is [to_i64 x]. *)
+(** [pub(crate) fn exp10(x: f64, up: bool) -> f64], with [TINY_EXP10] as
+    [TINY_EXP] and [exp10_dir] as [exp_dir] in [exp], where
+    [(1.0..=22.0).contains(&x)] is [1.0 <= x && x <= 22.0], and
+    [x as usize], for such an integer [x], is [to_i64 x]. *)
 Definition exp10_dir_with (x : f64) (up : bool) : option f64 :=
-  if is_nan x || eq x infinity then Some x
+  if lt (fabs x) tiny_exp10 then Some (near_one x up)
+  else if is_nan x || eq x infinity then Some x
   else if eq x neg_infinity then Some zero
   else if ge x (from_bits 0x4073500000000000) (* 309.0 *) then Some (overflow up)
   else if le x (from_bits 0xc074400000000000) (* -324.0 *) then Some (underflow up)
-  else if lt (fabs x) tiny_exp10 then Some (near_one x up)
   else if le one x && le x (from_bits 0x4036000000000000) (* 22.0 *) && eq x (ffloor x) then
     Some (pow10 (to_i64 x))
   else match fast_exp10_dir false x up with Some r => Some r | None => ziv (ev_exp10 x) up 1 end.
@@ -2717,8 +2730,10 @@ Definition cosh_dir_with (x : f64) (up : bool) : option f64 :=
   else if lt t tiny_hyp then Some (near_one t up)
   else match fast_cosh_dir false t up with Some r => Some r | None => ziv (ev_cosh t) up 1 end.
 
-(** [pub(crate) fn tanh(x: f64, up: bool) -> f64], with [tanh_dir] as
-    [exp_dir] in [exp]. *)
+(** [pub(crate) fn tanh(x: f64, up: bool) -> f64], which calls
+    [tanh_dir::<true>(x)] if [up] and [tanh_dir::<false>(x)] otherwise:
+    this is the body of [fn tanh_dir<const UP: bool>(x: f64) -> f64] with
+    [up] for [UP]. *)
 Definition tanh_dir_with (x : f64) (up : bool) : option f64 :=
   if is_nan x then Some x
   else if eq x infinity then Some one
@@ -2766,8 +2781,9 @@ Definition exp2_near_with (x : f64) : option f64 :=
   else if lt (fabs x) tiny_exp then Some one
   else match fast_exp2_near false x with Some r => Some r | None => ziv_near (ev_exp2 x) 1 end.
 
-(** [pub(crate) fn exp10_near(x: f64) -> f64], as [exp10_dir_with], where
-    the literal [1e23] is [from_bits 0x44b52d02c7e14af6]. *)
+(** [pub(crate) fn exp10_near(x: f64) -> f64], with
+    [(1.0..=22.0).contains(&x)] and [x as usize] as in [exp10_dir_with],
+    where the literal [1e23] is [from_bits 0x44b52d02c7e14af6]. *)
 Definition exp10_near_with (x : f64) : option f64 :=
   if is_nan x || eq x infinity then Some x
   else if eq x neg_infinity then Some zero

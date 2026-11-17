@@ -138,6 +138,13 @@ pub(super) const TINY_HYP: f64 = 1.0 / 67_108_864.0;
 const TINY_EXP: f64 = f64::EPSILON / 4.0;
 const TINY_EXP10: f64 = f64::EPSILON / 16.0;
 
+// Whether `exp`, `exp2` and `exp10` test for a tiny |x| themselves, before they call
+// their entry, and not its body. In a build with the dispatch (`level_entry!`), the body makes
+// the test, as its first one: the caller is compiled without the target features of the body's
+// copies, and there the test would cost every other argument a separate load of its mask and a
+// second jump, and `near_one(x, true)` would branch on the sign of x.
+const TINY_IN_CALLER: bool = !cfg!(inari_kernel_dispatch);
+
 // 2^-27: the arguments of smaller magnitude have results within half an ulp of x, or of 1,
 // for the functions rounded to nearest that take it, as x^2 < 2^-54.
 pub(super) const TINY_NEAR: f64 = 1.0 / 134_217_728.0;
@@ -842,8 +849,14 @@ fn fast_tanh_near<const FMA: bool>(x: f64) -> Option<f64> {
 /// e^x rounded toward +∞ if `up` and toward -∞ otherwise.
 #[inline(always)]
 pub(crate) fn exp(x: f64, up: bool) -> f64 {
-    // A copy per direction, where `up` is a constant.
-    if up {
+    // The rule for a tiny |x| comes first, in the caller (`TINY_IN_CALLER`), so that it returns
+    // without a call of `exp_dir` and before the tests of `exp_dir` for the special values. NaN
+    // and ±∞ fail its test and go on to them.
+    if TINY_IN_CALLER && x.abs() < TINY_EXP {
+        // 1 + x <= e^x <= 1 / (1 - x) for x < 1.
+        near_one(x, up)
+    } else if up {
+        // A copy per direction, where `up` is a constant.
         exp_dir::<true>(x)
     } else {
         exp_dir::<false>(x)
@@ -851,14 +864,18 @@ pub(crate) fn exp(x: f64, up: bool) -> f64 {
 }
 
 level_entry! {
-    // `exp` toward +∞ if `UP` and toward -∞ otherwise.
+    // `exp` toward +∞ if `UP` and toward -∞ otherwise, for an x that `exp` has not returned
+    // for: NaN, ±∞, or |x| >= `TINY_EXP`, or any x without `TINY_IN_CALLER`.
     fn exp_dir<const UP: bool>(x: f64) -> f64 = exp_dir_with;
 }
 
 // The body of `exp_dir`, with `FMA` for the products (`level_entry!`).
 #[inline(always)]
 fn exp_dir_with<const FMA: bool, const UP: bool>(x: f64) -> f64 {
-    if x.is_nan() || x == f64::INFINITY {
+    if !TINY_IN_CALLER && x.abs() < TINY_EXP {
+        // As in `exp`.
+        near_one(x, UP)
+    } else if x.is_nan() || x == f64::INFINITY {
         x
     } else if x == f64::NEG_INFINITY {
         0.0
@@ -868,9 +885,6 @@ fn exp_dir_with<const FMA: bool, const UP: bool>(x: f64) -> f64 {
     } else if x <= -746.0 {
         // e^x < 2^-1075, as -746 < -1075 ln 2 = -745.13...
         underflow(UP)
-    } else if x.abs() < TINY_EXP {
-        // 1 + x <= e^x <= 1 / (1 - x) for x < 1.
-        near_one(x, UP)
     } else if let Some(r) = fast_exp_dir::<FMA>(x, UP) {
         r
     } else {
@@ -908,8 +922,12 @@ fn exp_near_with<const FMA: bool>(x: f64) -> f64 {
 /// 2^x rounded toward +∞ if `up` and toward -∞ otherwise.
 #[inline(always)]
 pub(crate) fn exp2(x: f64, up: bool) -> f64 {
-    // A copy per direction, where `up` is a constant.
-    if up {
+    // The rule for a tiny |x| first, as in `exp`.
+    if TINY_IN_CALLER && x.abs() < TINY_EXP {
+        // 2^x = e^(x ln 2), and |x ln 2| < |x|.
+        near_one(x, up)
+    } else if up {
+        // A copy per direction, where `up` is a constant.
         exp2_dir::<true>(x)
     } else {
         exp2_dir::<false>(x)
@@ -917,14 +935,18 @@ pub(crate) fn exp2(x: f64, up: bool) -> f64 {
 }
 
 level_entry! {
-    // `exp2` toward +∞ if `UP` and toward -∞ otherwise.
+    // `exp2` toward +∞ if `UP` and toward -∞ otherwise, for an x that `exp2` has not returned
+    // for: NaN, ±∞, or |x| >= `TINY_EXP`, or any x without `TINY_IN_CALLER`.
     fn exp2_dir<const UP: bool>(x: f64) -> f64 = exp2_dir_with;
 }
 
 // The body of `exp2_dir`, with `FMA` for the products (`level_entry!`).
 #[inline(always)]
 fn exp2_dir_with<const FMA: bool, const UP: bool>(x: f64) -> f64 {
-    if x.is_nan() || x == f64::INFINITY {
+    if !TINY_IN_CALLER && x.abs() < TINY_EXP {
+        // As in `exp2`.
+        near_one(x, UP)
+    } else if x.is_nan() || x == f64::INFINITY {
         x
     } else if x == f64::NEG_INFINITY {
         0.0
@@ -932,9 +954,6 @@ fn exp2_dir_with<const FMA: bool, const UP: bool>(x: f64) -> f64 {
         overflow(UP)
     } else if x < -1075.0 {
         underflow(UP)
-    } else if x.abs() < TINY_EXP {
-        // 2^x = e^(x ln 2), and |x ln 2| < |x|.
-        near_one(x, UP)
     } else if let Some(r) = fast_exp2_dir::<FMA>(x, UP) {
         r
     } else {
@@ -972,8 +991,12 @@ fn exp2_near_with<const FMA: bool>(x: f64) -> f64 {
 /// 10^x rounded toward +∞ if `up` and toward -∞ otherwise.
 #[inline(always)]
 pub(crate) fn exp10(x: f64, up: bool) -> f64 {
-    // A copy per direction, where `up` is a constant.
-    if up {
+    // The rule for a tiny |x| first, as in `exp`.
+    if TINY_IN_CALLER && x.abs() < TINY_EXP10 {
+        // 10^x = e^(x ln 10), and |x ln 10| < 4 |x| < 2^-54.
+        near_one(x, up)
+    } else if up {
+        // A copy per direction, where `up` is a constant.
         exp10_dir::<true>(x)
     } else {
         exp10_dir::<false>(x)
@@ -981,14 +1004,18 @@ pub(crate) fn exp10(x: f64, up: bool) -> f64 {
 }
 
 level_entry! {
-    // `exp10` toward +∞ if `UP` and toward -∞ otherwise.
+    // `exp10` toward +∞ if `UP` and toward -∞ otherwise, for an x that `exp10` has not
+    // returned for: NaN, ±∞, or |x| >= `TINY_EXP10`, or any x without `TINY_IN_CALLER`.
     fn exp10_dir<const UP: bool>(x: f64) -> f64 = exp10_dir_with;
 }
 
 // The body of `exp10_dir`, with `FMA` for the products (`level_entry!`).
 #[inline(always)]
 fn exp10_dir_with<const FMA: bool, const UP: bool>(x: f64) -> f64 {
-    if x.is_nan() || x == f64::INFINITY {
+    if !TINY_IN_CALLER && x.abs() < TINY_EXP10 {
+        // As in `exp10`.
+        near_one(x, UP)
+    } else if x.is_nan() || x == f64::INFINITY {
         x
     } else if x == f64::NEG_INFINITY {
         0.0
@@ -998,9 +1025,6 @@ fn exp10_dir_with<const FMA: bool, const UP: bool>(x: f64) -> f64 {
     } else if x <= -324.0 {
         // 10^x < 2^-1075, as -324 < -1075 log10(2) = -323.6...
         underflow(UP)
-    } else if x.abs() < TINY_EXP10 {
-        // 10^x = e^(x ln 10), and |x ln 10| < 4 |x| < 2^-54.
-        near_one(x, UP)
     } else if (1.0..=22.0).contains(&x) && x == x.floor() {
         POW10[x as usize]
     } else if let Some(r) = fast_exp10_dir::<FMA>(x, UP) {

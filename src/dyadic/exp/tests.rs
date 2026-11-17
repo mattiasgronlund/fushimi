@@ -216,44 +216,44 @@ fn regressions_hold() {
     }
 }
 
-// Each rule of `exp.rs` at its threshold and the 3 `f64`s on each side of it, the thresholds of
-// the bounds of `known`, where the evaluations have to give the same roundings, and the
-// special values.
-#[test]
-fn rules_at_their_thresholds() {
-    let tiny_hyp = 1.0 / 67_108_864.0;
-    let thresholds: [&[f64]; 6] = [
-        &[
-            710.0,
-            709.782712893384,
-            -746.0,
-            -744.4400719213812,
-            -745.1332191019412,
-            f64::EPSILON / 4.0,
-            f64::EPSILON / 2.0,
-        ],
-        &[
-            1024.0,
-            -1075.0,
-            -1074.0,
-            -1022.0,
-            f64::EPSILON / 4.0,
-            f64::EPSILON / 2.0,
-        ],
-        &[
-            309.0,
-            308.25471555991675,
-            -324.0,
-            -323.3062153431158,
-            f64::EPSILON / 16.0,
-            f64::EPSILON / 8.0,
-            1.0,
-            22.0,
-        ],
-        &[711.0, 710.475860073944, tiny_hyp, SMALL, 1.0],
-        &[711.0, 710.475860073944, tiny_hyp, SMALL],
-        &[19.0, 18.714973875118524, tiny_hyp, SMALL, 1.0],
-    ];
+// The thresholds of the rules of `exp.rs` for the directions, of each function of `FUNCTIONS`,
+// and those of the bounds of `known`, where the evaluations have to give the same roundings.
+const RULE_THRESHOLDS: [&[f64]; 6] = [
+    &[
+        710.0,
+        709.782712893384,
+        -746.0,
+        -744.4400719213812,
+        -745.1332191019412,
+        f64::EPSILON / 4.0,
+        f64::EPSILON / 2.0,
+    ],
+    &[
+        1024.0,
+        -1075.0,
+        -1074.0,
+        -1022.0,
+        f64::EPSILON / 4.0,
+        f64::EPSILON / 2.0,
+    ],
+    &[
+        309.0,
+        308.25471555991675,
+        -324.0,
+        -323.3062153431158,
+        f64::EPSILON / 16.0,
+        f64::EPSILON / 8.0,
+        1.0,
+        22.0,
+    ],
+    &[711.0, 710.475860073944, TINY_HYP, SMALL, 1.0],
+    &[711.0, 710.475860073944, TINY_HYP, SMALL],
+    &[19.0, 18.714973875118524, TINY_HYP, SMALL, 1.0],
+];
+
+// The arguments of `RULE_THRESHOLDS` for the function `i` and the 3 `f64`s on each side of each,
+// and the special values, each with both signs, and NaN.
+fn at_rule_thresholds(i: usize) -> Vec<f64> {
     let special = [
         0.0,
         f64::from_bits(1),
@@ -262,18 +262,28 @@ fn rules_at_their_thresholds() {
         f64::MAX,
         f64::INFINITY,
     ];
-    for (i, thresholds) in thresholds.iter().enumerate() {
-        for &x in *thresholds {
-            for x in around(x, 3) {
-                check(i, x);
-                check(i, -x);
-            }
+    let mut v = Vec::new();
+    for &x in RULE_THRESHOLDS[i] {
+        for x in around(x, 3) {
+            v.extend([x, -x]);
         }
-        for x in special {
+    }
+    for x in special {
+        v.extend([x, -x]);
+    }
+    v.push(f64::NAN);
+    v
+}
+
+// Each rule of `exp.rs` for the directions at its threshold and the 3 `f64`s on each side of
+// it, the thresholds of the bounds of `known`, where the evaluations have to give the same
+// roundings, and the special values (`at_rule_thresholds`).
+#[test]
+fn rules_at_their_thresholds() {
+    for i in 0..FUNCTIONS.len() {
+        for x in at_rule_thresholds(i) {
             check(i, x);
-            check(i, -x);
         }
-        check(i, f64::NAN);
     }
 }
 
@@ -735,25 +745,61 @@ fn fast_path_agrees_with_kernel() {
     }
 }
 
+// `exp`, `exp2` or `exp10` at `x`, toward -∞ and toward +∞, with `down` and `up` for the
+// bodies of its entries `exp_dir::<false>` and `exp_dir::<true>` or the others:
+// `rule(x, false)` and `rule(x, true)` where |x| < `tiny`, which the function returns before
+// it calls its entries (or, without `TINY_IN_CALLER`, the body returns by its first test), and
+// `down(x)` and `up(x)` at the other x, the only ones at which the function runs the other
+// tests of the body.
+fn tiny_first(
+    x: f64,
+    tiny: f64,
+    rule: Directed,
+    down: fn(f64) -> f64,
+    up: fn(f64) -> f64,
+) -> [f64; 2] {
+    if x.abs() < tiny {
+        [rule(x, false), rule(x, true)]
+    } else {
+        [down(x), up(x)]
+    }
+}
+
 // The function `i` of `FUNCTIONS` at `x`, toward -∞, toward +∞ and to nearest, by the bodies of
-// its entries with `FMA` for the products (`level_entry!`).
+// its entries with `FMA` for the products (`level_entry!`), and for `exp`, `exp2` and `exp10`
+// toward -∞ and toward +∞ by their rule for a tiny |x| where it applies (`tiny_first`).
 fn bodies<const FMA: bool>(i: usize, x: f64) -> [f64; 3] {
     match i {
-        EXP => [
-            exp_dir_with::<FMA, false>(x),
-            exp_dir_with::<FMA, true>(x),
-            exp_near_with::<FMA>(x),
-        ],
-        EXP2 => [
-            exp2_dir_with::<FMA, false>(x),
-            exp2_dir_with::<FMA, true>(x),
-            exp2_near_with::<FMA>(x),
-        ],
-        EXP10 => [
-            exp10_dir_with::<FMA, false>(x),
-            exp10_dir_with::<FMA, true>(x),
-            exp10_near_with::<FMA>(x),
-        ],
+        EXP => {
+            let [down, up] = tiny_first(
+                x,
+                TINY_EXP,
+                near_one,
+                exp_dir_with::<FMA, false>,
+                exp_dir_with::<FMA, true>,
+            );
+            [down, up, exp_near_with::<FMA>(x)]
+        }
+        EXP2 => {
+            let [down, up] = tiny_first(
+                x,
+                TINY_EXP,
+                near_one,
+                exp2_dir_with::<FMA, false>,
+                exp2_dir_with::<FMA, true>,
+            );
+            [down, up, exp2_near_with::<FMA>(x)]
+        }
+        EXP10 => {
+            let [down, up] = tiny_first(
+                x,
+                TINY_EXP10,
+                near_one,
+                exp10_dir_with::<FMA, false>,
+                exp10_dir_with::<FMA, true>,
+            );
+            [down, up, exp10_near_with::<FMA>(x)]
+        }
         SINH => [
             sinh_dir_with::<FMA, false>(x),
             sinh_dir_with::<FMA, true>(x),
@@ -803,11 +849,12 @@ fn assert_copies_agree(what: &str, copies: [[f64; 3]; 3]) {
 
 // The copies of the exponentials and hyperbolic functions without an FMA and with one, and the
 // entries, give the same `f64`s, bit for bit, in both directions and to nearest, on the random
-// arguments of `fast_path_agrees_with_kernel` and of `fast_hyp_range_random` (`HYP_BRANCHES`)
-// and on `regressions()`. `rocq/theories/FastExp.v` and `rocq/theories/FastHyp.v` prove it of
-// the fast paths (`fast_exp_dir_fma`, `fast_sinh_dir_fma` and the others) at the arguments that
-// the entries give them; this test checks the code as compiled, where the entries call the copy
-// built with the target feature `fma` in a build with the dispatch, on a CPU that has it.
+// arguments of `fast_path_agrees_with_kernel` and of `fast_hyp_range_random` (`HYP_BRANCHES`),
+// on those of `rules_at_their_thresholds` and on `regressions()`. `rocq/theories/FastExp.v`
+// and `rocq/theories/FastHyp.v` prove it of the fast paths (`fast_exp_dir_fma`,
+// `fast_sinh_dir_fma` and the others) at the arguments that the entries give them; this test
+// checks the code as compiled, where the entries call the copy built with the target feature
+// `fma` in a build with the dispatch, on a CPU that has it.
 #[test]
 fn copies_agree() {
     let mut rng = Rng(876);
@@ -822,6 +869,11 @@ fn copies_agree() {
             let t = in_range(&mut rng, a, b, n % 2 == 1);
             let x = either_sign(&mut rng, t);
             assert_copies_agree(&format!("{}({x:e})", FUNCTIONS[i].0), copies(i, x));
+        }
+    }
+    for (i, (name, _)) in FUNCTIONS.iter().enumerate() {
+        for x in at_rule_thresholds(i) {
+            assert_copies_agree(&format!("{name}({x:e})"), copies(i, x));
         }
     }
     for (name, x) in regressions() {

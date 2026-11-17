@@ -445,13 +445,13 @@ Lemma exp_dir_post :
   post up (exp (B2R x)) v.
 Proof.
 intros z post Hp Hz x up v Fx H. unfold DyadicExp.exp_dir_with in H.
+destruct (lt (fabs x) DyadicExp.tiny_exp) eqn:G3; cbv iota in H.
+{ injection H as <-. apply Hp. exact (exp_tiny_rule x up Fx G3). }
 rewrite (fin_not_nan x Fx), (fin_neq_inf x Fx), (fin_neq_ninf x Fx) in H. cbn [orb] in H.
 destruct (ge x (from_bits 0x4086300000000000)) eqn:G1; cbv iota in H.
 { injection H as <-. apply Hp. exact (exp_overflow_rule x up Fx G1). }
 destruct (le x (from_bits 0xc087500000000000)) eqn:G2; cbv iota in H.
 { injection H as <-. apply Hp. exact (exp_underflow_rule x up Fx G2). }
-destruct (lt (fabs x) DyadicExp.tiny_exp) eqn:G3; cbv iota in H.
-{ injection H as <-. apply Hp. exact (exp_tiny_rule x up Fx G3). }
 destruct (DyadicExp.fast_exp_dir false x up) eqn:F; cbv iota in H.
 { injection H as <-. apply Hp. exact (fast_exp_dir_correct false x up _ Fx F). }
 apply (Hz (DyadicExp.ev_exp x) up 1%nat); [|exact H].
@@ -484,13 +484,13 @@ Lemma exp2_dir_post :
   post up (Rexp2 (B2R x)) v.
 Proof.
 intros z post Hp Hz x up v Fx H. unfold DyadicExp.exp2_dir_with in H.
+destruct (lt (fabs x) DyadicExp.tiny_exp) eqn:G3; cbv iota in H.
+{ injection H as <-. apply Hp. exact (exp2_tiny_rule x up Fx G3). }
 rewrite (fin_not_nan x Fx), (fin_neq_inf x Fx), (fin_neq_ninf x Fx) in H. cbn [orb] in H.
 destruct (ge x (from_bits 0x4090000000000000)) eqn:G1; cbv iota in H.
 { injection H as <-. apply Hp. exact (exp2_overflow_rule x up Fx G1). }
 destruct (lt x (from_bits 0xc090cc0000000000)) eqn:G2; cbv iota in H.
 { injection H as <-. apply Hp. exact (exp2_underflow_rule x up Fx G2). }
-destruct (lt (fabs x) DyadicExp.tiny_exp) eqn:G3; cbv iota in H.
-{ injection H as <-. apply Hp. exact (exp2_tiny_rule x up Fx G3). }
 destruct (DyadicExp.fast_exp2_dir false x up) eqn:F; cbv iota in H.
 { injection H as <-. apply Hp. exact (fast_exp2_dir_correct false x up _ Fx (tiny_exp_false x Fx G3) F). }
 apply (Hz (DyadicExp.ev_exp2 x) up 1%nat); [|exact H].
@@ -523,13 +523,13 @@ Lemma exp10_dir_post :
   post up (Rexp10 (B2R x)) v.
 Proof.
 intros z post Hp Hz x up v Fx H. unfold DyadicExp.exp10_dir_with in H.
+destruct (lt (fabs x) DyadicExp.tiny_exp10) eqn:G3; cbv iota in H.
+{ injection H as <-. apply Hp. exact (exp10_tiny_rule x up Fx G3). }
 rewrite (fin_not_nan x Fx), (fin_neq_inf x Fx), (fin_neq_ninf x Fx) in H. cbn [orb] in H.
 destruct (ge x (from_bits 0x4073500000000000)) eqn:G1; cbv iota in H.
 { injection H as <-. apply Hp. exact (exp10_overflow_rule x up Fx G1). }
 destruct (le x (from_bits 0xc074400000000000)) eqn:G2; cbv iota in H.
 { injection H as <-. apply Hp. exact (exp10_underflow_rule x up Fx G2). }
-destruct (lt (fabs x) DyadicExp.tiny_exp10) eqn:G3; cbv iota in H.
-{ injection H as <-. apply Hp. exact (exp10_tiny_rule x up Fx G3). }
 destruct (le DyadicExp.one x && le x (from_bits 0x4036000000000000) && eq x (ffloor x)) eqn:G4;
   cbv iota in H.
 { injection H as <-. apply Hp. exact (exp10_int_rule x up Fx G4). }
