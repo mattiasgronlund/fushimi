@@ -781,7 +781,7 @@ fn fast_path_agrees_with_kernel() {
     }
 }
 
-// `exp`, `exp2` or `exp10` at `x`, toward -∞ and toward +∞, with `down` and `up` for the
+// `exp`, `exp2`, `exp10` or `sinh` at `x`, toward -∞ and toward +∞, with `down` and `up` for the
 // bodies of its entries `exp_dir::<false>` and `exp_dir::<true>` or the others:
 // `rule(x, false)` and `rule(x, true)` where |x| < `tiny`, which the function returns before
 // it calls its entries (or, without `TINY_IN_CALLER`, the body returns by its first test), and
@@ -802,8 +802,8 @@ fn tiny_first(
 }
 
 // The function `i` of `FUNCTIONS` at `x`, toward -∞, toward +∞ and to nearest, by the bodies of
-// its entries with `FMA` for the products (`level_entry!`), and for `exp`, `exp2` and `exp10`
-// toward -∞ and toward +∞ by their rule for a tiny |x| where it applies (`tiny_first`).
+// its entries with `FMA` for the products (`level_entry!`), and for `exp`, `exp2`, `exp10` and
+// `sinh` toward -∞ and toward +∞ by their rule for a tiny |x| where it applies (`tiny_first`).
 fn bodies<const FMA: bool>(i: usize, x: f64) -> [f64; 3] {
     match i {
         EXP => {
@@ -836,11 +836,16 @@ fn bodies<const FMA: bool>(i: usize, x: f64) -> [f64; 3] {
             );
             [down, up, exp10_near_with::<FMA>(x)]
         }
-        SINH => [
-            sinh_dir_with::<FMA, false>(x),
-            sinh_dir_with::<FMA, true>(x),
-            sinh_near_with::<FMA>(x),
-        ],
+        SINH => {
+            let [down, up] = tiny_first(
+                x,
+                TINY_HYP,
+                away,
+                sinh_dir_with::<FMA, false>,
+                sinh_dir_with::<FMA, true>,
+            );
+            [down, up, sinh_near_with::<FMA>(x)]
+        }
         COSH => [
             cosh_with::<FMA>(x, false),
             cosh_with::<FMA>(x, true),

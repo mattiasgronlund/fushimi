@@ -138,11 +138,11 @@ pub(super) const TINY_HYP: f64 = 1.0 / 67_108_864.0;
 const TINY_EXP: f64 = f64::EPSILON / 4.0;
 const TINY_EXP10: f64 = f64::EPSILON / 16.0;
 
-// Whether `exp`, `exp2` and `exp10` test for a tiny |x| themselves, before they call
+// Whether `exp`, `exp2`, `exp10` and `sinh` test for a tiny |x| themselves, before they call
 // their entry, and not its body. In a build with the dispatch (`level_entry!`), the body makes
 // the test, as its first one: the caller is compiled without the target features of the body's
 // copies, and there the test would cost every other argument a separate load of its mask and a
-// second jump, and `near_one(x, true)` would branch on the sign of x.
+// second jump, and `near_one(x, true)` and `away(x, true)` would branch on the sign of x.
 const TINY_IN_CALLER: bool = !cfg!(inari_kernel_dispatch);
 
 // 2^-27: the arguments of smaller magnitude have results within half an ulp of x, or of 1,
@@ -1075,8 +1075,12 @@ fn exp10_near_with<const FMA: bool>(x: f64) -> f64 {
 /// sinh x rounded toward +∞ if `up` and toward -∞ otherwise.
 #[inline(always)]
 pub(crate) fn sinh(x: f64, up: bool) -> f64 {
-    // A copy per direction, where `up` is a constant.
-    if up {
+    // The rule for a tiny |x| first, as in `exp`.
+    if TINY_IN_CALLER && x.abs() < TINY_HYP {
+        // x <= sinh x <= x + x^3 / 3 for x in [0, 1], and sinh is odd.
+        away(x, up)
+    } else if up {
+        // A copy per direction, where `up` is a constant.
         sinh_dir::<true>(x)
     } else {
         sinh_dir::<false>(x)
@@ -1084,27 +1088,33 @@ pub(crate) fn sinh(x: f64, up: bool) -> f64 {
 }
 
 level_entry! {
-    // `sinh` toward +∞ if `UP` and toward -∞ otherwise.
+    // `sinh` toward +∞ if `UP` and toward -∞ otherwise, for an x that `sinh` has not returned
+    // for: NaN, ±∞, or |x| >= `TINY_HYP`, or any x without `TINY_IN_CALLER`.
     fn sinh_dir<const UP: bool>(x: f64) -> f64 = sinh_dir_with;
 }
 
-// The body of `sinh_dir`, with `FMA` for the products (`level_entry!`).
+// The body of `sinh_dir`, with `FMA` for the products (`level_entry!`). One test sends NaN, ±∞
+// and |x| >= 711 to their rules, after the fast path, as in `sinh_near`.
 #[inline(always)]
 fn sinh_dir_with<const FMA: bool, const UP: bool>(x: f64) -> f64 {
-    if x.is_nan() || x.is_infinite() {
+    if !TINY_IN_CALLER && x.abs() < TINY_HYP {
+        // As in `sinh`.
+        away(x, UP)
+    } else if x.abs() < 711.0 {
+        if let Some(r) = fast_sinh_dir::<FMA>(x, UP) {
+            r
+        } else {
+            ziv(&Sinh(x), UP, 1)
+        }
+    } else if x.is_nan() || x.is_infinite() {
+        // NaN fails the test |x| < 711, as do ±∞ and the other x with |x| >= 711.
         x
     } else if x >= 711.0 {
         // sinh x > 2^1024, as 711 > 1025 ln 2 = 710.47...
         overflow(UP)
-    } else if x <= -711.0 {
-        -overflow(!UP)
-    } else if x.abs() < TINY_HYP {
-        // x <= sinh x <= x + x^3 / 3 for x in [0, 1], and sinh is odd.
-        away(x, UP)
-    } else if let Some(r) = fast_sinh_dir::<FMA>(x, UP) {
-        r
     } else {
-        ziv(&Sinh(x), UP, 1)
+        // x <= -711, and sinh is odd.
+        -overflow(!UP)
     }
 }
 

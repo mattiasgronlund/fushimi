@@ -73,8 +73,8 @@ destruct (Rlt_bool_spec (B2R t) (B2R l)) as [_|A]; [discriminate G | exact A].
 Qed.
 
 (** If [|x| < l] and [x >= l] are false for a finite [x], then [x <= -l]
-    ([ml] is [-l]): the last branch of [sinh_near_with] and of
-    [tanh_near_with]. *)
+    ([ml] is [-l]): the last branch of [sinh_dir_with], of
+    [sinh_near_with] and of [tanh_near_with]. *)
 Lemma hyp_big_neg :
   forall x l ml, is_finite x = true -> is_finite l = true -> is_finite ml = true ->
   B2R ml = (- B2R l)%R -> lt (fabs x) l = false -> ge x l = false -> le x ml = true.
@@ -347,17 +347,22 @@ Lemma sinh_dir_post :
   post up (sinh (B2R x)) v.
 Proof.
 intros z post Hp Hz x up v Fx H. unfold DyadicExp.sinh_dir_with in H.
+destruct (lt (fabs x) DyadicExp.tiny_hyp) eqn:G3; cbv iota in H.
+{ injection H as <-. apply Hp. exact (sinh_tiny_rule x up Fx G3). }
+destruct (lt (fabs x) (from_bits 0x4086380000000000)) eqn:G4; cbv iota in H.
+{ destruct (DyadicExp.fast_sinh_dir false x up) eqn:F; cbv iota in H.
+  { injection H as <-. apply Hp. exact (fast_sinh_dir_correct false x up _ Fx F). }
+  apply (Hz (DyadicExp.ev_sinh x) up 1%nat); [|exact H].
+  intros n a Hn Ha. exact (ev_sinh_correct x n a Hn Ha). }
 rewrite (fin_not_nan x Fx), (fin_neq_inf x Fx), (fin_neq_ninf x Fx) in H. cbn [orb] in H.
 destruct (ge x (from_bits 0x4086380000000000)) eqn:G1; cbv iota in H.
 { injection H as <-. apply Hp. exact (sinh_overflow_rule x up Fx G1). }
-destruct (le x (from_bits 0xc086380000000000)) eqn:G2; cbv iota in H.
-{ injection H as <-. apply Hp. exact (sinh_overflow_neg_rule x up Fx G2). }
-destruct (lt (fabs x) DyadicExp.tiny_hyp) eqn:G3; cbv iota in H.
-{ injection H as <-. apply Hp. exact (sinh_tiny_rule x up Fx G3). }
-destruct (DyadicExp.fast_sinh_dir false x up) eqn:F; cbv iota in H.
-{ injection H as <-. apply Hp. exact (fast_sinh_dir_correct false x up _ Fx F). }
-apply (Hz (DyadicExp.ev_sinh x) up 1%nat); [|exact H].
-intros n a Hn Ha. exact (ev_sinh_correct x n a Hn Ha).
+(* [|x| < 711] and [x >= 711] are false, so [x <= -711]. *)
+assert (G2 : le x (from_bits 0xc086380000000000) = true).
+{ apply (hyp_big_neg x (from_bits 0x4086380000000000));
+    [exact Fx | reflexivity | reflexivity | | exact G4 | exact G1].
+  rewrite hyp_lit_711, hyp_lit_m711. lra. }
+injection H as <-. apply Hp. exact (sinh_overflow_neg_rule x up Fx G2).
 Qed.
 
 Theorem sinh_dir_correct :

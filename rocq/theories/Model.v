@@ -2669,10 +2669,10 @@ Definition fast_tanh_near (fma : bool) (x : f64) : option f64 :=
     file, such as [exp_dir], [cosh] and [exp_near], is defined by the
     macro [level_entry!] of [src/dyadic/level.rs] from its body, a
     function such as [exp_dir_with] that takes [FMA]. The definitions
-    below transcribe the bodies; those for [exp], [exp2] and [exp10]
-    first transcribe their test for a tiny [|x|], and then the other
-    tests of the body of the entry. The functions make that test before
-    they call their entry where [TINY_IN_CALLER], which is
+    below transcribe the bodies; those for [exp], [exp2], [exp10] and
+    [sinh] first transcribe their test for a tiny [|x|], and then the
+    other tests of the body of the entry. The functions make that test
+    before they call their entry where [TINY_IN_CALLER], which is
     [!cfg!(inari_kernel_dispatch)], is true, and the body makes it as its
     first test where it is false, so that the order of the tests is the
     same in both builds.
@@ -2728,17 +2728,23 @@ Definition exp10_dir_with (x : f64) (up : bool) : option f64 :=
     Some (pow10 (to_i64 x))
   else match fast_exp10_dir false x up with Some r => Some r | None => ziv (ev_exp10 x) up 1 end.
 
-(** [pub(crate) fn sinh(x: f64, up: bool) -> f64], which calls
-    [sinh_dir::<true>(x)] if [up] and [sinh_dir::<false>(x)] otherwise:
-    this is the body of [fn sinh_dir<const UP: bool>(x: f64) -> f64] with
-    [up] for [UP], where [x.is_infinite()] is [x == f64::INFINITY || x ==
-    f64::NEG_INFINITY]. *)
+(** [pub(crate) fn sinh(x: f64, up: bool) -> f64], which returns
+    [away(x, up)] if [TINY_IN_CALLER && x.abs() < TINY_HYP] and otherwise
+    calls [sinh_dir::<true>(x)] if [up] and [sinh_dir::<false>(x)]
+    otherwise. The body of [fn sinh_dir<const UP: bool>(x: f64) -> f64]
+    first returns [away(x, UP)] if
+    [!TINY_IN_CALLER && x.abs() < TINY_HYP], and then makes the other
+    tests. So in both builds (see above) this is the test
+    [x.abs() < TINY_HYP] followed by the other tests of that body, with
+    [up] for [UP], where [x.is_infinite()] is
+    [x == f64::INFINITY || x == f64::NEG_INFINITY]. *)
 Definition sinh_dir_with (x : f64) (up : bool) : option f64 :=
-  if is_nan x || (eq x infinity || eq x neg_infinity) then Some x
+  if lt (fabs x) tiny_hyp then Some (away x up)
+  else if lt (fabs x) (from_bits 0x4086380000000000) (* 711.0 *) then
+    match fast_sinh_dir false x up with Some r => Some r | None => ziv (ev_sinh x) up 1 end
+  else if is_nan x || (eq x infinity || eq x neg_infinity) then Some x
   else if ge x (from_bits 0x4086380000000000) (* 711.0 *) then Some (overflow up)
-  else if le x (from_bits 0xc086380000000000) (* -711.0 *) then Some (opp (overflow (negb up)))
-  else if lt (fabs x) tiny_hyp then Some (away x up)
-  else match fast_sinh_dir false x up with Some r => Some r | None => ziv (ev_sinh x) up 1 end.
+  else Some (opp (overflow (negb up))).
 
 (** [pub(crate) fn cosh(x: f64, up: bool) -> f64] *)
 Definition cosh_dir_with (x : f64) (up : bool) : option f64 :=
