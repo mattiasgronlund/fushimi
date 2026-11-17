@@ -212,8 +212,11 @@ fn cbrt_step<const FMA: bool>(y: f64, zz: f64, rr: f64) -> Option<(f64, f64)> {
 // (h, l, e) with h = RN(h + l), |cbrt |x| 2^-e - (h + l)| <= 2^-65 and e in [-358, 341], for a
 // finite nonzero x, or `None` where `cbrt_step` returns it. [CORE-MATH]
 // `rocq/theories/FastCbrt.v` proves the bound (`fast_cbrt_correct`), from
-// `rocq/theories/FastCbrtReduce.v` for the reduction.
-#[cfg_attr(inari_kernel_dispatch, inline(always))]
+// `rocq/theories/FastCbrtReduce.v` for the reduction. Always inlined: without it, the builds
+// without `cfg(inari_kernel_dispatch)` that were checked (for Haswell, AArch64, wasm32, and
+// x86-64 with `force-generic`) kept it out of line, and on x86-64 each call returned the
+// `Option` through memory, which the caller then tested.
+#[inline(always)]
 fn fast_cbrt<const FMA: bool>(x: f64) -> Option<(f64, f64, i64)> {
     // |x| = z 2^(e - 1023) with z in [1, 2) from its bits, after shifting the significand of a
     // subnormal to the top.
