@@ -38,7 +38,8 @@ pub(crate) use super::lanewise::add_ru;
 // Without `avx` and `fma`, `lanewise::add_ru` can be the build's own backend function (that of
 // `sse42`), compiled without those features. Called from the copy of `V3` in
 // `src/simd/token.rs`, it took its vectors in memory from every caller, the build's operations
-// too (seen in an `x86-64-v2` build), so the copy inlines its body instead.
+// too (seen in an `x86-64-v2` build, when it took Rust's ABI), so the copy inlines its body
+// instead.
 #[cfg(not(all(target_feature = "avx", target_feature = "fma")))]
 pub(crate) use super::lanewise::add_ru_body as add_ru;
 #[cfg(all(target_feature = "avx", target_feature = "fma"))]
@@ -50,13 +51,26 @@ pub(crate) use super::lanewise::{sub1_ru, sub_ru};
 /// `div_ru([x0, x1], [y0, y1]) = [x0 / y0, x1 / y1]` rounded toward +∞.
 // Without `avx` and `fma`, this module is only the backend of the token `V3`, whose copies in
 // `src/simd/token.rs` compile it with its target features by inlining it.
-#[cfg_attr(
-    not(all(target_feature = "avx", target_feature = "fma")),
-    inline(always)
-)]
-// As the build's backend, it is out of line (see `Baseline` in `src/simd/token.rs`).
-#[cfg_attr(all(target_feature = "avx", target_feature = "fma"), inline(never))]
+#[cfg(not(all(target_feature = "avx", target_feature = "fma")))]
+#[inline(always)]
 pub(crate) fn div_ru(x: F64X2, y: F64X2) -> F64X2 {
+    div_ru_body(x, y)
+}
+
+/// `div_ru([x0, x1], [y0, y1]) = [x0 / y0, x1 / y1]` rounded toward +∞.
+// As the build's backend, it is out of line, and takes the ABI `sysv64`, which passes its
+// vectors in registers, where Rust's ABI passes them by pointer (see `Baseline` in
+// `src/simd/token.rs`).
+#[cfg(all(target_feature = "avx", target_feature = "fma"))]
+#[allow(improper_ctypes_definitions)] // `__m128d` (see `Baseline` in `src/simd/token.rs`).
+#[inline(never)]
+pub(crate) extern "sysv64-unwind" fn div_ru(x: F64X2, y: F64X2) -> F64X2 {
+    div_ru_body(x, y)
+}
+
+// The body of `div_ru`.
+#[inline(always)]
+fn div_ru_body(x: F64X2, y: F64X2) -> F64X2 {
     // See `generic::div1_ru_fast`, the FMA variant.
     let q = div_rn(x, y);
     let special = is_special(x, y);
@@ -135,13 +149,26 @@ pub(crate) fn mul_add_ru(a: F64X2, b: F64X2, c: F64X2) -> F64X2 {
 }
 
 /// `mul_ru([x0, x1], [y0, y1]) = [x0 * y0, x1 * y1]` rounded toward +∞.
-#[cfg_attr(
-    not(all(target_feature = "avx", target_feature = "fma")),
-    inline(always)
-)]
-// As the build's backend, it is out of line (see `Baseline` in `src/simd/token.rs`).
-#[cfg_attr(all(target_feature = "avx", target_feature = "fma"), inline(never))]
+#[cfg(not(all(target_feature = "avx", target_feature = "fma")))]
+#[inline(always)]
 pub(crate) fn mul_ru(x: F64X2, y: F64X2) -> F64X2 {
+    mul_ru_body(x, y)
+}
+
+/// `mul_ru([x0, x1], [y0, y1]) = [x0 * y0, x1 * y1]` rounded toward +∞.
+// As the build's backend, it is out of line, and takes the ABI `sysv64`, which passes its
+// vectors in registers, where Rust's ABI passes them by pointer (see `Baseline` in
+// `src/simd/token.rs`).
+#[cfg(all(target_feature = "avx", target_feature = "fma"))]
+#[allow(improper_ctypes_definitions)] // `__m128d` (see `Baseline` in `src/simd/token.rs`).
+#[inline(never)]
+pub(crate) extern "sysv64-unwind" fn mul_ru(x: F64X2, y: F64X2) -> F64X2 {
+    mul_ru_body(x, y)
+}
+
+// The body of `mul_ru`.
+#[inline(always)]
+fn mul_ru_body(x: F64X2, y: F64X2) -> F64X2 {
     // See `generic::mul1_ru_fast`.
     let p = mul_rn(x, y);
     let special = is_special(x, y);

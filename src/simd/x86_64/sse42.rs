@@ -23,7 +23,7 @@ use super::lanewise::{
     lane0, mul_rn, not, or_generic, select, splat_i64, sqrt_rn, step_up, sub_i64, two_sum_err,
     zero,
 };
-use super::{add_rn, all, and, eq, extract, gt, lt, or, splat, sub_rn, xor, F64X2};
+use super::{add_rn, all, and, constant, eq, extract, gt, lt, or, splat, sub_rn, xor, F64X2};
 use crate::simd::generic;
 use std::arch::x86_64::*;
 
@@ -34,36 +34,80 @@ pub(crate) use super::lanewise::{sqrt1_rd_mxcsr, sqrt1_ru_mxcsr};
 /// `div_ru([x0, x1], [y0, y1]) = [x0 / y0, x1 / y1]` rounded toward +∞.
 // Without `sse4.2`, this module is only the backend of the token `V2`, whose copies in
 // `src/simd/token.rs` compile it with its target features by inlining it.
-#[cfg_attr(not(target_feature = "sse4.2"), inline(always))]
-// As the build's backend, it is out of line (see `Baseline` in `src/simd/token.rs`).
-#[cfg_attr(target_feature = "sse4.2", inline(never))]
+#[cfg(not(target_feature = "sse4.2"))]
+#[inline(always)]
 pub(crate) fn div_ru(x: F64X2, y: F64X2) -> F64X2 {
+    div_ru_body(x, y)
+}
+
+/// `div_ru([x0, x1], [y0, y1]) = [x0 / y0, x1 / y1]` rounded toward +∞.
+// As the build's backend, it is out of line, and takes the ABI `sysv64`, which passes its
+// vectors in registers, where Rust's ABI passes them by pointer (see `Baseline` in
+// `src/simd/token.rs`).
+#[cfg(target_feature = "sse4.2")]
+#[allow(improper_ctypes_definitions)] // `__m128d` (see `Baseline` in `src/simd/token.rs`).
+#[inline(never)]
+pub(crate) extern "sysv64-unwind" fn div_ru(x: F64X2, y: F64X2) -> F64X2 {
+    div_ru_body(x, y)
+}
+
+// The body of `div_ru`.
+#[inline(always)]
+fn div_ru_body(x: F64X2, y: F64X2) -> F64X2 {
     // See `generic::div1_ru_fast`, Dekker's variant.
     let q = div_rn(x, y);
     let special = is_special(x, y);
     let exact = and(exponent_in(q, -1022, 1023), exponent_gt(x, -968));
-    let p = mul_rn(q, y);
     let dekker = and(
         and(exponent_le(q, 995), exponent_le(y, 995)),
         exponent_le(x, 1021),
     );
-    let r = sub_rn(sub_rn(x, p), two_prod_err(q, y, p));
     let ok = or(special, and(exact, dekker));
+    // Branch before the rest of the fast path: when `or_generic` took the result of
+    // the fast path after it, LLVM computed that result before the branch in the
+    // out-of-line `div_ru` above, so the slow path paid for it too.
+    if !all(ok) {
+        // Here `all(ok)` is false, so `or_generic` returns the result of the generic
+        // backend, not `q`. In a build for `x86-64` with one codegen unit, where this
+        // body is inlined into the `sse4.2` copies of the token `V2`,
+        // `generic::div_ru` took its arguments by pointer from every caller when it
+        // was called here directly, or through a helper smaller than `or_generic`,
+        // and in registers when called through `or_generic`.
+        return or_generic(ok, q, || generic::div_ru(extract(x), extract(y)));
+    }
+    let p = mul_rn(q, y);
+    let r = sub_rn(sub_rn(x, p), two_prod_err(q, y, p));
     // x / y > q ⟺ r / y > 0. y is nonzero and r is not NaN unless special.
     let up = or(
         and(gt(r, zero()), gt(y, zero())),
         and(lt(r, zero()), lt(y, zero())),
     );
-    let res = select(andnot(up, special), step_up(q), q);
-    or_generic(ok, res, || generic::div_ru(extract(x), extract(y)))
+    select(andnot(up, special), step_up(q), q)
 }
 
 /// `mul_add_ru([x0, x1], [y0, y1], [z0, z1]) = [x0 * y0 + z0, x1 * y1 + z1]`
 /// rounded toward +∞ (with a single rounding).
-#[cfg_attr(not(target_feature = "sse4.2"), inline(always))]
-// As the build's backend, it is out of line (see `Baseline` in `src/simd/token.rs`).
-#[cfg_attr(target_feature = "sse4.2", inline(never))]
+#[cfg(not(target_feature = "sse4.2"))]
+#[inline(always)]
 pub(crate) fn mul_add_ru(a: F64X2, b: F64X2, c: F64X2) -> F64X2 {
+    mul_add_ru_body(a, b, c)
+}
+
+/// `mul_add_ru([x0, x1], [y0, y1], [z0, z1]) = [x0 * y0 + z0, x1 * y1 + z1]`
+/// rounded toward +∞ (with a single rounding).
+// As the build's backend, it is out of line, and takes the ABI `sysv64`, which passes its
+// vectors in registers, where Rust's ABI passes them by pointer (see `Baseline` in
+// `src/simd/token.rs`).
+#[cfg(target_feature = "sse4.2")]
+#[allow(improper_ctypes_definitions)] // `__m128d` (see `Baseline` in `src/simd/token.rs`).
+#[inline(never)]
+pub(crate) extern "sysv64-unwind" fn mul_add_ru(a: F64X2, b: F64X2, c: F64X2) -> F64X2 {
+    mul_add_ru_body(a, b, c)
+}
+
+// The body of `mul_add_ru`.
+#[inline(always)]
+fn mul_add_ru_body(a: F64X2, b: F64X2, c: F64X2) -> F64X2 {
     // See `generic::mul_add1_ru_fast` for the algorithm (ErrFma) and its
     // hypotheses, with the FMA emulated by `generic::mul_add1_rn_emulated`.
     let u1 = mul_rn(a, b);
@@ -72,13 +116,8 @@ pub(crate) fn mul_add_ru(a: F64X2, b: F64X2, c: F64X2) -> F64X2 {
     let t2 = two_sum_err(c, u1, t1);
     let r1 = add_rn(t1, add_odd(t2, u2));
     let alpha1 = add_rn(c, u2);
-    let alpha2 = two_sum_err(c, u2, alpha1);
     let beta1 = add_rn(u1, alpha1);
-    let beta2 = two_sum_err(u1, alpha1, beta1);
-    let gamma = add_rn(sub_rn(beta1, r1), beta2);
-    let err = add_rn(gamma, alpha2);
 
-    let finite_ab = and(is_finite(a), is_finite(b));
     let special = or(not(is_finite(c)), is_special(a, b));
     let not_tiny = |x: F64X2, e_min: i64| or(eq(x, zero()), exponent_gt(x, e_min - 1));
     let ok = or(
@@ -94,21 +133,44 @@ pub(crate) fn mul_add_ru(a: F64X2, b: F64X2, c: F64X2) -> F64X2 {
             ),
         ),
     );
+    // Branch before the rest of the fast path, as in `div_ru_body`.
+    if !all(ok) {
+        let r = generic::mul_add_ru(extract(a), extract(b), extract(c));
+        return constant(r[0], r[1]);
+    }
+    let alpha2 = two_sum_err(c, u2, alpha1);
+    let beta2 = two_sum_err(u1, alpha1, beta1);
+    let gamma = add_rn(sub_rn(beta1, r1), beta2);
+    let err = add_rn(gamma, alpha2);
+    let finite_ab = and(is_finite(a), is_finite(b));
     // `generic::mul_add1_special`: a * b is finite (though RN(a * b) may
     // overflow) and c is not, or else a * b is exact and adding c is exact too.
     let special_r = select(andnot(finite_ab, is_finite(c)), c, add_rn(mul_rn(a, b), c));
     // If err > 0, then r1 is inexact and thus nonzero.
-    let r = select(special, special_r, select(gt(err, zero()), step_up(r1), r1));
-    or_generic(ok, r, || {
-        generic::mul_add_ru(extract(a), extract(b), extract(c))
-    })
+    select(special, special_r, select(gt(err, zero()), step_up(r1), r1))
 }
 
 /// `mul_ru([x0, x1], [y0, y1]) = [x0 * y0, x1 * y1]` rounded toward +∞.
-#[cfg_attr(not(target_feature = "sse4.2"), inline(always))]
-// As the build's backend, it is out of line (see `Baseline` in `src/simd/token.rs`).
-#[cfg_attr(target_feature = "sse4.2", inline(never))]
+#[cfg(not(target_feature = "sse4.2"))]
+#[inline(always)]
 pub(crate) fn mul_ru(x: F64X2, y: F64X2) -> F64X2 {
+    mul_ru_body(x, y)
+}
+
+/// `mul_ru([x0, x1], [y0, y1]) = [x0 * y0, x1 * y1]` rounded toward +∞.
+// As the build's backend, it is out of line, and takes the ABI `sysv64`, which passes its
+// vectors in registers, where Rust's ABI passes them by pointer (see `Baseline` in
+// `src/simd/token.rs`).
+#[cfg(target_feature = "sse4.2")]
+#[allow(improper_ctypes_definitions)] // `__m128d` (see `Baseline` in `src/simd/token.rs`).
+#[inline(never)]
+pub(crate) extern "sysv64-unwind" fn mul_ru(x: F64X2, y: F64X2) -> F64X2 {
+    mul_ru_body(x, y)
+}
+
+// The body of `mul_ru`.
+#[inline(always)]
+fn mul_ru_body(x: F64X2, y: F64X2) -> F64X2 {
     // See `generic::mul1_ru_fast`.
     let p = mul_rn(x, y);
     let special = is_special(x, y);

@@ -17,10 +17,20 @@ use std::arch::x86_64::*;
 /// `add_ru([x0, x1], [y0, y1]) = [x0 + y0, x1 + y1]` rounded toward +∞.
 // Without `sse4.2`, this module is only the backend of the tokens `V2` and `V3`, whose copies
 // in `src/simd/token.rs` compile it with their target features by inlining it.
-#[cfg_attr(not(target_feature = "sse4.2"), inline(always))]
-// As the build's backend, it is out of line (see `Baseline` in `src/simd/token.rs`).
-#[cfg_attr(target_feature = "sse4.2", inline(never))]
+#[cfg(not(target_feature = "sse4.2"))]
+#[inline(always)]
 pub(crate) fn add_ru(x: F64X2, y: F64X2) -> F64X2 {
+    add_ru_body(x, y)
+}
+
+/// `add_ru([x0, x1], [y0, y1]) = [x0 + y0, x1 + y1]` rounded toward +∞.
+// As the build's backend, it is out of line, and takes the ABI `sysv64`, which passes its
+// vectors in registers, where Rust's ABI passes them by pointer (see `Baseline` in
+// `src/simd/token.rs`).
+#[cfg(target_feature = "sse4.2")]
+#[allow(improper_ctypes_definitions)] // `__m128d` (see `Baseline` in `src/simd/token.rs`).
+#[inline(never)]
+pub(crate) extern "sysv64-unwind" fn add_ru(x: F64X2, y: F64X2) -> F64X2 {
     add_ru_body(x, y)
 }
 

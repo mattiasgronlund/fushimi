@@ -282,30 +282,50 @@ pub fn dispatch<W: WithLevel>(w: W) -> W::Output {
 // `x.add_with(Baseline, y)`).
 //
 // A function that a user's crate can inline or instantiate, such as `add_with`, can call only
-// functions that the crate exports, and Rust's ABI passes the vector arguments and result of an
-// exported function by pointer (the copies of `V2` and `V3` below that are out of line pass them
-// in registers). Inside the crate, LLVM can pass them in registers instead. So `add_ru`, `div_ru`
-// and `mul_ru`, which the crate's operations call out of line (on aarch64 only `mul_ru`, see
-// below), are called here from methods without `#[inline]`, which the crate exports in their
-// place. LLVM inlines these small methods into the crate's operations, which then call the
+// functions that the crate exports. So `add_ru`, `div_ru` and `mul_ru`, which the crate's
+// operations call out of line (on aarch64 only `mul_ru`, see below, and on wasm32 with `simd128`
+// none of them), are called here from methods without `#[inline]`, which the crate exports in
+// their place. LLVM inlines these small methods into the crate's operations, which then call the
 // backend functions as before. Where the portable, `sse42` or `fma` backend is the build's, the
 // backend functions are `#[inline(never)]`, as otherwise LLVM would inline each into its only
-// caller, the method. Making the methods `#[inline(always)]` there, so that a user's crate calls
-// the backend functions without them, made the crate export the backend functions, and its own
-// operations then passed them their vectors by pointer, at up to 9 more instructions per call
-// (21 with one codegen unit; cachegrind, row 136). On aarch64 only `mul_ru` is
-// `#[inline(never)]`: there LLVM inlines `add_ru` and `div_ru` into the methods and into the
-// crate's operations, which then take fewer instructions (counted under QEMU), whereas inlining
-// `mul_ru` gives `Interval::mul` a stack frame and more instructions. `sqrt_rd_ru` has one caller
-// in the crate's operations, which inlines it, and is `#[inline(always)]` where the portable,
-// `sse42`, `fma` or `aarch64` backend is the build's, as is `mul_add_ru` where `fma` or
-// `aarch64` is. Where `sse42` is the backend, the crate calls `mul_add_ru` out of line, as
-// `add_ru`. The portable `mul_add_ru`, which is also the slow path of those of `fma`, `sse42` and
-// `aarch64`, has no `#[inline]`: where it is the build's backend, `#[inline(always)]` cost
-// `Interval::mul_add` 1 to 3 more instructions per call in a build for `x86-64` in Cargo's
-// default release profile, and none with one codegen unit (cachegrind, row 136).
-// (`src/__bench.rs`, compiled only with the feature `__bench`, for the benchmarks, also calls
-// `mul_add_ru`.)
+// caller, the method. Making the methods `#[inline(always)]` there (with that of `mul_add_ru`
+// where `sse42` is the backend, see below), so that a user's crate calls the backend functions
+// without them, made the crate export the backend functions, and its own operations then called
+// them through the global offset table. Where `fma` or `sse42` is the backend, that cost 2 to 4
+// more instructions per `Interval::mul`, and per `Interval::mul_add` where `sse42` is, and none
+// per `Interval::add` or `Interval::div`, whereas a user's loop of `*_with` calls that run the
+// build's backend ran 14 to 16 fewer instructions per `add_with`, `mul_with` or `div_with` (29
+// to 31 for a `mul_with` of two intervals that have 0 in their interiors), but 3 to 5 more per
+// `div_with` by an interval that has 0 in its interior (cachegrind, in Cargo's default release
+// profile, row 143). Where the portable backend is, it cost up to 6 more instructions per call
+// in a build for `x86-64` (21 with one codegen unit; cachegrind, row 136).
+//
+// On aarch64 only `mul_ru` is `#[inline(never)]`: there LLVM inlines `add_ru` and `div_ru` into
+// the methods and into the crate's operations, which then take fewer instructions (counted under
+// QEMU), whereas inlining `mul_ru` gives `Interval::mul` a stack frame and more instructions.
+// `sqrt_rd_ru` has one caller in the crate's operations, which inlines it, and is
+// `#[inline(always)]` where the portable, `sse42`, `fma` or `aarch64` backend is the build's, as
+// is `mul_add_ru` where `fma` or `aarch64` is. Where `sse42` is the backend, the crate calls
+// `mul_add_ru` out of line, as `add_ru`. The portable `mul_add_ru`, which is also the slow path
+// of those of `fma`, `sse42` and `aarch64`, has no `#[inline]`: where it is the build's backend,
+// `#[inline(always)]` cost `Interval::mul_add` 1 to 3 more instructions per call in a build for
+// `x86-64` in Cargo's default release profile, and none with one codegen unit (cachegrind, row
+// 136). (`src/__bench.rs`, compiled only with the feature `__bench`, for the benchmarks, also
+// calls `mul_add_ru`.)
+//
+// The out-of-line `add_ru`, `div_ru` and `mul_ru` of the `fma` and `sse42` backends (and
+// `mul_add_ru` of `sse42`) take the ABI `sysv64`, as do the out-of-line copies of vector
+// functions that `V2` and `V3` have below. It passes and returns each `__m128d` in an `xmm`
+// register on every x86-64 target, whether the crate exports the function or not, where Rust's
+// ABI passes it by pointer. The lint `improper_ctypes_definitions` flags `__m128d`, whose layout
+// Rust does not specify for C, but only Rust code calls these functions. `-unwind` lets a panic
+// unwind through them, as through a function of Rust's ABI. The portable backend's `add_ru`,
+// `div_ru` and `mul_ru` take Rust's ABI. In a build for `x86-64`, they took each `[f64; 2]` by
+// pointer in Cargo's default release profile, and in registers with one codegen unit, as LLVM
+// may change the ABI of a function that only code in its codegen unit can call. (Its
+// `mul_add_ru`, which a user's crate can call, took them by pointer in both.) On aarch64,
+// `mul_ru` takes Rust's ABI too, and in Cargo's default release profile it took its vectors in
+// registers and returned its result through memory.
 //
 // The other functions that a `*_with` method of `Interval` or `DecInterval` reaches, and that
 // rustc would not by itself inline into a user's crate on some target, are marked for it, apart
@@ -564,32 +584,29 @@ macro_rules! level {
         // is out of line (see `@sqrt1_ru_copy`).
         //
         // The copies of vector functions that are out of line take the ABI `sysv64`, which
-        // passes and returns an `__m128d` in an `xmm` register on every x86-64 target, where
-        // Rust's ABI passes each by pointer. The copy of `mul_add_ru` takes `$abi`: `sysv64` at
-        // `V2`, and Rust's ABI at `V3`, which inlines it. With `sysv64` at `V3`, a region that
-        // evaluated a polynomial of degree 8 by Horner's rule with `mul_add_with` ran up to 19
-        // more instructions per polynomial (cachegrind, row 136). The lint
-        // `improper_ctypes_definitions` flags `__m128d`, whose layout Rust does not specify for
-        // C, but no C code calls the copies: only the methods below do. `-unwind` lets a panic
-        // unwind through them, as through a function of Rust's ABI.
+        // passes their vectors in registers (see `Baseline`, which also explains `-unwind` and
+        // the lint `improper_ctypes_definitions`). The copy of `mul_add_ru` takes `$abi`:
+        // `sysv64` at `V2`, and Rust's ABI at `V3`, which inlines it. With `sysv64` at `V3`, a
+        // region that evaluated a polynomial of degree 8 by Horner's rule with `mul_add_with` ran
+        // up to 19 more instructions per polynomial (cachegrind, row 136).
         #[cfg($copies)]
         mod $m {
             use crate::simd::x86_64::$backend;
             use std::arch::x86_64::__m128d;
 
-            #[allow(improper_ctypes_definitions)] // `__m128d` (see above).
+            #[allow(improper_ctypes_definitions)] // `__m128d` (see `Baseline`).
             $(#[target_feature(enable = $f)])*
             pub(super) extern "sysv64-unwind" fn add_ru(x: __m128d, y: __m128d) -> __m128d {
                 $backend::add_ru(x, y)
             }
 
-            #[allow(improper_ctypes_definitions)] // `__m128d` (see above).
+            #[allow(improper_ctypes_definitions)] // `__m128d` (see `Baseline`).
             $(#[target_feature(enable = $f)])*
             pub(super) extern "sysv64-unwind" fn div_ru(x: __m128d, y: __m128d) -> __m128d {
                 $backend::div_ru(x, y)
             }
 
-            #[allow(improper_ctypes_definitions)] // `__m128d` (see above).
+            #[allow(improper_ctypes_definitions)] // `__m128d` (see `Baseline`).
             $(#[$ma])*
             $(#[target_feature(enable = $f)])*
             pub(super) extern $abi fn mul_add_ru(
@@ -600,7 +617,7 @@ macro_rules! level {
                 $backend::mul_add_ru(x, y, z)
             }
 
-            #[allow(improper_ctypes_definitions)] // `__m128d` (see above).
+            #[allow(improper_ctypes_definitions)] // `__m128d` (see `Baseline`).
             $(#[target_feature(enable = $f)])*
             pub(super) extern "sysv64-unwind" fn mul_ru(x: __m128d, y: __m128d) -> __m128d {
                 $backend::mul_ru(x, y)

@@ -218,20 +218,31 @@ struct Ops {
     target_feature = "sse4.2"
 ))]
 fn binary_ops() -> Vec<(&'static str, HwBinary, Binary)> {
+    // Where the build's backend is `fma` or `sse42`, its `add_ru`, `div_ru` and `mul_ru` (and
+    // `mul_add_ru` of `sse42`) take the ABI `sysv64` (see `Baseline` in `src/simd/token.rs`), and
+    // the closures turn them into `fn` pointers of Rust's ABI.
     let mut ops: Vec<(&'static str, HwBinary, Binary)> = vec![
-        ("add_ru", super::add_ru, generic::add_ru),
+        ("add_ru", |x, y| super::add_ru(x, y), generic::add_ru),
         ("sub_ru", super::sub_ru, generic::sub_ru),
         ("sub1_ru", sub1_ru_as_binary, sub1_ru_as_binary_generic),
-        ("mul_ru/fma", super::mul_ru, generic::mul_ru_impl::<true>),
+        (
+            "mul_ru/fma",
+            |x, y| super::mul_ru(x, y),
+            generic::mul_ru_impl::<true>,
+        ),
         (
             "mul_ru/dekker",
-            super::mul_ru,
+            |x, y| super::mul_ru(x, y),
             generic::mul_ru_impl::<false>,
         ),
-        ("div_ru/fma", super::div_ru, generic::div_ru_impl::<true>),
+        (
+            "div_ru/fma",
+            |x, y| super::div_ru(x, y),
+            generic::div_ru_impl::<true>,
+        ),
         (
             "div_ru/dekker",
-            super::div_ru,
+            |x, y| super::div_ru(x, y),
             generic::div_ru_impl::<false>,
         ),
     ];
@@ -294,7 +305,8 @@ fn sub1_ru_as_binary_generic(x: generic::F64X2, y: generic::F64X2) -> generic::F
     target_feature = "sse4.2"
 ))]
 fn ternary_ops() -> Vec<(&'static str, HwTernary, Ternary)> {
-    let mul_add_ru: HwTernary = super::mul_add_ru;
+    // As in `binary_ops`.
+    let mul_add_ru: HwTernary = |x, y, z| super::mul_add_ru(x, y, z);
     let mut ops: Vec<(&'static str, HwTernary, Ternary)> = vec![
         (
             "mul_add_ru/fma",
