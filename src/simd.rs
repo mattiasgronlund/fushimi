@@ -18,7 +18,17 @@
 //! around the loop. To run it at the level of a token, call the token's
 //! [`vectorize`](Simd::vectorize). The code gets the target features of the level only where the
 //! compiler inlines it into the region that `vectorize` enters, so mark `with_level`, a large
-//! closure and the functions between them and the operations `#[inline(always)]`.
+//! closure and the functions between them and the operations `#[inline(always)]`. The compiler
+//! may also keep a short loop of operations in the region as a loop: in a crate built for
+//! `x86-64` or for Haswell in Cargo's default release profile with rustc 1.98, it did not unroll
+//! a loop of eight steps in the region of `V3` that evaluated a polynomial of degree 8 by
+//! Horner's rule, each step making a coefficient from a constant `f64` with `Interval::try_from`
+//! and calling [`Interval::mul_with`](crate::Interval::mul_with) and
+//! [`Interval::add_with`](crate::Interval::add_with), or
+//! [`Interval::mul_add_with`](crate::Interval::mul_add_with). Writing out the eight steps by hand
+//! ran 16 fewer conditional branches per evaluation, the loop's 8 and the 8 tests of `try_from`,
+//! which the compiler then made at compile time, and 78 to 180 fewer instructions, on the
+//! arguments counted with cachegrind.
 //!
 //! On x86-64, unless the feature `force-generic` is on, `V2` gives the `sse42` backend in a build
 //! without the target feature `sse4.2`, such as one for `x86-64`, the default of
