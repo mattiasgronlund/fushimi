@@ -5,6 +5,9 @@
 // paths of the generic one, and is compared with it.
 // In a build that compiles the copies of the backend functions of the tokens `V2`
 // and `V3` (`src/simd/token.rs`), `mod tokens` compares those in the same way.
+// `classify_bits_baseline` compares the `classify_bits` of `Baseline` with its
+// formula in the functions of the generic backend, in every build that compiles
+// these tests.
 // Both the FMA and the Dekker (no FMA) variants of the generic backend are tested.
 // On aarch64, the generic backend is also compared with the hardware's rounding,
 // with the rounding mode switched in FPCR (the `_fpcr` functions of `aarch64`:
@@ -169,6 +172,24 @@ impl Report {
                     expected.to_bits(),
                     actual,
                     actual.to_bits()
+                )
+                .unwrap();
+            }
+        }
+    }
+
+    // As `check`, for the codes of `classify_bits` (`src/classify.rs`): counts a case,
+    // and a mismatch unless `expected == actual`, which is shown, with the codes in
+    // binary, if it is one of the first 10.
+    fn check_code(&mut self, name: &str, args: &[f64], expected: u8, actual: u8) {
+        self.cases += 1;
+        if expected != actual {
+            self.mismatches += 1;
+            if self.mismatches <= 10 {
+                writeln!(
+                    self.examples,
+                    "{}{:?}: expected {:#06b}, got {:#06b}",
+                    name, args, expected, actual
                 )
                 .unwrap();
             }
@@ -1249,6 +1270,75 @@ fn mul_add_rn_emulated() {
     assert_eq!(r.mismatches, 0, "\n{}", r.examples);
 }
 
+// `classify_bits(x)` of `src/classify.rs` as the generic backend computes it, the reference of
+// the `classify_bits` of the tokens: the code of the class of the interval whose `rep` is `x`.
+fn classify_bits_reference(x: generic::F64X2) -> u8 {
+    let zero = generic::splat(0.0);
+    let ge_zero = generic::bitmask(generic::ge(x, zero));
+    let le_zero = generic::bitmask(generic::le(x, zero));
+    ((le_zero << 2) | ge_zero) as u8
+}
+
+// The `classify_bits` of `s`, called through the bound `S: Simd`, as
+// `Interval::classify_with` calls it.
+fn classify_bits_of<S: super::Simd>(s: S, x: &super::F64X2) -> u8 {
+    s.classify_bits(x)
+}
+
+// The `classify_bits` of `s` against `classify_bits_reference` on the vector `x`.
+fn check_classify_bits<S: super::Simd>(r: &mut Report, s: S, x: [f64; 2]) {
+    let actual = classify_bits_of(s, &super::constant(x[0], x[1]));
+    r.check_code("classify_bits", &x, classify_bits_reference(x), actual);
+}
+
+// The `classify_bits` of `Baseline` against `classify_bits_reference`, on every ordered pair of
+// `adversarial(true)` values, so that each value is seen in both lanes (among them NaN of both
+// signs, both zeros, ±∞ and subnormal numbers), and on the intervals of `fn classify` in
+// `src/classify.rs`, one or two of each of the seven classes, on which the reference is also
+// checked against the codes of `IntervalClass`. `Baseline` is the reference of the token tests:
+// the tests `classes_*` of `src/simd/token/tests.rs` compare the `classify_with` and
+// `classify2_with` of each level with `classify` and `classify2`, which call the `classify_bits`
+// of `Baseline`, so it needs a test of its own. In an x86-64 build with a backend of
+// `src/simd/x86_64/`, it runs `classify_bits` of `src/simd/x86_64.rs`, the body that `V2` and
+// `V3` run too (in their copies, or by calling that of `Baseline`), so there those tests compare
+// that body with itself. In an aarch64 or wasm32 build, it runs the `classify_bits` of
+// `src/classify.rs` with the functions of the build's backend. In a build for plain `x86-64`,
+// it runs that function with those of the generic backend, the reference itself, so there only
+// the codes of `IntervalClass` check it.
+#[test]
+fn classify_bits_baseline() {
+    use crate::{classify::IntervalClass::*, const_interval, Interval as I};
+    let s = super::Baseline;
+    let mut r = Report::default();
+    let v = adversarial(true);
+    for &x in &v {
+        for &y in &v {
+            check_classify_bits(&mut r, s, [x, y]);
+        }
+    }
+    let classes = [
+        (I::EMPTY, E),
+        (I::ENTIRE, M),
+        (const_interval!(-1.0, 1.0), M),
+        (const_interval!(-1.0, 0.0), N0),
+        (const_interval!(-1.0, -1.0), N1),
+        (const_interval!(0.0, 1.0), P0),
+        (const_interval!(1.0, 1.0), P1),
+        (I::zero(), Z),
+    ];
+    for (x, class) in classes {
+        let rep = super::extract(x.rep);
+        let reference = classify_bits_reference(rep);
+        r.check_code("IntervalClass", &rep, class as u8, reference);
+        check_classify_bits(&mut r, s, rep);
+    }
+    println!(
+        "{:18} {:>10} cases, {} mismatches",
+        "classify_bits", r.cases, r.mismatches
+    );
+    assert_eq!(r.mismatches, 0, "\n{}", r.examples);
+}
+
 // The tokens whose backend functions are copies compiled with their target
 // features (`src/simd/token.rs`), compared as `differential` compares the build's
 // backend: `V3` in the x86-64 builds that have neither both `avx` and `fma` nor
@@ -1379,13 +1469,18 @@ mod tokens {
     // `V3`, `max` is `_mm_max_pd`, which returns its second argument where either
     // is NaN or both are zeros. Generic `max` returns the first where only the
     // second is NaN, and +0 for zeros of opposite signs. So `max` is checked only
-    // on lanes without a NaN, with zeros of either sign equal.
+    // on lanes without a NaN, with zeros of either sign equal. `classify_bits` is
+    // checked against `classify_bits_reference` on every ordered pair of the
+    // values, among which are all the vectors above, as `classify_bits_baseline`
+    // checks that of `Baseline`, with which the tests `classes_*` of
+    // `src/simd/token/tests.rs` compare it.
     fn check_thin_layers<S: Simd>(s: S) {
         let mut r = Report::default();
         let v = adversarial(true);
         for (i, &x0) in v.iter().enumerate() {
             check_bits(&mut r, "splat", &[x0], generic::splat(x0), s.splat(x0));
             for (j, &y0) in v.iter().enumerate() {
+                check_classify_bits(&mut r, s, [x0, y0]);
                 // Pair each case with another one in the other lane.
                 let (x, y) = ([x0, v[(i + 7) % v.len()]], [y0, v[(j + 13) % v.len()]]);
                 let (vx, vy) = (constant(x[0], x[1]), constant(y[0], y[1]));

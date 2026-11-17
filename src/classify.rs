@@ -6,18 +6,26 @@ use std::mem::transmute;
 // `IntervalClass`). Each `bitmask` is below 4, so the casts to `u8` keep the values, and the
 // result is below 16.
 //
-// It is the `classify_bits` of `Baseline` (`src/simd/token.rs`). The body is here, in a function
-// that is not generic, rather than in `Interval::classify_with` with the methods `bitmask`, `ge`
-// and `le` of `Baseline`: in a build for plain `x86-64`, rustc 1.98.1 compiled that generic body
-// with the portable `bitmask`, `ge` and `le` to a mask in a vector register whose sign bits were
-// read back, at 11 more instructions per call of `classify` and 21 more per call of `classify2`
-// than this body, which it compiles to a flag per lane's comparison (`ucomisd` and `setae`).
+// It is the `classify_bits` of `Baseline` (`src/simd/token.rs`), except where the build's backend
+// is one of `src/simd/x86_64.rs` (`sse42`, `fma` or `avx512f`), where this function is not
+// compiled: there `Baseline`, like the copies of `V2` and `V3` in every build that has them, calls
+// the `classify_bits` of that file, which computes the same class code with one `movmskps`. The
+// body is here, in a function that is not generic, rather than in `Interval::classify_with` with
+// the methods `bitmask`, `ge` and `le` of `Baseline`: in a build for plain `x86-64`, rustc 1.98.1
+// compiled that generic body with the portable `bitmask`, `ge` and `le` to a mask in a vector
+// register whose sign bits were read back, at 11 more instructions per call of `classify` and 21
+// more per call of `classify2` than this body, which it compiles to a flag per lane's comparison
+// (`ucomisd` and `setae`).
 //
 // `x` is a reference: with `x: F64X2`, rustc 1.98.1 compiled `<Interval as Mul>::mul` and
 // `<Interval as Div>::div` of a build for plain `x86-64` with the feature `force-generic` so that
 // they copied each operand to the stack and read its lanes from the copy, at 1 to 7 more
 // instructions per call in the classes counted. With `x: &F64X2`, they read the lanes from the
 // operand.
+//
+// The `cfg` is the complement of that of the `classify_bits` of `Baseline` that calls the one of
+// `src/simd/x86_64.rs`.
+#[cfg(not(all(target_arch = "x86_64", not(inari_generic_backend), not(docsrs))))]
 #[inline]
 pub(crate) fn classify_bits(x: &F64X2) -> u8 {
     // `rocq/theories/Model.v` transcribes this function in `classify`, its transcription of

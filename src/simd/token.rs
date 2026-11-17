@@ -31,7 +31,8 @@ mod sealed {
     // `Interval::classify_with` and `classify2_with` (`src/classify.rs`) call for them. Each
     // method computes what the function of the same name computes in the backend that the token
     // gives (the table above), and `classify_bits` what `crate::classify::classify_bits` computes
-    // with the `bitmask`, `ge`, `le` and `splat` of that backend. `classify_bits` takes `x` by
+    // with the `bitmask`, `ge`, `le` and `splat` of that backend (where it is one of
+    // `src/simd/x86_64.rs`, it is the `classify_bits` of that file). `classify_bits` takes `x` by
     // reference, as `crate::classify::classify_bits` does, for the reason given there.
     // `src/simd/generic.rs` says what its functions compute. The other backends need not compute
     // the same on every argument: where an argument is a NaN, or the arguments are zeros of
@@ -352,7 +353,8 @@ pub fn dispatch<W: WithLevel>(w: W) -> W::Output {
 // `#[inline]`) and the functions that they call: `add_rn`, `all`, `and`, `bitmask`, `eq`, `ge`,
 // `gt`, `le`, `lt`, `max`, `or` and `sub_rn` on aarch64, with the helpers of `aarch64/lanewise.rs`
 // and `aarch64/fma.rs` that `mul_add_ru` and `sqrt_rd_ru` call on their fast paths, and the thin
-// layers of `wasm32.rs` that a `*_with` method reaches are `#[inline(always)]`, and
+// layers of `wasm32.rs` that a `*_with` method reaches are `#[inline(always)]`, as is
+// `classify_bits` of `src/simd/x86_64.rs`, and
 // `classify_bits` of `src/classify.rs`, `Interval::classify_with`, `classify2_with`, `inf_raw`,
 // `sup_raw`, `with_infsup_raw`, `zero`, `is_empty`, `contains`, `is_common_interval` and
 // `DecInterval::set_dec_impl` are `#[inline]`.
@@ -363,9 +365,21 @@ impl sealed::Backend for Baseline {
         crate::simd::add_ru(x, y)
     }
 
+    #[cfg(not(all(target_arch = "x86_64", not(inari_generic_backend), not(docsrs))))]
     #[inline(always)]
     fn classify_bits(self, x: &F64X2) -> u8 {
         crate::classify::classify_bits(x)
+    }
+
+    // Where the build's backend is one of `src/simd/x86_64.rs` (`sse42`, `fma` or `avx512f`), as
+    // where `src/simd.rs` selects it (with `docsrs`, it takes `unimplemented.rs`, and
+    // `inari_generic_backend` is not set), the `classify_bits` of that file, which the copies of
+    // `V2` and `V3` below call too. Where `fma` or `avx512f` is the backend, the classification
+    // then puts no `vzeroupper` into the operations that classify (see that function).
+    #[cfg(all(target_arch = "x86_64", not(inari_generic_backend), not(docsrs)))]
+    #[inline(always)]
+    fn classify_bits(self, x: &F64X2) -> u8 {
+        super::x86_64::classify_bits(*x)
     }
 
     #[cfg(not(all(inari_generic_backend, target_arch = "x86_64")))]
@@ -780,14 +794,11 @@ macro_rules! level {
                 from_m128d(unsafe { $m::add_ru(to_m128d(x), to_m128d(y)) })
             }
 
-            // `crate::classify::classify_bits` with the thin layers of `src/simd/x86_64.rs`.
+            // The `classify_bits` of `src/simd/x86_64.rs`, as that of `Baseline` where the build's
+            // backend is one of that file.
             #[inline(always)]
             fn classify_bits(self, x: &F64X2) -> u8 {
-                let x = to_m128d(*x);
-                let zero = x86_64::splat(0.0);
-                let ge_zero = x86_64::bitmask(x86_64::ge(x, zero)) as u8;
-                let le_zero = x86_64::bitmask(x86_64::le(x, zero)) as u8;
-                (le_zero << 2) | ge_zero
+                x86_64::classify_bits(to_m128d(*x))
             }
 
             #[inline(always)]

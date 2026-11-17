@@ -41,6 +41,28 @@ pub(crate) fn ceil(x: F64X2) -> F64X2 {
     unsafe { _mm_ceil_pd(x) }
 }
 
+/// `classify_bits(x) = (bitmask(le(x, splat(0.0))) << 2) | bitmask(ge(x, splat(0.0)))`, the code
+/// of the class of the interval whose `rep` is `x`, as `crate::classify::classify_bits` computes
+/// it, with one `movmskps` in place of the two `movmskpd` of `bitmask`.
+// `_mm_shuffle_ps(ge, le, 0xdd)` is [ge[63:32], ge[127:96], le[63:32], le[127:96]]: the upper
+// halves of the lanes of the two masks, whose sign bits are bits 63 of the lanes, which
+// `_mm_movemask_ps` reads into bits 0 to 3. With `avx`, rustc 1.98.1 compiled the two `movmskpd`
+// of `crate::classify::classify_bits` to one `vmovmskpd` of a 256-bit register that it filled with
+// `vinsertf128`, both in the builds for Haswell and `x86-64-v4` and in the copies of `V3`. As that
+// left the upper halves of the `ymm` registers in use, LLVM then put a `vzeroupper` before the
+// calls and returns of the operations that classify, such as `Interval::mul`, which cost a
+// call of `Interval::mul` 2 instructions in a build for Haswell, and one of `Interval::mul_with`
+// at `V3` 1 in a build for `x86-64` (cachegrind, row 150). This body takes no `ymm` register
+// there. Without `avx`, it compiled the two `movmskpd` to `packssdw` and one `movmskps`, as many
+// instructions as this body.
+#[inline(always)]
+pub(super) fn classify_bits(x: F64X2) -> u8 {
+    let zero = splat(0.0);
+    let ge_zero = unsafe { _mm_castpd_ps(ge(x, zero)) };
+    let le_zero = unsafe { _mm_castpd_ps(le(x, zero)) };
+    unsafe { _mm_movemask_ps(_mm_shuffle_ps(ge_zero, le_zero, 0xdd)) as u8 }
+}
+
 #[inline(always)]
 pub(crate) fn constant(x: f64, y: f64) -> F64X2 {
     unsafe { transmute([x, y]) }
