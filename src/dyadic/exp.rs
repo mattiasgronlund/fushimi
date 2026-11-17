@@ -706,8 +706,14 @@ fn fast_cosh_poly<const FMA: bool>(t: f64) -> (f64, f64) {
 // e in [-1021, 1023] and err = 2^-p for an integer p in [55, 105], or `None`; the rounding
 // tests check 1/2 < h < 2. Below 1/4, the Taylor polynomial, scaled to [1, 2). From 1/4,
 // sinh t = (e^t - e^-t) / 2 with e^t = y 2^e from `fast_exp` and e^-t 2^-e = 2^-2e / y from
-// the quotient of `dd_div`; from 26 on, e^-t 2^-e < 2^-74 is left out.
-#[cfg_attr(inari_kernel_dispatch, inline(always))]
+// the quotient of `dd_div`; from 26 on, e^-t 2^-e < 2^-74 is left out. Always inlined, also in
+// a build without the dispatch, where LLVM kept it a function of its own, which `fast_sinh_dir`
+// and `fast_sinh_near` called: there `sinh` took 24.9 to 27.0 more instructions per call rounded
+// to nearest and 7.0 to 8.0 more rounded toward -∞ or +∞ on random x in [0.1, 10), [-10, 10),
+// [-710.47, 710.47), [709, 710.47) and its negation, 18.7 and 8.4 more on its hard cases in
+// `src/cr/tests/mpfr/hard_cases.wc`, and 1.9 to 2.2 more on x of either sign with a magnitude
+// log-uniform in [2^-1022, 2^10), in a crate that links `cr`, built for Haswell (cachegrind).
+#[inline(always)]
 fn fast_sinh_pos<const FMA: bool>(t: f64) -> Option<(f64, f64, i64, f64)> {
     if t < TINY_NEAR {
         return None;
@@ -774,8 +780,12 @@ fn fast_cosh_pos<const FMA: bool>(t: f64) -> Option<(f64, f64, i64, f64)> {
 // Taylor polynomials; from 1/8, (1 - w) / (1 + w) for w = e^-2t = wh + wl from `fast_exp`,
 // where 1 + wh and 1 - wh are exact in double-double by Fast2Sum [Dekker], as wh < 1. Both
 // scale the quotient to [1, 2), and err is 2^-63 below 1/8 and, from 1/8 on, the 2^-67 that
-// bounds the error of the unscaled quotient, scaled with it.
-#[cfg_attr(inari_kernel_dispatch, inline(always))]
+// bounds the error of the unscaled quotient, scaled with it. Always inlined, as `fast_sinh_pos`:
+// without the attribute, in the same crate and build, `tanh` took 28.0 to 28.1 more instructions
+// per call rounded to nearest and 18.8 to 19.9 more rounded toward -∞ or +∞ on random x in
+// [0.1, 10), [-10, 10) and [-20, 20), 21.9 and 6.9 more on its hard cases, and 2.0 more rounded
+// to nearest on the log-uniform x.
+#[inline(always)]
 fn fast_tanh_pos<const FMA: bool>(t: f64) -> Option<(f64, f64, i64, f64)> {
     if t < TINY_NEAR {
         return None;
