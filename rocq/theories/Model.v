@@ -2743,10 +2743,11 @@ Definition sinh_dir_with (x : f64) (up : bool) : option f64 :=
 (** [pub(crate) fn cosh(x: f64, up: bool) -> f64] *)
 Definition cosh_dir_with (x : f64) (up : bool) : option f64 :=
   let t := fabs x in
-  if is_nan t || eq t infinity then Some t
-  else if ge t (from_bits 0x4086380000000000) (* 711.0 *) then Some (overflow up)
-  else if lt t tiny_hyp then Some (near_one t up)
-  else match fast_cosh_dir false t up with Some r => Some r | None => ziv (ev_cosh t) up 1 end.
+  if lt t tiny_hyp then Some (near_one t up)
+  else if lt t (from_bits 0x4086380000000000) (* 711.0 *) then
+    match fast_cosh_dir false t up with Some r => Some r | None => ziv (ev_cosh t) up 1 end
+  else if is_nan t || eq t infinity then Some t
+  else Some (overflow up).
 
 (** [pub(crate) fn tanh(x: f64, up: bool) -> f64], which calls
     [tanh_dir::<true>(x)] if [up] and [tanh_dir::<false>(x)] otherwise:
@@ -2826,10 +2827,11 @@ Definition sinh_near_with (x : f64) : option f64 :=
 (** [pub(crate) fn cosh_near(x: f64) -> f64] *)
 Definition cosh_near_with (x : f64) : option f64 :=
   let t := fabs x in
-  if is_nan t || eq t infinity then Some t
-  else if ge t (from_bits 0x4086380000000000) (* 711.0 *) then Some infinity
-  else if lt t tiny_near then Some one
-  else match fast_cosh_near false t with Some r => Some r | None => ziv_near (ev_cosh t) 1 end.
+  if lt t tiny_near then Some one
+  else if lt t (from_bits 0x4086380000000000) (* 711.0 *) then
+    match fast_cosh_near false t with Some r => Some r | None => ziv_near (ev_cosh t) 1 end
+  else if is_nan t || eq t infinity then Some t
+  else Some infinity.
 
 (** [pub(crate) fn tanh_near(x: f64) -> f64] *)
 Definition tanh_near_with (x : f64) : option f64 :=

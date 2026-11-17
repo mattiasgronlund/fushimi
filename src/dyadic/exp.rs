@@ -1149,22 +1149,27 @@ level_entry! {
     pub(crate) fn cosh(x: f64, up: bool) -> f64 = cosh_with;
 }
 
-// The body of `cosh`, with `FMA` for the products (`level_entry!`).
+// The body of `cosh`, with `FMA` for the products (`level_entry!`). One test sends NaN, +∞ and
+// t >= 711 to their rules, after the fast path, as in `sinh_near`.
 #[inline(always)]
 fn cosh_with<const FMA: bool>(x: f64, up: bool) -> f64 {
     let t = x.abs();
-    if t.is_nan() || t == f64::INFINITY {
-        t
-    } else if t >= 711.0 {
-        // cosh t > sinh t > 2^1024.
-        overflow(up)
-    } else if t < TINY_HYP {
+    // The rule for a tiny t first, as in `exp_near`.
+    if t < TINY_HYP {
         // 1 <= cosh t <= 1 + t^2 for t in [0, 1].
         near_one(t, up)
-    } else if let Some(r) = fast_cosh_dir::<FMA>(t, up) {
-        r
+    } else if t < 711.0 {
+        if let Some(r) = fast_cosh_dir::<FMA>(t, up) {
+            r
+        } else {
+            ziv(&Cosh(t), up, 1)
+        }
+    } else if t.is_nan() || t == f64::INFINITY {
+        // NaN fails the test t < 711, as do +∞ and the other t >= 711.
+        t
     } else {
-        ziv(&Cosh(t), up, 1)
+        // t >= 711: cosh t > sinh t > 2^1024.
+        overflow(up)
     }
 }
 
@@ -1173,21 +1178,27 @@ level_entry! {
     pub(crate) fn cosh_near(x: f64) -> f64 = cosh_near_with;
 }
 
-// The body of `cosh_near`, with `FMA` for the products (`level_entry!`).
+// The body of `cosh_near`, with `FMA` for the products (`level_entry!`). One test sends NaN, +∞
+// and t >= 711 to their rules, after the fast path, as in `cosh`.
 #[inline(always)]
 fn cosh_near_with<const FMA: bool>(x: f64) -> f64 {
     let t = x.abs();
-    if t.is_nan() || t == f64::INFINITY {
-        t
-    } else if t >= 711.0 {
-        f64::INFINITY
-    } else if t < TINY_NEAR {
+    // The rule for a tiny t first, as in `exp_near`.
+    if t < TINY_NEAR {
         // 1 <= cosh t <= 1 + t^2 for t in [0, 1].
         1.0
-    } else if let Some(r) = fast_cosh_near::<FMA>(t) {
-        r
+    } else if t < 711.0 {
+        if let Some(r) = fast_cosh_near::<FMA>(t) {
+            r
+        } else {
+            ziv_near(&Cosh(t), 1)
+        }
+    } else if t.is_nan() || t == f64::INFINITY {
+        // NaN fails the test t < 711, as do +∞ and the other t >= 711.
+        t
     } else {
-        ziv_near(&Cosh(t), 1)
+        // t >= 711, as in `cosh`.
+        f64::INFINITY
     }
 }
 

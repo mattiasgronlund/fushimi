@@ -30,14 +30,15 @@ Open Scope Z_scope.
 (** Where [ziv_strict] returns, [Dyadic.ziv] returns the same: the goal
     [<body with ziv_strict> = Some v -> <body with Dyadic.ziv> = Some v]
     of a function of this file, split at its guards, which name neither
-    driver. *)
+    driver. A branch that calls no driver is the same on both sides, and
+    one that calls it is closed by [ziv_strict_ziv], in either branch of
+    an [if], as in [cosh_dir_with], where the call is in a [then]. *)
 Local Ltac dir_strict :=
   repeat match goal with
-  | |- (if ?c then _ else _) = Some _ -> _ => destruct c; [exact (fun h => h)|]
-  | |- match ?c with Some _ => _ | None => _ end = Some _ -> _ =>
-      destruct c; [exact (fun h => h)|]
+  | |- (if ?c then _ else _) = Some _ -> _ => destruct c
+  | |- match ?c with Some _ => _ | None => _ end = Some _ -> _ => destruct c
   end;
-  apply ziv_strict_ziv.
+  first [exact (fun h => h) | apply ziv_strict_ziv].
 
 (** ** Helpers
 
@@ -58,6 +59,17 @@ Qed.
 Lemma hyp_fabs : forall x : f64, B2R (fabs x) = Rabs (B2R x).
 Proof.
 intros x. apply B2R_Babs.
+Qed.
+
+(** If [t < l] is false for a finite [t], then [t >= l]: the last branch
+    of [cosh_dir_with] and of [cosh_near_with]. *)
+Lemma hyp_not_lt_ge :
+  forall t l, is_finite t = true -> is_finite l = true -> lt t l = false -> ge t l = true.
+Proof.
+intros t l Ft Fl G.
+unfold lt in G. rewrite Bltb_correct in G by assumption.
+unfold ge. rewrite Bleb_correct by assumption. apply Rle_bool_true.
+destruct (Rlt_bool_spec (B2R t) (B2R l)) as [_|A]; [discriminate G | exact A].
 Qed.
 
 (** If [|x| < l] and [x >= l] are false for a finite [x], then [x <= -l]
@@ -375,22 +387,25 @@ Lemma cosh_dir_post :
 Proof.
 intros z post Hp Hz x up v Fx H. unfold DyadicExp.cosh_dir_with in H. cbv zeta in H.
 assert (Ft : is_finite (fabs x) = true) by (unfold fabs; rewrite is_finite_Babs; exact Fx).
-rewrite (fin_not_nan _ Ft), (fin_neq_inf _ Ft) in H. cbn [orb] in H.
-destruct (ge (fabs x) (from_bits 0x4086380000000000)) eqn:G1; cbv iota in H.
-{ injection H as <-. apply Hp. exact (cosh_overflow_rule x up Fx G1). }
 destruct (lt (fabs x) DyadicExp.tiny_hyp) eqn:G3; cbv iota in H.
 { injection H as <-. apply Hp. exact (cosh_tiny_rule x up Fx G3). }
-destruct (DyadicExp.fast_cosh_dir false (fabs x) up) eqn:F; cbv iota in H.
-{ injection H as <-. apply Hp. rewrite cosh_Rabs, <- hyp_fabs.
-  apply (fast_cosh_dir_correct false (fabs x) up _ Ft); [|exact F].
-  rewrite hyp_fabs. apply Rabs_pos. }
-apply (Hz (DyadicExp.ev_cosh (fabs x)) up 1%nat); [|exact H].
-intros n a Hn Ha. destruct (ev_cosh_correct _ n a Hn Ha) as (Oa & Ha').
-split; [exact Oa|].
-rewrite hyp_fabs in Ha'.
-destruct (Rle_or_lt 0 (B2R x)) as [P|P].
-- rewrite Rabs_pos_eq in Ha' by exact P. exact Ha'.
-- rewrite Rabs_left in Ha' by exact P. rewrite cosh_even in Ha'. exact Ha'.
+destruct (lt (fabs x) (from_bits 0x4086380000000000)) eqn:G4; cbv iota in H.
+{ destruct (DyadicExp.fast_cosh_dir false (fabs x) up) eqn:F; cbv iota in H.
+  { injection H as <-. apply Hp. rewrite cosh_Rabs, <- hyp_fabs.
+    apply (fast_cosh_dir_correct false (fabs x) up _ Ft); [|exact F].
+    rewrite hyp_fabs. apply Rabs_pos. }
+  apply (Hz (DyadicExp.ev_cosh (fabs x)) up 1%nat); [|exact H].
+  intros n a Hn Ha. destruct (ev_cosh_correct _ n a Hn Ha) as (Oa & Ha').
+  split; [exact Oa|].
+  rewrite hyp_fabs in Ha'.
+  destruct (Rle_or_lt 0 (B2R x)) as [P|P].
+  - rewrite Rabs_pos_eq in Ha' by exact P. exact Ha'.
+  - rewrite Rabs_left in Ha' by exact P. rewrite cosh_even in Ha'. exact Ha'. }
+rewrite (fin_not_nan _ Ft), (fin_neq_inf _ Ft) in H. cbn [orb] in H.
+(* [|x| < 711] is false, so [|x| >= 711]. *)
+assert (G1 : ge (fabs x) (from_bits 0x4086380000000000) = true)
+  by (apply hyp_not_lt_ge; [exact Ft | reflexivity | exact G4]).
+injection H as <-. apply Hp. exact (cosh_overflow_rule x up Fx G1).
 Qed.
 
 Theorem cosh_dir_correct :

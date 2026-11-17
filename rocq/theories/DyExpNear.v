@@ -21,10 +21,10 @@ Open Scope Z_scope.
 (** Where [ziv_near_strict] returns, [Dyadic.ziv_near] returns the same:
     the goal [<body with ziv_near_strict> = Some v -> <body with
     Dyadic.ziv_near> = Some v] of a function of this file, split at its
-    guards, which name neither driver: a branch that calls no driver is
-    the same on both sides, and one that calls it is closed by
-    [ziv_near_strict_ziv], in either branch of an [if], as in
-    [sinh_near_with], where the call is in a [then]. *)
+    guards, which name neither driver, as [dir_strict] of [DyHyp.v]: a
+    branch that calls no driver is the same on both sides, and one that
+    calls it is closed by [ziv_near_strict_ziv], in either branch of an
+    [if], as in [sinh_near_with], where the call is in a [then]. *)
 Local Ltac near_strict :=
   repeat match goal with
   | |- (if ?c then _ else _) = Some _ -> _ => destruct c
@@ -607,20 +607,23 @@ Theorem cosh_near_correct :
 Proof.
 intros x v Fx H. unfold DyadicExp.cosh_near_with in H. cbv zeta in H.
 assert (Ft : is_finite (fabs x) = true) by (unfold fabs; rewrite is_finite_Babs; exact Fx).
-rewrite (fin_not_nan _ Ft), (fin_neq_inf _ Ft) in H. cbn [orb] in H.
-destruct (ge (fabs x) (from_bits 0x4086380000000000)) eqn:G1; cbv iota in H.
-{ injection H as <-. exact (cosh_inf_near x Fx G1). }
 destruct (lt (fabs x) DyadicExp.tiny_near) eqn:G3; cbv iota in H.
 { injection H as <-. exact (cosh_one_near x Fx G3). }
-destruct (DyadicExp.fast_cosh_near false (fabs x)) eqn:F; cbv iota in H.
-{ injection H as <-. rewrite cosh_Rabs, <- hyp_fabs.
-  apply (fast_cosh_near_correct false (fabs x) _ Ft); [|exact F].
-  rewrite hyp_fabs. apply Rabs_pos. }
-assert (Hev : forall n a, level_ok n -> DyadicExp.ev_cosh (fabs x) n = Some a ->
-                encl_ok n a /\ encl_has a (cosh (B2R x))).
-{ intros n a Hn Ha. destruct (ev_cosh_correct _ n a Hn Ha) as (Oa & Ha').
-  split; [exact Oa|]. rewrite hyp_fabs in Ha'. rewrite cosh_Rabs. exact Ha'. }
-exact (ziv_near_strict_correct _ _ _ _ Hev H).
+destruct (lt (fabs x) (from_bits 0x4086380000000000)) eqn:G4; cbv iota in H.
+{ destruct (DyadicExp.fast_cosh_near false (fabs x)) eqn:F; cbv iota in H.
+  { injection H as <-. rewrite cosh_Rabs, <- hyp_fabs.
+    apply (fast_cosh_near_correct false (fabs x) _ Ft); [|exact F].
+    rewrite hyp_fabs. apply Rabs_pos. }
+  assert (Hev : forall n a, level_ok n -> DyadicExp.ev_cosh (fabs x) n = Some a ->
+                  encl_ok n a /\ encl_has a (cosh (B2R x))).
+  { intros n a Hn Ha. destruct (ev_cosh_correct _ n a Hn Ha) as (Oa & Ha').
+    split; [exact Oa|]. rewrite hyp_fabs in Ha'. rewrite cosh_Rabs. exact Ha'. }
+  exact (ziv_near_strict_correct _ _ _ _ Hev H). }
+rewrite (fin_not_nan _ Ft), (fin_neq_inf _ Ft) in H. cbn [orb] in H.
+(* [|x| < 711] is false, so [|x| >= 711]. *)
+assert (G1 : ge (fabs x) (from_bits 0x4086380000000000) = true)
+  by (apply hyp_not_lt_ge; [exact Ft | reflexivity | exact G4]).
+injection H as <-. exact (cosh_inf_near x Fx G1).
 Qed.
 
 Theorem tanh_near_correct :
