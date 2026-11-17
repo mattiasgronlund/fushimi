@@ -21,14 +21,16 @@ Open Scope Z_scope.
 (** Where [ziv_near_strict] returns, [Dyadic.ziv_near] returns the same:
     the goal [<body with ziv_near_strict> = Some v -> <body with
     Dyadic.ziv_near> = Some v] of a function of this file, split at its
-    guards, which name neither driver, as [dir_strict] of [DyExp.v]. *)
+    guards, which name neither driver: a branch that calls no driver is
+    the same on both sides, and one that calls it is closed by
+    [ziv_near_strict_ziv], in either branch of an [if], as in
+    [sinh_near_with], where the call is in a [then]. *)
 Local Ltac near_strict :=
   repeat match goal with
-  | |- (if ?c then _ else _) = Some _ -> _ => destruct c; [exact (fun h => h)|]
-  | |- match ?c with Some _ => _ | None => _ end = Some _ -> _ =>
-      destruct c; [exact (fun h => h)|]
+  | |- (if ?c then _ else _) = Some _ -> _ => destruct c
+  | |- match ?c with Some _ => _ | None => _ end = Some _ -> _ => destruct c
   end;
-  apply ziv_near_strict_ziv.
+  first [exact (fun h => h) | apply ziv_near_strict_ziv].
 
 (** [lit w H] adds [H : B2R w = n * / d] for the literal [w], with [n] and
     [d] numerals that [lra] reads, as in [DyExpRules.v]. *)
@@ -522,13 +524,13 @@ Theorem exp_near_correct :
   near_round (exp (B2R x)) v.
 Proof.
 intros x v Fx H. unfold DyadicExp.exp_near_with in H.
+destruct (lt (fabs x) DyadicExp.tiny_exp) eqn:G3; cbv iota in H.
+{ injection H as <-. exact (exp_one_near x Fx G3). }
 rewrite (fin_not_nan x Fx), (fin_neq_inf x Fx), (fin_neq_ninf x Fx) in H. cbn [orb] in H.
 destruct (ge x (from_bits 0x4086300000000000)) eqn:G1; cbv iota in H.
 { injection H as <-. exact (exp_inf_near x Fx G1). }
 destruct (le x (from_bits 0xc087500000000000)) eqn:G2; cbv iota in H.
 { injection H as <-. exact (exp_zero_near x Fx G2). }
-destruct (lt (fabs x) DyadicExp.tiny_exp) eqn:G3; cbv iota in H.
-{ injection H as <-. exact (exp_one_near x Fx G3). }
 destruct (DyadicExp.fast_exp_near false x) eqn:F; cbv iota in H.
 { injection H as <-. exact (fast_exp_near_correct false x _ Fx F). }
 exact (ziv_near_strict_correct _ _ _ _ (fun n a Hn Ha => ev_exp_correct x n a Hn Ha) H).
@@ -540,13 +542,13 @@ Theorem exp2_near_correct :
   near_round (Rexp2 (B2R x)) v.
 Proof.
 intros x v Fx H. unfold DyadicExp.exp2_near_with in H.
+destruct (lt (fabs x) DyadicExp.tiny_exp) eqn:G3; cbv iota in H.
+{ injection H as <-. exact (exp2_one_near x Fx G3). }
 rewrite (fin_not_nan x Fx), (fin_neq_inf x Fx), (fin_neq_ninf x Fx) in H. cbn [orb] in H.
 destruct (ge x (from_bits 0x4090000000000000)) eqn:G1; cbv iota in H.
 { injection H as <-. exact (exp2_inf_near x Fx G1). }
 destruct (lt x (from_bits 0xc090cc0000000000)) eqn:G2; cbv iota in H.
 { injection H as <-. exact (exp2_zero_near x Fx G2). }
-destruct (lt (fabs x) DyadicExp.tiny_exp) eqn:G3; cbv iota in H.
-{ injection H as <-. exact (exp2_one_near x Fx G3). }
 destruct (DyadicExp.fast_exp2_near false x) eqn:F; cbv iota in H.
 { injection H as <-. exact (fast_exp2_near_correct false x _ Fx (tiny_exp_false x Fx G3) F). }
 exact (ziv_near_strict_correct _ _ _ _ (fun n a Hn Ha => ev_exp2_correct x n a Hn Ha) H).
@@ -558,13 +560,13 @@ Theorem exp10_near_correct :
   near_round (Rexp10 (B2R x)) v.
 Proof.
 intros x v Fx H. unfold DyadicExp.exp10_near_with in H.
+destruct (lt (fabs x) DyadicExp.tiny_exp10) eqn:G3; cbv iota in H.
+{ injection H as <-. exact (exp10_one_near x Fx G3). }
 rewrite (fin_not_nan x Fx), (fin_neq_inf x Fx), (fin_neq_ninf x Fx) in H. cbn [orb] in H.
 destruct (ge x (from_bits 0x4073500000000000)) eqn:G1; cbv iota in H.
 { injection H as <-. exact (exp10_inf_near x Fx G1). }
 destruct (le x (from_bits 0xc074400000000000)) eqn:G2; cbv iota in H.
 { injection H as <-. exact (exp10_zero_near x Fx G2). }
-destruct (lt (fabs x) DyadicExp.tiny_exp10) eqn:G3; cbv iota in H.
-{ injection H as <-. exact (exp10_one_near x Fx G3). }
 destruct (le DyadicExp.one x && le x (from_bits 0x4036000000000000) && eq x (ffloor x))
   eqn:G4; cbv iota in H.
 { injection H as <-. exact (exp10_int_near x Fx G4). }
@@ -581,16 +583,21 @@ Theorem sinh_near_correct :
   near_round (sinh (B2R x)) v.
 Proof.
 intros x v Fx H. unfold DyadicExp.sinh_near_with in H.
+destruct (lt (fabs x) DyadicExp.tiny_near) eqn:G3; cbv iota in H.
+{ injection H as <-. exact (odd_tiny_near sinh x sinh_odd sinh_tiny_bound Fx G3). }
+destruct (lt (fabs x) (from_bits 0x4086380000000000)) eqn:G4; cbv iota in H.
+{ destruct (DyadicExp.fast_sinh_near false x) eqn:F; cbv iota in H.
+  { injection H as <-. exact (fast_sinh_near_correct false x _ Fx F). }
+  exact (ziv_near_strict_correct _ _ _ _ (fun n a Hn Ha => ev_sinh_correct x n a Hn Ha) H). }
 rewrite (fin_not_nan x Fx), (fin_neq_inf x Fx), (fin_neq_ninf x Fx) in H. cbn [orb] in H.
 destruct (ge x (from_bits 0x4086380000000000)) eqn:G1; cbv iota in H.
 { injection H as <-. exact (sinh_inf_near x Fx G1). }
-destruct (le x (from_bits 0xc086380000000000)) eqn:G2; cbv iota in H.
-{ injection H as <-. exact (sinh_ninf_near x Fx G2). }
-destruct (lt (fabs x) DyadicExp.tiny_near) eqn:G3; cbv iota in H.
-{ injection H as <-. exact (odd_tiny_near sinh x sinh_odd sinh_tiny_bound Fx G3). }
-destruct (DyadicExp.fast_sinh_near false x) eqn:F; cbv iota in H.
-{ injection H as <-. exact (fast_sinh_near_correct false x _ Fx F). }
-exact (ziv_near_strict_correct _ _ _ _ (fun n a Hn Ha => ev_sinh_correct x n a Hn Ha) H).
+(* [|x| < 711] and [x >= 711] are false, so [x <= -711]. *)
+assert (G2 : le x (from_bits 0xc086380000000000) = true).
+{ apply (hyp_big_neg x (from_bits 0x4086380000000000));
+    [exact Fx | reflexivity | reflexivity | | exact G4 | exact G1].
+  rewrite hyp_lit_711, hyp_lit_m711. lra. }
+injection H as <-. exact (sinh_ninf_near x Fx G2).
 Qed.
 
 Theorem cosh_near_correct :
@@ -622,16 +629,21 @@ Theorem tanh_near_correct :
   near_round (tanh (B2R x)) v.
 Proof.
 intros x v Fx H. unfold DyadicExp.tanh_near_with in H.
+destruct (lt (fabs x) DyadicExp.tiny_near) eqn:G3; cbv iota in H.
+{ injection H as <-. exact (odd_tiny_near tanh x tanh_odd tanh_tiny_bound Fx G3). }
+destruct (lt (fabs x) (from_bits 0x4034000000000000)) eqn:G4; cbv iota in H.
+{ destruct (DyadicExp.fast_tanh_near false x) eqn:F; cbv iota in H.
+  { injection H as <-. exact (fast_tanh_near_correct false x _ Fx F). }
+  exact (ziv_near_strict_correct _ _ _ _ (fun n a Hn Ha => ev_tanh_correct x n a Hn Ha) H). }
 rewrite (fin_not_nan x Fx) in H. cbv iota in H.
 destruct (ge x (from_bits 0x4034000000000000)) eqn:G1; cbv iota in H.
 { injection H as <-. exact (tanh_one_near x Fx G1). }
-destruct (le x (from_bits 0xc034000000000000)) eqn:G2; cbv iota in H.
-{ injection H as <-. exact (tanh_m_one_near x Fx G2). }
-destruct (lt (fabs x) DyadicExp.tiny_near) eqn:G3; cbv iota in H.
-{ injection H as <-. exact (odd_tiny_near tanh x tanh_odd tanh_tiny_bound Fx G3). }
-destruct (DyadicExp.fast_tanh_near false x) eqn:F; cbv iota in H.
-{ injection H as <-. exact (fast_tanh_near_correct false x _ Fx F). }
-exact (ziv_near_strict_correct _ _ _ _ (fun n a Hn Ha => ev_tanh_correct x n a Hn Ha) H).
+(* [|x| < 20] and [x >= 20] are false, so [x <= -20]. *)
+assert (G2 : le x (from_bits 0xc034000000000000) = true).
+{ apply (hyp_big_neg x (from_bits 0x4034000000000000));
+    [exact Fx | reflexivity | reflexivity | | exact G4 | exact G1].
+  lit (from_bits 0x4034000000000000) E. lit (from_bits 0xc034000000000000) Em. lra. }
+injection H as <-. exact (tanh_m_one_near x Fx G2).
 Qed.
 
 Theorem exp_near_strict :

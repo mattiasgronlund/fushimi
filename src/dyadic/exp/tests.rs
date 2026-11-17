@@ -320,6 +320,42 @@ fn near_rules_at_their_thresholds() {
     }
 }
 
+// The thresholds of the rules of `exp.rs` for a tiny |x|, of every function of `FUNCTIONS` in
+// the directions and to nearest: `TINY_NEAR` (sinh, cosh and tanh to nearest), `TINY_HYP` (sinh,
+// cosh and tanh in the directions), `TINY_EXP` (e^x and 2^x) and `TINY_EXP10` (10^x); and those
+// of the rules of tanh at 19 (directions) and 20 (to nearest) and of sinh and cosh at 711.
+const SHARED_THRESHOLDS: [f64; 7] = [TINY_NEAR, TINY_HYP, TINY_EXP, TINY_EXP10, 19.0, 20.0, 711.0];
+
+// The arguments of `SHARED_THRESHOLDS` and the 3 `f64`s on each side of each, and the 4 least
+// subnormal numbers, the least of which tanh's rule for a tiny |x| takes to 0 in one direction,
+// each with both signs. Every function takes all of them, and so the thresholds of the other
+// functions' rules too, around which a function with the wrong threshold in its first test, the
+// one for a tiny |x|, would take that rule on the wrong arguments. `at_rule_thresholds` has
+// neither `TINY_NEAR` nor 20, thresholds of rules to nearest only, so `copies_agree` takes
+// these arguments too.
+fn at_shared_thresholds() -> Vec<f64> {
+    let mut v = Vec::new();
+    for x in SHARED_THRESHOLDS {
+        for x in around(x, 3) {
+            v.extend([x, -x]);
+        }
+    }
+    for x in (1..=4).map(f64::from_bits) {
+        v.extend([x, -x]);
+    }
+    v
+}
+
+// Every function at the arguments of `at_shared_thresholds`, in both directions and to nearest.
+#[test]
+fn rules_at_shared_thresholds() {
+    for i in 0..FUNCTIONS.len() {
+        for x in at_shared_thresholds() {
+            check(i, x);
+        }
+    }
+}
+
 // Roundings to nearest that follow without bounds: 10^n for n up to 22 is an `f64`, which
 // `str::parse` gives; 10^23 is the midpoint of two `f64`s, and its tie goes to the even one,
 // 0x44b5_2d02_c7e1_4af6, which `1e23` also is; 2^-1074 is an `f64`, 2^-1075 is the midpoint of
@@ -850,7 +886,8 @@ fn assert_copies_agree(what: &str, copies: [[f64; 3]; 3]) {
 // The copies of the exponentials and hyperbolic functions without an FMA and with one, and the
 // entries, give the same `f64`s, bit for bit, in both directions and to nearest, on the random
 // arguments of `fast_path_agrees_with_kernel` and of `fast_hyp_range_random` (`HYP_BRANCHES`),
-// on those of `rules_at_their_thresholds` and on `regressions()`. `rocq/theories/FastExp.v`
+// on those of `rules_at_their_thresholds` and `rules_at_shared_thresholds` (the rules for a tiny
+// |x| to nearest of sinh, cosh and tanh too) and on `regressions()`. `rocq/theories/FastExp.v`
 // and `rocq/theories/FastHyp.v` prove it of the fast paths (`fast_exp_dir_fma`,
 // `fast_sinh_dir_fma` and the others) at the arguments that the entries give them; this test
 // checks the code as compiled, where the entries call the copy built with the target feature
@@ -872,7 +909,7 @@ fn copies_agree() {
         }
     }
     for (i, (name, _)) in FUNCTIONS.iter().enumerate() {
-        for x in at_rule_thresholds(i) {
+        for x in [at_rule_thresholds(i), at_shared_thresholds()].concat() {
             assert_copies_agree(&format!("{name}({x:e})"), copies(i, x));
         }
     }

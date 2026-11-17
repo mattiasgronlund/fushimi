@@ -900,7 +900,12 @@ level_entry! {
 // The body of `exp_near`, with `FMA` for the products (`level_entry!`).
 #[inline(always)]
 fn exp_near_with<const FMA: bool>(x: f64) -> f64 {
-    if x.is_nan() || x == f64::INFINITY {
+    // The rule for a tiny |x| comes first, before the tests for the special values, as in
+    // `exp`. NaN and ±∞ fail its test and go on to them.
+    if x.abs() < TINY_EXP {
+        // 1 - 2^-54 < 1 + x <= e^x <= 1 / (1 - x) < 1 + 2^-53.
+        1.0
+    } else if x.is_nan() || x == f64::INFINITY {
         x
     } else if x == f64::NEG_INFINITY {
         0.0
@@ -909,9 +914,6 @@ fn exp_near_with<const FMA: bool>(x: f64) -> f64 {
     } else if x <= -746.0 {
         // e^x < 2^-1075, half of the least subnormal number.
         0.0
-    } else if x.abs() < TINY_EXP {
-        // 1 - 2^-54 < 1 + x <= e^x <= 1 / (1 - x) < 1 + 2^-53.
-        1.0
     } else if let Some(r) = fast_exp_near::<FMA>(x) {
         r
     } else {
@@ -969,7 +971,11 @@ level_entry! {
 // The body of `exp2_near`, with `FMA` for the products (`level_entry!`).
 #[inline(always)]
 fn exp2_near_with<const FMA: bool>(x: f64) -> f64 {
-    if x.is_nan() || x == f64::INFINITY {
+    // The rule for a tiny |x| first, as in `exp_near`.
+    if x.abs() < TINY_EXP {
+        // 2^x = e^(x ln 2), and |x ln 2| < |x|.
+        1.0
+    } else if x.is_nan() || x == f64::INFINITY {
         x
     } else if x == f64::NEG_INFINITY {
         0.0
@@ -978,9 +984,6 @@ fn exp2_near_with<const FMA: bool>(x: f64) -> f64 {
     } else if x < -1075.0 {
         // 2^x < 2^-1075. At -1075 itself the enclosure is exact, and its tie goes to +0.
         0.0
-    } else if x.abs() < TINY_EXP {
-        // 2^x = e^(x ln 2), and |x ln 2| < |x|.
-        1.0
     } else if let Some(r) = fast_exp2_near::<FMA>(x) {
         r
     } else {
@@ -1042,7 +1045,11 @@ level_entry! {
 // The body of `exp10_near`, with `FMA` for the products (`level_entry!`).
 #[inline(always)]
 fn exp10_near_with<const FMA: bool>(x: f64) -> f64 {
-    if x.is_nan() || x == f64::INFINITY {
+    // The rule for a tiny |x| first, as in `exp_near`.
+    if x.abs() < TINY_EXP10 {
+        // 10^x = e^(x ln 10), and |x ln 10| < 4 |x| < 2^-54.
+        1.0
+    } else if x.is_nan() || x == f64::INFINITY {
         x
     } else if x == f64::NEG_INFINITY {
         0.0
@@ -1051,9 +1058,6 @@ fn exp10_near_with<const FMA: bool>(x: f64) -> f64 {
     } else if x <= -324.0 {
         // 10^x < 2^-1075, half of the least subnormal number.
         0.0
-    } else if x.abs() < TINY_EXP10 {
-        // 10^x = e^(x ln 10), and |x ln 10| < 4 |x| < 2^-54.
-        1.0
     } else if (1.0..=22.0).contains(&x) && x == x.floor() {
         POW10[x as usize]
     } else if x == 23.0 {
@@ -1109,22 +1113,33 @@ level_entry! {
     pub(crate) fn sinh_near(x: f64) -> f64 = sinh_near_with;
 }
 
-// The body of `sinh_near`, with `FMA` for the products (`level_entry!`).
+// The body of `sinh_near`, with `FMA` for the products (`level_entry!`). One test sends NaN, ±∞
+// and |x| >= 711 to their rules, after the fast path. Tested before it, right after the rule for
+// a tiny |x|, which returns x as the rule for NaN and ±∞ does, these rules cost 10 more
+// instructions on the way to the fast path: LLVM computed the tests of those two rules together,
+// with one branch, and then compared x with 711 and -711 (objdump and cachegrind, in a crate
+// that links `cr`, built for Haswell).
 #[inline(always)]
 fn sinh_near_with<const FMA: bool>(x: f64) -> f64 {
-    if x.is_nan() || x.is_infinite() {
-        x
-    } else if x >= 711.0 {
-        f64::INFINITY
-    } else if x <= -711.0 {
-        f64::NEG_INFINITY
-    } else if x.abs() < TINY_NEAR {
+    // The rule for a tiny |x| first, as in `exp_near`.
+    if x.abs() < TINY_NEAR {
         // x <= sinh x <= x + x^3 / 3 for x in [0, 1], and sinh is odd.
         x
-    } else if let Some(r) = fast_sinh_near::<FMA>(x) {
-        r
+    } else if x.abs() < 711.0 {
+        if let Some(r) = fast_sinh_near::<FMA>(x) {
+            r
+        } else {
+            ziv_near(&Sinh(x), 1)
+        }
+    } else if x.is_nan() || x.is_infinite() {
+        // NaN fails the test |x| < 711, as do ±∞ and the other x with |x| >= 711.
+        x
+    } else if x >= 711.0 {
+        // sinh x > 2^1024, as in `sinh_dir`.
+        f64::INFINITY
     } else {
-        ziv_near(&Sinh(x), 1)
+        // x <= -711, and sinh is odd.
+        f64::NEG_INFINITY
     }
 }
 
@@ -1229,23 +1244,29 @@ level_entry! {
     pub(crate) fn tanh_near(x: f64) -> f64 = tanh_near_with;
 }
 
-// The body of `tanh_near`, with `FMA` for the products (`level_entry!`).
+// The body of `tanh_near`, with `FMA` for the products (`level_entry!`). One test sends NaN, ±∞
+// and |x| >= 20 to their rules, after the fast path, as in `sinh_near`.
 #[inline(always)]
 fn tanh_near_with<const FMA: bool>(x: f64) -> f64 {
-    if x.is_nan() {
+    // The rule for a tiny |x| first, as in `exp_near`.
+    if x.abs() < TINY_NEAR {
+        // x - x^3 / 3 <= tanh x <= x for x in [0, 1], and tanh is odd.
+        x
+    } else if x.abs() < 20.0 {
+        if let Some(r) = fast_tanh_near::<FMA>(x) {
+            r
+        } else {
+            ziv_near(&Tanh(x), 1)
+        }
+    } else if x.is_nan() {
+        // NaN fails the test |x| < 20, as do ±∞ and the other x with |x| >= 20.
         x
     } else if x >= 20.0 {
         // 1 - 2^-54 < tanh x <= 1, as 1 - tanh x = 2 / (e^2x + 1) and 40 > 55 ln 2 = 38.12...
         // `tanh`'s 19 is not enough here: 1 - tanh 19 > 2^-54.
         1.0
-    } else if x <= -20.0 {
-        -1.0
-    } else if x.abs() < TINY_NEAR {
-        // x - x^3 / 3 <= tanh x <= x for x in [0, 1], and tanh is odd.
-        x
-    } else if let Some(r) = fast_tanh_near::<FMA>(x) {
-        r
     } else {
-        ziv_near(&Tanh(x), 1)
+        // x <= -20, and tanh is odd.
+        -1.0
     }
 }

@@ -60,6 +60,23 @@ Proof.
 intros x. apply B2R_Babs.
 Qed.
 
+(** If [|x| < l] and [x >= l] are false for a finite [x], then [x <= -l]
+    ([ml] is [-l]): the last branch of [sinh_near_with] and of
+    [tanh_near_with]. *)
+Lemma hyp_big_neg :
+  forall x l ml, is_finite x = true -> is_finite l = true -> is_finite ml = true ->
+  B2R ml = (- B2R l)%R -> lt (fabs x) l = false -> ge x l = false -> le x ml = true.
+Proof.
+intros x l ml Fx Fl Fm Hm G4 G1.
+assert (Ft : is_finite (fabs x) = true) by (unfold fabs; rewrite is_finite_Babs; exact Fx).
+unfold lt in G4. rewrite Bltb_correct in G4 by assumption. rewrite hyp_fabs in G4.
+unfold ge in G1. rewrite Bleb_correct in G1 by assumption.
+unfold le. rewrite Bleb_correct by assumption. apply Rle_bool_true.
+destruct (Rlt_bool_spec (Rabs (B2R x)) (B2R l)) as [_|A]; [discriminate G4|].
+destruct (Rle_bool_spec (B2R l) (B2R x)) as [_|B]; [discriminate G1|].
+rewrite Hm. unfold Rabs in A. destruct (Rcase_abs (B2R x)); lra.
+Qed.
+
 (** [-2.0] *)
 Lemma hyp_m_two_R : B2R DyadicExp.m_two = (-2)%R.
 Proof.

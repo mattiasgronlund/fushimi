@@ -2783,31 +2783,31 @@ Variable ziv_near : (nat -> option Dyadic.encl) -> nat -> option f64.
 
 (** [pub(crate) fn exp_near(x: f64) -> f64] *)
 Definition exp_near_with (x : f64) : option f64 :=
-  if is_nan x || eq x infinity then Some x
+  if lt (fabs x) tiny_exp then Some one
+  else if is_nan x || eq x infinity then Some x
   else if eq x neg_infinity then Some zero
   else if ge x (from_bits 0x4086300000000000) (* 710.0 *) then Some infinity
   else if le x (from_bits 0xc087500000000000) (* -746.0 *) then Some zero
-  else if lt (fabs x) tiny_exp then Some one
   else match fast_exp_near false x with Some r => Some r | None => ziv_near (ev_exp x) 1 end.
 
 (** [pub(crate) fn exp2_near(x: f64) -> f64] *)
 Definition exp2_near_with (x : f64) : option f64 :=
-  if is_nan x || eq x infinity then Some x
+  if lt (fabs x) tiny_exp then Some one
+  else if is_nan x || eq x infinity then Some x
   else if eq x neg_infinity then Some zero
   else if ge x (from_bits 0x4090000000000000) (* 1024.0 *) then Some infinity
   else if lt x (from_bits 0xc090cc0000000000) (* -1075.0 *) then Some zero
-  else if lt (fabs x) tiny_exp then Some one
   else match fast_exp2_near false x with Some r => Some r | None => ziv_near (ev_exp2 x) 1 end.
 
 (** [pub(crate) fn exp10_near(x: f64) -> f64], with
     [(1.0..=22.0).contains(&x)] and [x as usize] as in [exp10_dir_with],
     where the literal [1e23] is [from_bits 0x44b52d02c7e14af6]. *)
 Definition exp10_near_with (x : f64) : option f64 :=
-  if is_nan x || eq x infinity then Some x
+  if lt (fabs x) tiny_exp10 then Some one
+  else if is_nan x || eq x infinity then Some x
   else if eq x neg_infinity then Some zero
   else if ge x (from_bits 0x4073500000000000) (* 309.0 *) then Some infinity
   else if le x (from_bits 0xc074400000000000) (* -324.0 *) then Some zero
-  else if lt (fabs x) tiny_exp10 then Some one
   else if le one x && le x (from_bits 0x4036000000000000) (* 22.0 *) && eq x (ffloor x) then
     Some (pow10 (to_i64 x))
   else if eq x (from_bits 0x4037000000000000) (* 23.0 *) then
@@ -2816,11 +2816,12 @@ Definition exp10_near_with (x : f64) : option f64 :=
 
 (** [pub(crate) fn sinh_near(x: f64) -> f64], as [sinh_dir_with]. *)
 Definition sinh_near_with (x : f64) : option f64 :=
-  if is_nan x || (eq x infinity || eq x neg_infinity) then Some x
+  if lt (fabs x) tiny_near then Some x
+  else if lt (fabs x) (from_bits 0x4086380000000000) (* 711.0 *) then
+    match fast_sinh_near false x with Some r => Some r | None => ziv_near (ev_sinh x) 1 end
+  else if is_nan x || (eq x infinity || eq x neg_infinity) then Some x
   else if ge x (from_bits 0x4086380000000000) (* 711.0 *) then Some infinity
-  else if le x (from_bits 0xc086380000000000) (* -711.0 *) then Some neg_infinity
-  else if lt (fabs x) tiny_near then Some x
-  else match fast_sinh_near false x with Some r => Some r | None => ziv_near (ev_sinh x) 1 end.
+  else Some neg_infinity.
 
 (** [pub(crate) fn cosh_near(x: f64) -> f64] *)
 Definition cosh_near_with (x : f64) : option f64 :=
@@ -2832,11 +2833,12 @@ Definition cosh_near_with (x : f64) : option f64 :=
 
 (** [pub(crate) fn tanh_near(x: f64) -> f64] *)
 Definition tanh_near_with (x : f64) : option f64 :=
-  if is_nan x then Some x
+  if lt (fabs x) tiny_near then Some x
+  else if lt (fabs x) (from_bits 0x4034000000000000) (* 20.0 *) then
+    match fast_tanh_near false x with Some r => Some r | None => ziv_near (ev_tanh x) 1 end
+  else if is_nan x then Some x
   else if ge x (from_bits 0x4034000000000000) (* 20.0 *) then Some one
-  else if le x (from_bits 0xc034000000000000) (* -20.0 *) then Some m_one
-  else if lt (fabs x) tiny_near then Some x
-  else match fast_tanh_near false x with Some r => Some r | None => ziv_near (ev_tanh x) 1 end.
+  else Some m_one.
 
 End DriverNear.
 
