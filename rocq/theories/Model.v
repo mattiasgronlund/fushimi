@@ -645,9 +645,12 @@ Definition lanewise2 (x y : F64X2) (fast : f64 -> f64 -> f64 * bool)
     let* b := if ok1 then Some r1 else slow (snd x) (snd y) in
     Some (a, b).
 
-(** [pub(crate) fn add_ru(x: F64X2, y: F64X2) -> F64X2] *)
+(** [pub(crate) fn add_ru(x: F64X2, y: F64X2) -> F64X2], whose
+    [let [x0, x1] = x] and [let [y0, y1] = y] give the lanes that it passes
+    to [lanewise2] as [[x0, x1]] and [[y0, y1]], i.e. [(fst x, snd x)] and
+    [(fst y, snd y)]. *)
 Definition add_ru (x y : F64X2) : option F64X2 :=
-  lanewise2 x y add1_ru_fast add1_ru_slow.
+  lanewise2 (fst x, snd x) (fst y, snd y) add1_ru_fast add1_ru_slow.
 
 (** [pub(super) fn mul_ru_impl<const FMA: bool>(x: F64X2, y: F64X2) -> F64X2] *)
 Definition mul_ru_impl (fma : bool) (x y : F64X2) : option F64X2 :=
@@ -655,7 +658,15 @@ Definition mul_ru_impl (fma : bool) (x y : F64X2) : option F64X2 :=
 
 (** [pub(crate) fn mul_ru(x: F64X2, y: F64X2) -> F64X2], which calls
     [mul_ru_impl::<HAS_FMA>]. [HAS_FMA] depends on the target, so it is an
-    argument. *)
+    argument. As the build's backend on x86-64, it is instead
+    [pub(crate) extern "sysv64-unwind" fn mul_ru(x: F64X2, y: F64X2) -> F64X2],
+    with the same body: the ABI [sysv64] passes the vectors in registers,
+    which does not change what the function computes. There the method
+    [mul_ru] of [Baseline] calls a copy with Rust's ABI,
+    [pub(crate) fn mul_ru_rust_abi(x: F64X2, y: F64X2) -> F64X2], which
+    this definition transcribes too: its body,
+    [lanewise2(x, y, mul1_ru_fast::<HAS_FMA>, |a, b| mul1_ru_tiny::<HAS_FMA>(a, b))],
+    is that of [mul_ru] with [mul_ru_impl] inlined, up to eta. *)
 Definition mul_ru (has_fma : bool) (x y : F64X2) : option F64X2 :=
   mul_ru_impl has_fma x y.
 
@@ -727,7 +738,14 @@ Definition div_ru_impl (fma : bool) (x y : F64X2) : option F64X2 :=
   lanewise2 x y (div1_ru_fast fma) div1_ru_slow.
 
 (** [pub(crate) fn div_ru(x: F64X2, y: F64X2) -> F64X2], which calls
-    [div_ru_impl::<HAS_FMA>]. *)
+    [div_ru_impl::<HAS_FMA>]. As the build's backend on x86-64, it is instead
+    [pub(crate) extern "sysv64-unwind" fn div_ru(x: F64X2, y: F64X2) -> F64X2],
+    with the same body: as for [mul_ru], the ABI does not change what the
+    function computes. There the method [div_ru] of [Baseline] calls a copy
+    with Rust's ABI, [pub(crate) fn div_ru_rust_abi(x: F64X2, y: F64X2) ->
+    F64X2], which this definition transcribes too: its body,
+    [lanewise2(x, y, div1_ru_fast::<HAS_FMA>, |a, b| div1_ru_slow(a, b))],
+    is that of [div_ru] with [div_ru_impl] inlined, up to eta. *)
 Definition div_ru (has_fma : bool) (x y : F64X2) : option F64X2 :=
   div_ru_impl has_fma x y.
 
@@ -6774,16 +6792,18 @@ Definition quadrants (pt : point) (a b : f64) : f64 * f64 :=
     [shuffle02], [shuffle03], [shuffle13], [swap], [add_rn], [sub_rn],
     [hadd_rn], [add_ru], [sub_ru], [mul_ru], [div_ru], [mul_add_ru],
     [sqrt1_ru] and [sqrt_rd_ru], which are the ones in [Generic] here.
-    [x + y], [x - y], [x / y], [Interval::mul_add],
-    [Interval::recip], [Interval::sqr] and [Interval::sqrt] are
-    [add_with], [sub_with], [div_with], [mul_add_with], [recip_with],
-    [sqr_with] and [sqrt_with] of [impl Interval] called with the token
-    [Baseline], whose backend is the build's (see [src/simd/token.rs]),
-    [x * y] is the body of [mul_with] with [Baseline] for its token (see
-    [mul] below), and [mul_rev_to_pair] calls the divisions of
-    [div_with] with [Baseline] too. These methods and divisions call the
-    backend of their token [s], as in [s.add_ru(x, y)], and are
-    transcribed here for an [s] whose backend is the portable one.
+    [x + y], [x - y], [Interval::mul_add] and [Interval::sqrt] are
+    [add_with], [sub_with], [mul_add_with] and [sqrt_with] of
+    [impl Interval] called with the token [Baseline], whose backend is the
+    build's (see [src/simd/token.rs]). [x / y], [Interval::recip] and
+    [Interval::sqr] are [div_with], [recip_with] and [sqr_with] called
+    with the token [CrateBaseline], private to the crate, whose backend is
+    that of [Baseline] (see [src/simd/token.rs]), [x * y] is the body of
+    [mul_with] with [CrateBaseline] for its token (see [mul] below), and
+    [mul_rev_to_pair] calls the divisions of [div_with] with
+    [CrateBaseline] too. These methods and divisions call the backend of
+    their token [s], as in [s.add_ru(x, y)], and are transcribed here for
+    an [s] whose backend is the portable one.
     [add_with], [sub_with], [mul_with], [div_with], [mul_add_with],
     [recip_with], [sqr_with] and [sqrt_with] of [impl DecInterval] call
     those of [impl Interval] with their token [s], and are transcribed
@@ -7765,10 +7785,11 @@ Definition zero : Interval := {| rep := Generic.splat zero |}.
 
 (** [pub fn sqr_with<S: Simd>(self, s: S) -> Self], for an [s] whose
     backend is the portable one; [pub fn sqr(self) -> Self] is
-    [self.sqr_with(Baseline)]. Its [s.mul_ru] calls
-    [mul_ru_impl::<HAS_FMA>], so [has_fma] is an argument, as for [mul].
-    [Self::zero()] is [zero], and [0.0] is the float [Model.zero], i.e. +0,
-    which [zero] shadows here. *)
+    [self.sqr_with(CrateBaseline)]. Its [s.mul_ru] calls
+    [mul_ru_impl::<HAS_FMA>], or [mul_ru_rust_abi], whose body is that of
+    [mul_ru_impl::<HAS_FMA>] up to eta, so [has_fma] is an argument, as for
+    [mul]. [Self::zero()] is [zero], and [0.0] is the float [Model.zero],
+    i.e. +0, which [zero] shadows here. *)
 Definition sqr (has_fma : bool) (self : Interval) : option Interval :=
   let* c := classify self in
   match c with
@@ -7795,11 +7816,13 @@ Definition sqr (has_fma : bool) (self : Interval) : option Interval :=
     [impl Interval], for an [s] whose backend is the portable one: its
     body is [mul_with_body!(self, s, rhs)], which binds [lhs], [s] and
     [rhs] to its arguments; [fn mul(self, rhs: Self) -> Self] of
-    [impl Mul for Interval] is [mul_with_body!(self, Baseline, rhs)],
-    the same body with [Baseline] for [s], whose methods there are those
-    of [TokenMethods], each of which calls the method of the same name of
-    [Baseline] through the bound [S: Simd]. Its [s.mul_ru] calls
-    [mul_ru_impl::<HAS_FMA>], and [HAS_FMA] depends on the
+    [impl Mul for Interval] is [mul_with_body!(self, CrateBaseline, rhs)],
+    the same body with [CrateBaseline] for [s], whose backend is that of
+    [Baseline] and whose methods there are those of [TokenMethods], each
+    of which calls the method of the same name of [CrateBaseline] through
+    the bound [S: Simd]. Its [s.mul_ru] calls
+    [mul_ru_impl::<HAS_FMA>], or [mul_ru_rust_abi], whose body is that of
+    [mul_ru_impl::<HAS_FMA>] up to eta, and [HAS_FMA] depends on the
     target, so it is an argument, as for [Generic.mul_ru]. The variant
     [X_Y] of [IntervalClass2] is the pair [(X, Y)], as in
     [transmute_class2], and [Self::zero()] is [zero]. *)
@@ -7944,9 +7967,10 @@ Definition mul_add (has_fma : bool) (self rhs addend : Interval) : option Interv
 (** [pub(crate) fn div_m_n1<S: Simd>(self, s: S, rhs: Self) -> Self] and the
     other divisions of [[a, b]] by [[c, d]] in [src/basic.rs], one for each
     case of [div] below, for an [s] whose backend is the portable one. Their
-    [s.div_ru] calls [div_ru_impl::<HAS_FMA>], so
-    [has_fma] is an argument, as for [mul], and [f64::INFINITY] is
-    [infinity]. *)
+    [s.div_ru] calls [div_ru_impl::<HAS_FMA>], or [div_ru_rust_abi], whose
+    body is that of [div_ru_impl::<HAS_FMA>] up to eta (see
+    [Generic.div_ru]), so [has_fma] is an argument, as for [mul], and
+    [f64::INFINITY] is [infinity]. *)
 Definition div_m_n1 (has_fma : bool) (self rhs : Interval) : option Interval :=
   let x := Generic.swap (rep self) in
   let y := Generic.swap (rep rhs) in
@@ -8024,8 +8048,8 @@ Definition div_p_p1 (has_fma : bool) (self rhs : Interval) : option Interval :=
 
 (** [pub fn recip_with<S: Simd>(self, s: S) -> Self], for an [s] whose
     backend is the portable one; [pub fn recip(self) -> Self] is
-    [self.recip_with(Baseline)]. [has_fma] is as for the divisions above,
-    and [-1.0] is [opp (of_u64 1)], as in [sign]. *)
+    [self.recip_with(CrateBaseline)]. [has_fma] is as for the divisions
+    above, and [-1.0] is [opp (of_u64 1)], as in [sign]. *)
 Definition recip (has_fma : bool) (self : Interval) : option Interval :=
   let* c := classify self in
   match c with
@@ -8056,9 +8080,9 @@ Definition recip (has_fma : bool) (self : Interval) : option Interval :=
 (** [pub fn div_with<S: Simd>(self, s: S, rhs: Self) -> Self] of
     [impl Interval], for an [s] whose backend is the portable one;
     [fn div(self, rhs: Self) -> Self] of [impl Div for Interval] is
-    [self.div_with(Baseline, rhs)]. [has_fma] is as for the divisions
-    above, and the variants of [IntervalClass2] and [Self::zero()] are as
-    in [mul]. *)
+    [self.div_with(CrateBaseline, rhs)]. [has_fma] is as for the
+    divisions above, and the variants of [IntervalClass2] and
+    [Self::zero()] are as in [mul]. *)
 Definition div (has_fma : bool) (self rhs : Interval) : option Interval :=
   let* c := classify2 self rhs in
   match c with
@@ -8085,8 +8109,9 @@ Definition div (has_fma : bool) (self rhs : Interval) : option Interval :=
 
 (** [pub fn mul_rev_to_pair(self, numerator: Self) -> [Self; 2]], with the
     array [[u, v]] as the pair [(u, v)], [has_fma] as for the divisions
-    above, which it calls with [Baseline], the variants of [IntervalClass2]
-    and [Self::zero()] as in [mul], and [f64::INFINITY] as [infinity]. *)
+    above, which it calls with [CrateBaseline], the variants of
+    [IntervalClass2] and [Self::zero()] as in [mul], and [f64::INFINITY]
+    as [infinity]. *)
 Definition mul_rev_to_pair (has_fma : bool) (self numerator : Interval) :
     option (Interval * Interval) :=
   let* c := classify2 numerator self in
@@ -8788,7 +8813,7 @@ Definition sign : DecInterval -> DecInterval :=
     [self.x().sqr_with(s)] is [Interval.sqr has_fma (itv self)], with the
     [has_fma] of [Interval.sqr] as an argument here too;
     [pub fn sqr(self) -> Self] expands the same macro with
-    [self.x().sqr()], which is [self.x().sqr_with(Baseline)], and with
+    [self.x().sqr()], which is [self.x().sqr_with(CrateBaseline)], and with
     [Self::set_dec], which calls [Self::set_dec_impl]. *)
 Definition sqr (has_fma : bool) (self : DecInterval) : option DecInterval :=
   if is_nai self then Some self
@@ -8878,7 +8903,7 @@ Definition sub (self rhs : DecInterval) : option DecInterval :=
     [Interval.mul] as an argument here too;
     [fn mul(self, rhs: Self) -> Self] of [impl Mul for DecInterval]
     expands the same macro with [self.x() * rhs.x()], which is the body
-    of [self.x().mul_with(s, rhs.x())] with [Baseline] for [s] (see
+    of [self.x().mul_with(s, rhs.x())] with [CrateBaseline] for [s] (see
     [Interval.mul]), and with [Self::set_dec], which calls
     [Self::set_dec_impl]. *)
 Definition mul (has_fma : bool) (self rhs : DecInterval) : option DecInterval :=
@@ -8917,8 +8942,8 @@ Definition mul_add (has_fma : bool) (self rhs addend : DecInterval) :
     [self.x().recip_with(s)] is [Interval.recip has_fma (itv self)], with
     the [has_fma] of [Interval.recip] as an argument here too, and [0.0]
     is +0; [pub fn recip(self) -> Self] expands the same macro with
-    [self.x().recip()], which is [self.x().recip_with(Baseline)], and with
-    [Self::set_dec], which calls [Self::set_dec_impl]. *)
+    [self.x().recip()], which is [self.x().recip_with(CrateBaseline)], and
+    with [Self::set_dec], which calls [Self::set_dec_impl]. *)
 Definition recip (has_fma : bool) (self : DecInterval) : option DecInterval :=
   if is_nai self then Some self
   else
@@ -8937,7 +8962,7 @@ Definition recip (has_fma : bool) (self : DecInterval) : option DecInterval :=
     [Interval.div] as an argument here too, and [0.0] is +0;
     [fn div(self, rhs: Self) -> Self] of [impl Div for DecInterval]
     expands the same macro with [self.x() / rhs.x()], which is
-    [self.x().div_with(Baseline, rhs.x())], and with [Self::set_dec],
+    [self.x().div_with(CrateBaseline, rhs.x())], and with [Self::set_dec],
     which calls [Self::set_dec_impl]. *)
 Definition div (has_fma : bool) (self rhs : DecInterval) : option DecInterval :=
   if is_nai self || is_nai rhs then Some NAI

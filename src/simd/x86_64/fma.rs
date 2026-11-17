@@ -25,9 +25,9 @@
 #[cfg(not(all(target_feature = "avx", target_feature = "fma")))]
 use super::extract0;
 use super::lanewise::{
-    add_i64, andnot, div_rn, exponent_gt, exponent_in, exponent_le, gt_i64, is_finite, is_special,
-    lane0, mul_rn, not, or_generic, select, splat_i64, sqrt_rn, step_up, sub_i64, two_sum_err,
-    zero,
+    add_i64, andnot, div_rn, div_ru_generic, exponent_gt, exponent_in, exponent_le, gt_i64,
+    is_finite, is_special, lane0, mul_rn, mul_ru_generic, not, or_generic, select, splat_i64,
+    sqrt_rn, step_up, sub_i64, two_sum_err, zero,
 };
 use super::{add_rn, all, and, eq, extract, gt, lt, or, splat, sub_rn, F64X2};
 use crate::simd::generic;
@@ -87,7 +87,13 @@ fn div_ru_body(x: F64X2, y: F64X2) -> F64X2 {
         and(lt(r, zero()), lt(y, zero())),
     );
     let res = select(andnot(up, special), step_up(q), q);
-    or_generic(ok, res, || generic::div_ru(extract(x), extract(y)))
+    // `#[inline(always)]`: see `lanewise::div_ru_generic`.
+    or_generic(
+        ok,
+        res,
+        #[inline(always)]
+        move || div_ru_generic(x, y),
+    )
 }
 
 /// `mul_add_ru([x0, x1], [y0, y1], [z0, z1]) = [x0 * y0 + z0, x1 * y1 + z1]`
@@ -236,7 +242,13 @@ fn mul_ru_tiny(x: F64X2, y: F64X2, p: F64X2, ok: F64X2, special: F64X2) -> F64X2
     let zero_rule = select(gt_i64(zero(), p), p, splat_i64(1));
     let res = select(ok, r, select(p_zero, zero_rule, q));
     let ok = or(ok, or(p_zero, two_prod_is_exact(ps)));
-    or_generic(ok, res, || generic::mul_ru(extract(x), extract(y)))
+    // `#[inline(always)]`: see `lanewise::div_ru_generic`.
+    or_generic(
+        ok,
+        res,
+        #[inline(always)]
+        move || mul_ru_generic(x, y),
+    )
 }
 
 /// `sqrt_rd_ru([x0, x1]) = [√x0, √x1]`, the first rounded toward -∞ and the

@@ -48,6 +48,7 @@
 //   r[63:0] = x0, r[127:64] = x1.
 
 mod token;
+pub(crate) use token::CrateBaseline;
 pub use token::{dispatch, Baseline, Simd, WithLevel};
 #[cfg(target_arch = "x86_64")]
 pub use token::{V2, V3};

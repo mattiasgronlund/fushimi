@@ -76,13 +76,25 @@ pub(crate) fn add_rn(x: F64X2, y: F64X2) -> F64X2 {
 }
 
 /// `add_ru([x0, x1], [y0, y1]) = [x0 + y0, x1 + y1]` rounded toward +∞.
-// Out of line as the build's backend (see `Baseline` in `src/simd/token.rs`).
-#[cfg_attr(inari_generic_backend, inline(never))]
+// Out of line as the build's backend, except on aarch64, where that kept LLVM, in a build with
+// fat LTO, from inlining it into some of a user's loops: a loop of calls of `add_ru` of
+// `src/__bench.rs` then ran 17 more instructions per call (counted under QEMU). There it takes
+// Rust's ABI, which passed its vectors by pointer in Cargo's default release profile (see
+// `Baseline` in `src/simd/token.rs`).
+#[cfg_attr(
+    all(inari_generic_backend, not(target_arch = "aarch64")),
+    inline(never)
+)]
 pub(crate) fn add_ru(x: F64X2, y: F64X2) -> F64X2 {
     // Proved correct in `rocq/theories/AddRu.v`. `rocq/theories/Model.v` transcribes
     // this function for that proof and those of `(Dec)Interval::add` and
     // `(Dec)Interval::sub`, so it has to be updated along with it.
-    lanewise2(x, y, add1_ru_fast, add1_ru_slow)
+    // Destructuring `x` and `y`, rather than moving them into `lanewise2`, lets rustc
+    // mark them read-only, so that LLVM can drop the copies of their operands that
+    // `DecInterval::{add, sub}` make to call this function.
+    let [x0, x1] = x;
+    let [y0, y1] = y;
+    lanewise2([x0, x1], [y0, y1], add1_ru_fast, add1_ru_slow)
 }
 
 // `rocq/theories/Model.v` transcribes this function for the proofs of
@@ -159,14 +171,54 @@ pub(crate) fn constant(x: f64, y: f64) -> F64X2 {
 }
 
 /// `div_ru([x0, x1], [y0, y1]) = [x0 / y0, x1 / y1]` rounded toward +∞.
-// Out of line as the build's backend (see `Baseline` in `src/simd/token.rs`).
-#[cfg_attr(inari_generic_backend, inline(never))]
+// Out of line as the build's backend, except on aarch64, where that kept LLVM, in a build with
+// fat LTO, from inlining it into some of a user's loops: a loop of calls of `div_ru` of
+// `src/__bench.rs` then ran 14 more instructions per call (counted under QEMU). There it takes
+// Rust's ABI, which passed its vectors by pointer in Cargo's default release profile (see
+// `Baseline` in `src/simd/token.rs`).
+#[cfg(not(all(inari_generic_backend, target_arch = "x86_64")))]
+#[cfg_attr(
+    all(inari_generic_backend, not(target_arch = "aarch64")),
+    inline(never)
+)]
 pub(crate) fn div_ru(x: F64X2, y: F64X2) -> F64X2 {
     // Proved correct in `rocq/theories/DivRu.v`. `rocq/theories/Model.v` transcribes
     // this function for that proof and those of `(Dec)Interval::div`,
     // `(Dec)Interval::mul_rev_to_pair` and `(Dec)Interval::recip`, so it has to be
     // updated along with it.
     div_ru_impl::<HAS_FMA>(x, y)
+}
+
+/// `div_ru([x0, x1], [y0, y1]) = [x0 / y0, x1 / y1]` rounded toward +∞.
+// As the build's backend on x86-64, it is out of line, and takes the ABI `sysv64`, which passes
+// its vectors in registers, where Rust's ABI passed them by pointer in Cargo's default release
+// profile (see `Baseline` in `src/simd/token.rs`).
+#[cfg(all(inari_generic_backend, target_arch = "x86_64"))]
+#[allow(improper_ctypes_definitions)] // `[f64; 2]`, but only Rust code calls it.
+#[inline(never)]
+pub(crate) extern "sysv64-unwind" fn div_ru(x: F64X2, y: F64X2) -> F64X2 {
+    // Proved correct in `rocq/theories/DivRu.v`. `rocq/theories/Model.v` transcribes
+    // this function for that proof and those of `(Dec)Interval::div`,
+    // `(Dec)Interval::mul_rev_to_pair` and `(Dec)Interval::recip`, so it has to be
+    // updated along with it.
+    div_ru_impl::<HAS_FMA>(x, y)
+}
+
+/// `div_ru([x0, x1], [y0, y1]) = [x0 / y0, x1 / y1]` rounded toward +∞.
+// The copy of `div_ru` with Rust's ABI, which `Baseline::div_ru` calls: that method is
+// `#[inline(always)]`, so a user's crate calls this copy, which the crate exports, whereas
+// `CrateBaseline` calls the `sysv64` `div_ru` (see `CrateBaseline` in `src/simd/token.rs`).
+#[cfg(all(inari_generic_backend, target_arch = "x86_64"))]
+#[allow(clippy::redundant_closure)] // The closure gives this copy its own `lanewise2` (see below).
+#[inline(never)]
+pub(crate) fn div_ru_rust_abi(x: F64X2, y: F64X2) -> F64X2 {
+    // Proved correct in `rocq/theories/DivRu.v`. `rocq/theories/Model.v` transcribes
+    // this function, the body of `div_ru` with `div_ru_impl` inlined, for that proof and
+    // those of `(Dec)Interval::div`, `(Dec)Interval::mul_rev_to_pair` and
+    // `(Dec)Interval::recip`, so it has to be updated along with it. The closure,
+    // `div1_ru_slow` up to eta, gives this copy its own `lanewise2`: when it and the
+    // `sysv64` `div_ru` called one instance, LLVM left that instance out of line.
+    lanewise2(x, y, div1_ru_fast::<HAS_FMA>, |a, b| div1_ru_slow(a, b))
 }
 
 // `rocq/theories/Model.v` transcribes this function for the proofs of
@@ -317,13 +369,54 @@ pub(crate) fn mul_add_ru(x: F64X2, y: F64X2, z: F64X2) -> F64X2 {
 }
 
 /// `mul_ru([x0, x1], [y0, y1]) = [x0 * y0, x1 * y1]` rounded toward +∞.
-// Out of line as the build's backend (see `Baseline` in `src/simd/token.rs`).
-#[cfg_attr(inari_generic_backend, inline(never))]
+// Out of line as the build's backend, except on aarch64, where that kept LLVM, in a build with
+// fat LTO, from inlining it into some of a user's loops: a loop of calls of `mul_ru` of
+// `src/__bench.rs` then ran 22 more instructions per call (counted under QEMU). There it takes
+// Rust's ABI, which passed its vectors by pointer in Cargo's default release profile (see
+// `Baseline` in `src/simd/token.rs`).
+#[cfg(not(all(inari_generic_backend, target_arch = "x86_64")))]
+#[cfg_attr(
+    all(inari_generic_backend, not(target_arch = "aarch64")),
+    inline(never)
+)]
 pub(crate) fn mul_ru(x: F64X2, y: F64X2) -> F64X2 {
     // Proved correct in `rocq/theories/MulRu.v`. `rocq/theories/Model.v` transcribes
     // this function for that proof and those of `(Dec)Interval::mul` and
     // `(Dec)Interval::sqr`, so it has to be updated along with it.
     mul_ru_impl::<HAS_FMA>(x, y)
+}
+
+/// `mul_ru([x0, x1], [y0, y1]) = [x0 * y0, x1 * y1]` rounded toward +∞.
+// As the build's backend on x86-64, it is out of line, and takes the ABI `sysv64`, which passes
+// its vectors in registers, where Rust's ABI passed them by pointer in Cargo's default release
+// profile (see `Baseline` in `src/simd/token.rs`).
+#[cfg(all(inari_generic_backend, target_arch = "x86_64"))]
+#[allow(improper_ctypes_definitions)] // `[f64; 2]`, but only Rust code calls it.
+#[inline(never)]
+pub(crate) extern "sysv64-unwind" fn mul_ru(x: F64X2, y: F64X2) -> F64X2 {
+    // Proved correct in `rocq/theories/MulRu.v`. `rocq/theories/Model.v` transcribes
+    // this function for that proof and those of `(Dec)Interval::mul` and
+    // `(Dec)Interval::sqr`, so it has to be updated along with it.
+    mul_ru_impl::<HAS_FMA>(x, y)
+}
+
+/// `mul_ru([x0, x1], [y0, y1]) = [x0 * y0, x1 * y1]` rounded toward +∞.
+// The copy of `mul_ru` with Rust's ABI, which `Baseline::mul_ru` calls: that method is
+// `#[inline(always)]`, so a user's crate calls this copy, which the crate exports, whereas
+// `CrateBaseline` calls the `sysv64` `mul_ru` (see `CrateBaseline` in `src/simd/token.rs`).
+#[cfg(all(inari_generic_backend, target_arch = "x86_64"))]
+#[allow(clippy::redundant_closure)] // The closure gives this copy its own `lanewise2` (see below).
+#[inline(never)]
+pub(crate) fn mul_ru_rust_abi(x: F64X2, y: F64X2) -> F64X2 {
+    // Proved correct in `rocq/theories/MulRu.v`. `rocq/theories/Model.v` transcribes
+    // this function, the body of `mul_ru` with `mul_ru_impl` inlined, for that proof and
+    // those of `(Dec)Interval::mul` and `(Dec)Interval::sqr`, so it has to be updated along
+    // with it. The closure, `mul1_ru_tiny::<HAS_FMA>` up to eta, gives this copy its own
+    // `lanewise2`: when it and the `sysv64` `mul_ru` called one instance, LLVM left that
+    // instance out of line.
+    lanewise2(x, y, mul1_ru_fast::<HAS_FMA>, |a, b| {
+        mul1_ru_tiny::<HAS_FMA>(a, b)
+    })
 }
 
 // `rocq/theories/Model.v` transcribes this function for the proof of `sub_ru`.

@@ -128,11 +128,11 @@ impl Sub for Interval {
 forward_ref_binop!(impl Sub, sub for Interval, Interval);
 
 // The body of `Interval::mul_with`, with `$lhs` for `self`, `$s` for `s` and `$rhs` for `rhs`.
-// `Mul::mul` expands it with `Baseline` rather than calling `mul_with`. The body is too large
-// for rustc's MIR inliner even with `#[inline(always)]` (seen with rustc 1.98), which only LLVM
-// always follows, so the call would stay in the MIR of `mul`, and as it takes `self` and `rhs`
-// by `move`, rustc would no longer mark the pointers through which `mul` takes them `readonly`
-// and `captures(none)`.
+// `Mul::mul` expands it with `CrateBaseline` rather than calling `mul_with`. The body is too
+// large for rustc's MIR inliner even with `#[inline(always)]` (seen with rustc 1.98), which only
+// LLVM always follows, so the call would stay in the MIR of `mul`, and as it takes `self` and
+// `rhs` by `move`, rustc would no longer mark the pointers through which `mul` takes them
+// `readonly` and `captures(none)`.
 // A caller that sees only the declaration of `mul`, such as `<DecInterval as Mul>::mul` in
 // another codegen unit, would then copy both intervals to its stack before the call.
 macro_rules! mul_with_body {
@@ -244,10 +244,10 @@ macro_rules! mul_with_body {
 }
 
 // The methods of a token that `mul_with_body!` calls, for `Mul::mul`, which expands the macro with
-// `Baseline`. They are those of the sealed supertrait of `Simd`, which this module cannot name:
-// `mul_with` calls them through its bound `S: Simd`, but on the type `Baseline` only a trait in
-// scope gives them. Each method calls the one of the same name through the bound `S: Simd`, as
-// the bound comes first in method resolution.
+// `CrateBaseline`. They are those of the sealed supertrait of `Simd`, which this module cannot
+// name: `mul_with` calls them through its bound `S: Simd`, but on the type `CrateBaseline` only a
+// trait in scope gives them. Each method calls the one of the same name through the bound
+// `S: Simd`, as the bound comes first in method resolution.
 trait TokenMethods {
     fn max(self, x: F64X2, y: F64X2) -> F64X2;
     fn mul_ru(self, x: F64X2, y: F64X2) -> F64X2;
@@ -324,10 +324,11 @@ impl Mul for Interval {
 
     fn mul(self, rhs: Self) -> Self {
         // Proved correct in `rocq/theories/Mul.v` for the portable backend, as `mul_with`
-        // called with `Baseline`: this is the body of `mul_with`, `mul_with_body!`, with
-        // `Baseline` for `s` (see the comment on the macro). `rocq/theories/Model.v`
+        // called with `CrateBaseline`, whose backend is that of `Baseline` (see `CrateBaseline`
+        // in `src/simd/token.rs`): this is the body of `mul_with`, `mul_with_body!`, with
+        // `CrateBaseline` for `s` (see the comment on the macro). `rocq/theories/Model.v`
         // transcribes this, so it has to be updated along with it.
-        mul_with_body!(self, Baseline, rhs)
+        mul_with_body!(self, CrateBaseline, rhs)
     }
 }
 
@@ -399,9 +400,10 @@ impl Div for Interval {
 
     fn div(self, rhs: Self) -> Self {
         // Proved correct in `rocq/theories/Div.v` for the portable backend, as `div_with`
-        // called with `Baseline`. `rocq/theories/Model.v` transcribes this call, so it has to
+        // called with `CrateBaseline`, whose backend is that of `Baseline` (see `CrateBaseline`
+        // in `src/simd/token.rs`). `rocq/theories/Model.v` transcribes this call, so it has to
         // be updated along with it.
-        self.div_with(Baseline, rhs)
+        self.div_with(CrateBaseline, rhs)
     }
 }
 
@@ -626,11 +628,12 @@ impl Mul for DecInterval {
 
     fn mul(self, rhs: Self) -> Self {
         // Proved correct in `rocq/theories/Mul.v` for the portable backend, as `mul_with`
-        // called with `Baseline`, if `self` and `rhs` are `com` only when `self.x()` and
+        // called with `CrateBaseline`, whose backend is that of `Baseline` (see `CrateBaseline`
+        // in `src/simd/token.rs`), if `self` and `rhs` are `com` only when `self.x()` and
         // `rhs.x()` are common, which `rocq/theories/ComCommon.v` proves of every
         // `DecInterval` that the library makes: this is the body of `mul_with`,
         // `dec_add_sub_mul_with_body!`, with `self.x() * rhs.x()`, which is the body of
-        // `Interval::mul_with` with `Baseline` for `s`, for the interval, and with
+        // `Interval::mul_with` with `CrateBaseline` for `s`, for the interval, and with
         // `Self::set_dec`, which calls `Self::set_dec_impl` (see the comment on the macro).
         // `rocq/theories/Model.v` transcribes this, so it has to be updated along with it.
         dec_add_sub_mul_with_body!(self, rhs, self.x() * rhs.x(), Self::set_dec)
@@ -687,12 +690,13 @@ impl Div for DecInterval {
 
     fn div(self, rhs: Self) -> Self {
         // Proved correct in `rocq/theories/Div.v` for the portable backend, as `div_with`
-        // called with `Baseline`, if `self` and `rhs` are `com` only when `self.x()` and
+        // called with `CrateBaseline`, whose backend is that of `Baseline` (see `CrateBaseline`
+        // in `src/simd/token.rs`), if `self` and `rhs` are `com` only when `self.x()` and
         // `rhs.x()` are common, which `rocq/theories/ComCommon.v` proves of every
         // `DecInterval` that the library makes: this is the body of `div_with`,
         // `dec_div_with_body!`, with `self.x() / rhs.x()`, which is
-        // `self.x().div_with(Baseline, rhs.x())`, for the interval, and with `Self::set_dec`,
-        // which calls `Self::set_dec_impl` (see the comment on the macro).
+        // `self.x().div_with(CrateBaseline, rhs.x())`, for the interval, and with
+        // `Self::set_dec`, which calls `Self::set_dec_impl` (see the comment on the macro).
         // `rocq/theories/Model.v` transcribes this, so it has to be updated along with it.
         dec_div_with_body!(self, rhs, self.x() / rhs.x(), Self::set_dec)
     }

@@ -241,16 +241,16 @@ impl Interval {
                     },
                 ]
             }
-            M_N1 => [numerator.div_m_n1(Baseline, self), Self::EMPTY],
-            M_P1 => [numerator.div_m_p1(Baseline, self), Self::EMPTY],
-            N1_N0 => [numerator.div_n_n0(Baseline, self), Self::EMPTY],
-            N0_N1 | N1_N1 => [numerator.div_n_n1(Baseline, self), Self::EMPTY],
-            N1_P0 => [numerator.div_n_p0(Baseline, self), Self::EMPTY],
-            N0_P1 | N1_P1 => [numerator.div_n_p1(Baseline, self), Self::EMPTY],
-            P1_N0 => [numerator.div_p_n0(Baseline, self), Self::EMPTY],
-            P0_N1 | P1_N1 => [numerator.div_p_n1(Baseline, self), Self::EMPTY],
-            P1_P0 => [numerator.div_p_p0(Baseline, self), Self::EMPTY],
-            P0_P1 | P1_P1 => [numerator.div_p_p1(Baseline, self), Self::EMPTY],
+            M_N1 => [numerator.div_m_n1(CrateBaseline, self), Self::EMPTY],
+            M_P1 => [numerator.div_m_p1(CrateBaseline, self), Self::EMPTY],
+            N1_N0 => [numerator.div_n_n0(CrateBaseline, self), Self::EMPTY],
+            N0_N1 | N1_N1 => [numerator.div_n_n1(CrateBaseline, self), Self::EMPTY],
+            N1_P0 => [numerator.div_n_p0(CrateBaseline, self), Self::EMPTY],
+            N0_P1 | N1_P1 => [numerator.div_n_p1(CrateBaseline, self), Self::EMPTY],
+            P1_N0 => [numerator.div_p_n0(CrateBaseline, self), Self::EMPTY],
+            P0_N1 | P1_N1 => [numerator.div_p_n1(CrateBaseline, self), Self::EMPTY],
+            P1_P0 => [numerator.div_p_p0(CrateBaseline, self), Self::EMPTY],
+            P0_P1 | P1_P1 => [numerator.div_p_p1(CrateBaseline, self), Self::EMPTY],
         }
     }
 
@@ -557,9 +557,10 @@ impl Interval {
     #[must_use]
     pub fn recip(self) -> Self {
         // Proved correct in `rocq/theories/Recip.v` for the portable backend, as `recip_with`
-        // called with `Baseline`. `rocq/theories/Model.v` transcribes this call, so it has to
+        // called with `CrateBaseline`, whose backend is that of `Baseline` (see `CrateBaseline`
+        // in `src/simd/token.rs`). `rocq/theories/Model.v` transcribes this call, so it has to
         // be updated along with it.
-        self.recip_with(Baseline)
+        self.recip_with(CrateBaseline)
     }
 
     /// Returns `self.recip()`, computed by the backend of `s` (see [`Simd`](crate::simd::Simd)).
@@ -641,9 +642,10 @@ impl Interval {
     #[must_use]
     pub fn sqr(self) -> Self {
         // Proved correct in `rocq/theories/Sqr.v` for the portable backend, as `sqr_with`
-        // called with `Baseline`. `rocq/theories/Model.v` transcribes this call, so it has to
+        // called with `CrateBaseline`, whose backend is that of `Baseline` (see `CrateBaseline`
+        // in `src/simd/token.rs`). `rocq/theories/Model.v` transcribes this call, so it has to
         // be updated along with it.
-        self.sqr_with(Baseline)
+        self.sqr_with(CrateBaseline)
     }
 
     /// Returns `self.sqr()`, computed by the backend of `s` (see [`Simd`](crate::simd::Simd)).
@@ -803,7 +805,8 @@ macro_rules! dec_mul_add_with_body {
 // `self.x().recip()` and with `Self::set_dec`, which is not, rather than calling `recip_with`
 // with `Baseline`. With that call, `DecInterval::recip` took one more branch per call for a
 // positive or a negative interval in a plain x86-64 build of the library, though 12 fewer
-// instructions (seen with rustc 1.98).
+// instructions (seen with rustc 1.98, when `Interval::recip` called `recip_with` with `Baseline`
+// too, not with `CrateBaseline`).
 macro_rules! dec_recip_with_body {
     ($lhs:ident, $x:expr, $set_dec:path) => {{
         if $lhs.is_nai() {
@@ -824,7 +827,8 @@ macro_rules! dec_recip_with_body {
 // `Self::set_dec` rather than calling `sqr_with` with `Baseline`. With every operation of
 // `DecInterval` without a token calling its `*_with` method with `Baseline`, `Interval::sqr`,
 // whose source is the same either way, took 5 more instructions per call for a positive or a
-// mixed interval in a plain x86-64 build of the library (seen with rustc 1.98).
+// mixed interval in a plain x86-64 build of the library (seen with rustc 1.98, when
+// `Interval::sqr` called `sqr_with` with `Baseline` too, not with `CrateBaseline`).
 macro_rules! dec_sqr_with_body {
     ($lhs:ident, $x:expr, $set_dec:path) => {{
         if $lhs.is_nai() {
@@ -987,11 +991,11 @@ impl DecInterval {
     #[must_use]
     pub fn recip(self) -> Self {
         // Proved correct in `rocq/theories/Recip.v` for the portable backend, as `recip_with`
-        // called with `Baseline`, if `self` is `com` only when `self.x()` is common, which
+        // called with `CrateBaseline`, if `self` is `com` only when `self.x()` is common, which
         // `rocq/theories/ComCommon.v` proves of every `DecInterval` that the library makes:
         // this is the body of `recip_with`, `dec_recip_with_body!`, with `self.x().recip()`,
-        // which is `self.x().recip_with(Baseline)`, for the interval, and with `Self::set_dec`,
-        // which calls `Self::set_dec_impl` (see the comment on the macro).
+        // which is `self.x().recip_with(CrateBaseline)`, for the interval, and with
+        // `Self::set_dec`, which calls `Self::set_dec_impl` (see the comment on the macro).
         // `rocq/theories/Model.v` transcribes this, so it has to be updated along with it.
         dec_recip_with_body!(self, self.x().recip(), Self::set_dec)
     }
@@ -1042,9 +1046,9 @@ impl DecInterval {
     #[must_use]
     pub fn sqr(self) -> Self {
         // Proved correct in `rocq/theories/Sqr.v` for the portable backend, as `sqr_with`
-        // called with `Baseline`: this is the body of `sqr_with`, `dec_sqr_with_body!`, with
-        // `self.x().sqr()`, which is `self.x().sqr_with(Baseline)`, for the interval, and with
-        // `Self::set_dec`, which calls `Self::set_dec_impl` (see the comment on the macro).
+        // called with `CrateBaseline`: this is the body of `sqr_with`, `dec_sqr_with_body!`, with
+        // `self.x().sqr()`, which is `self.x().sqr_with(CrateBaseline)`, for the interval, and
+        // with `Self::set_dec`, which calls `Self::set_dec_impl` (see the comment on the macro).
         // `rocq/theories/Model.v` transcribes this, so it has to be updated along with it.
         dec_sqr_with_body!(self, self.x().sqr(), Self::set_dec)
     }

@@ -218,6 +218,38 @@ pub(super) fn or_generic_unless(bad: F64X2, r: F64X2, generic: impl FnOnce() -> 
     }
 }
 
+// `$f(x, y)` is `generic::$g(x, y)`, the slow path of `$g` in `fma.rs` and `sse42.rs`.
+//
+// Where the generic backend is the build's (plain `x86-64`), `fma` and `sse42` are only the
+// backends of the copies of `V2` and `V3` in `src/simd/token.rs`, and `generic::$g` takes the ABI
+// `sysv64`, which passes x and y as four `f64`s in four registers. Called through a forwarder
+// with Rust's ABI, whose arguments LLVM passed in the same four registers, `generic::div_ru` made
+// the copy of `V3` keep y from its entry in the register where the call takes it: one more
+// instruction on the copy's fast path. `$f` takes x and y as `__m128d`s, which `sysv64` passes in
+// the registers where the copies have them, and splits them itself. As the closure that calls it
+// passes vectors to a function with other target features, LLVM inlines the closure into the
+// copies only as `#[inline(always)]`: out of line, it cost the fast path of the copy of `V3`'s
+// `div_ru` 4 instructions (objdump of an `x86-64` build).
+macro_rules! impl_generic_slow_path {
+    ($f:ident, $g:ident) => {
+        #[cfg(not(inari_generic_backend))]
+        #[inline(always)]
+        pub(super) fn $f(x: F64X2, y: F64X2) -> [f64; 2] {
+            generic::$g(extract(x), extract(y))
+        }
+
+        #[cfg(inari_generic_backend)]
+        #[allow(improper_ctypes_definitions)] // `__m128d` and `[f64; 2]` (see `generic::$g`).
+        #[inline(never)]
+        pub(super) extern "sysv64-unwind" fn $f(x: F64X2, y: F64X2) -> [f64; 2] {
+            generic::$g(extract(x), extract(y))
+        }
+    };
+}
+
+impl_generic_slow_path!(div_ru_generic, div_ru);
+impl_generic_slow_path!(mul_ru_generic, mul_ru);
+
 // The unbiased exponents of the lanes of x as i64 lanes: floor(log2(|x|)) if x
 // is normal, -1023 if x is zero or subnormal, and 1024 if x is infinite or NaN.
 #[inline(always)]

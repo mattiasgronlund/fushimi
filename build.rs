@@ -13,9 +13,10 @@
 // (`src/simd/generic.rs`), as the arms of `src/simd.rs` select it: with `force-generic`, and on
 // targets without a backend of their own, among them plain `x86-64`. It does not look at `docsrs`,
 // where `src/simd.rs` takes `unimplemented.rs` and calls none of these functions, so that the cfg
-// there only pins functions that nothing calls. Where it is set, the backend functions of
-// `generic.rs` that `Baseline` calls (`src/simd/token.rs`) are pinned in or out of line;
-// elsewhere they are the slow paths of another backend, and are left to LLVM as before.
+// there only pins functions that nothing calls. Where it is set, some of the backend functions
+// of `generic.rs` that `Baseline` calls (`src/simd/token.rs`) are pinned in or out of line, as
+// `Baseline` says; elsewhere they are the slow paths of another backend, and are left to LLVM
+// as before.
 // `cfg(inari_sse42_backend)` is set where it uses `sse42` (`src/simd/x86_64.rs`), whose
 // `mul_add_ru` is then out of line, as `Baseline` says.
 

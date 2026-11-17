@@ -19,9 +19,9 @@
 // backend shares.
 
 use super::lanewise::{
-    add_i64, andnot, div_rn, exponent_gt, exponent_in, exponent_le, gt_i64, is_finite, is_special,
-    lane0, mul_rn, not, or_generic, select, splat_i64, sqrt_rn, step_up, sub_i64, two_sum_err,
-    zero,
+    add_i64, andnot, div_rn, div_ru_generic, exponent_gt, exponent_in, exponent_le, gt_i64,
+    is_finite, is_special, lane0, mul_rn, mul_ru_generic, not, or_generic, select, splat_i64,
+    sqrt_rn, step_up, sub_i64, two_sum_err, zero,
 };
 use super::{add_rn, all, and, constant, eq, extract, gt, lt, or, splat, sub_rn, xor, F64X2};
 use crate::simd::generic;
@@ -70,10 +70,18 @@ fn div_ru_body(x: F64X2, y: F64X2) -> F64X2 {
         // Here `all(ok)` is false, so `or_generic` returns the result of the generic
         // backend, not `q`. In a build for `x86-64` with one codegen unit, where this
         // body is inlined into the `sse4.2` copies of the token `V2`,
-        // `generic::div_ru` took its arguments by pointer from every caller when it
-        // was called here directly, or through a helper smaller than `or_generic`,
-        // and in registers when called through `or_generic`.
-        return or_generic(ok, q, || generic::div_ru(extract(x), extract(y)));
+        // `generic::div_ru`, when it took Rust's ABI, took its arguments by pointer
+        // from every caller when it was called here directly, or through a helper
+        // smaller than `or_generic`, and in registers when called through
+        // `or_generic`. In that build it now takes the ABI `sysv64`, and the closure
+        // calls it through `lanewise::div_ru_generic`, whose comment says why the
+        // closure is `#[inline(always)]`.
+        return or_generic(
+            ok,
+            q,
+            #[inline(always)]
+            move || div_ru_generic(x, y),
+        );
     }
     let p = mul_rn(q, y);
     let r = sub_rn(sub_rn(x, p), two_prod_err(q, y, p));
@@ -233,7 +241,13 @@ fn mul_ru_tiny(x: F64X2, y: F64X2, p: F64X2, ok: F64X2, special: F64X2) -> F64X2
     let zero_rule = select(gt_i64(zero(), p), p, splat_i64(1));
     let res = select(ok, r, select(p_zero, zero_rule, q));
     let ok = or(ok, or(p_zero, two_prod_is_exact(xs, y, ps)));
-    or_generic(ok, res, || generic::mul_ru(extract(x), extract(y)))
+    // `#[inline(always)]`: see `lanewise::div_ru_generic`.
+    or_generic(
+        ok,
+        res,
+        #[inline(always)]
+        move || mul_ru_generic(x, y),
+    )
 }
 
 /// `sqrt_rd_ru([x0, x1]) = [√x0, √x1]`, the first rounded toward -∞ and the
