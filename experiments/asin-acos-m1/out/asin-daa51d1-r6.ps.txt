@@ -1,0 +1,6 @@
+ %CPU COMM
+ 15.5 /System/Library/Frameworks/AddressBook.framework/Versions/A/Helpers/AddressBookManager.app/Contents/MacOS/AddressBookManager
+ 11.0 /System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer
+ 10.5 /usr/libexec/runningboardd
+  8.3 /System/Library/Frameworks/Contacts.framework/Support/contactsd
+  7.3 /Applications/kitty.app/Contents/MacOS/kitty

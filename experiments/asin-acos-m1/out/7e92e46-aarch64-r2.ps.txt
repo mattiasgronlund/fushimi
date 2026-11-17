@@ -1,0 +1,6 @@
+ %CPU COMM
+  2.0 /usr/libexec/locationd
+  1.6 /usr/libexec/searchpartyd
+  1.4 /System/Library/CoreServices/Finder.app/Contents/MacOS/Finder
+  1.0 /Applications/Nextcloud Talk.app/Contents/Frameworks/Nextcloud Talk Helper.app/Contents/MacOS/Nextcloud Talk Helper
+  1.0 claude

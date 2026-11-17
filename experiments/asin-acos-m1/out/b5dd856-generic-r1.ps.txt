@@ -1,0 +1,6 @@
+ %CPU COMM
+ 10.6 /System/Library/CoreServices/Finder.app/Contents/MacOS/Finder
+  0.8 claude
+  0.6 /System/Library/ExtensionKit/Extensions/WallpaperAerialsExtension.appex/Contents/MacOS/WallpaperAerialsExtension
+  0.5 claude
+  0.3 /Library/Application Support/org.pqrs/Karabiner-Elements/Karabiner-Core-Service.app/Contents/MacOS/Karabiner-Core-Service

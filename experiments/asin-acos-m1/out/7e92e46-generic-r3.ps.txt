@@ -1,0 +1,6 @@
+ %CPU COMM
+ 12.2 /System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer
+  7.9 /usr/sbin/systemstats
+  4.4 /System/Volumes/Preboot/Cryptexes/App/System/Applications/Safari.app/Contents/MacOS/Safari
+  4.2 /usr/sbin/bluetoothd
+  3.9 /Library/SystemExtensions/70C33EF6-65B2-419B-B810-B3314186A6EF/io.tailscale.ipn.macsys.network-extension.systemextension/Contents/MacOS/io.tailscale.ipn.macsys.network-extension

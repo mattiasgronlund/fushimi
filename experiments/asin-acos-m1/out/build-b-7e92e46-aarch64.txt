@@ -1,0 +1,3 @@
+    Finished `bench` profile [optimized] target(s) in 0.03s
+  Executable benches/intervals.rs (target/release/build/inari-bench/d9ac37e559fb69dd/out/intervals-d9ac37e559fb69dd)
+  Executable benches/primitives.rs (target/release/build/inari-bench/be8a6758e3878437/out/primitives-be8a6758e3878437)

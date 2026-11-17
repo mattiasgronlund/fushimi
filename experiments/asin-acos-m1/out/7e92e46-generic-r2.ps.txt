@@ -1,0 +1,6 @@
+ %CPU COMM
+  3.0 /System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent
+  2.5 /usr/libexec/locationd
+  1.9 /System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer
+  1.1 /Library/Application Support/Logitech.localized/LogiOptionsPlus/logioptionsplus_agent.app/Contents/MacOS/logioptionsplus_agent
+  1.1 /System/Library/ExtensionKit/Extensions/WallpaperAerialsExtension.appex/Contents/MacOS/WallpaperAerialsExtension

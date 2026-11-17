@@ -1,0 +1,163 @@
+    Finished `bench` profile [optimized] target(s) in 0.06s
+     Running benches/asin_acos.rs (target/release/build/inari-bench/7033671b6b274258/out/asin_acos-7033671b6b274258)
+Benchmarking asin_rn/sc
+Benchmarking asin_rn/sc: Warming up for 3.0000 s
+Benchmarking asin_rn/sc: Collecting 100 samples in estimated 5.0011 s (11k iterations)
+Benchmarking asin_rn/sc: Analyzing
+asin_rn/sc              time:   [448.18 µs 450.00 µs 452.20 µs]
+                        thrpt:  [92.923 Melem/s 93.377 Melem/s 93.757 Melem/s]
+Found 10 outliers among 100 measurements (10.00%)
+  7 (7.00%) high mild
+  3 (3.00%) high severe
+Benchmarking asin_rn/cal
+Benchmarking asin_rn/cal: Warming up for 3.0000 s
+Benchmarking asin_rn/cal: Collecting 100 samples in estimated 5.0006 s (104k iterations)
+Benchmarking asin_rn/cal: Analyzing
+asin_rn/cal             time:   [46.435 µs 46.559 µs 46.686 µs]
+                        thrpt:  [87.735 Melem/s 87.974 Melem/s 88.210 Melem/s]
+
+Benchmarking asin_rd/sc
+Benchmarking asin_rd/sc: Warming up for 3.0000 s
+Benchmarking asin_rd/sc: Collecting 100 samples in estimated 5.0202 s (13k iterations)
+Benchmarking asin_rd/sc: Analyzing
+asin_rd/sc              time:   [387.27 µs 387.82 µs 388.40 µs]
+                        thrpt:  [108.19 Melem/s 108.35 Melem/s 108.50 Melem/s]
+Found 5 outliers among 100 measurements (5.00%)
+  5 (5.00%) high mild
+Benchmarking asin_rd/cal
+Benchmarking asin_rd/cal: Warming up for 3.0000 s
+Benchmarking asin_rd/cal: Collecting 100 samples in estimated 5.0036 s (113k iterations)
+Benchmarking asin_rd/cal: Analyzing
+asin_rd/cal             time:   [44.240 µs 44.326 µs 44.410 µs]
+                        thrpt:  [92.232 Melem/s 92.407 Melem/s 92.587 Melem/s]
+Found 2 outliers among 100 measurements (2.00%)
+  2 (2.00%) low mild
+
+Benchmarking asin_ru/sc
+Benchmarking asin_ru/sc: Warming up for 3.0000 s
+Benchmarking asin_ru/sc: Collecting 100 samples in estimated 5.0022 s (13k iterations)
+Benchmarking asin_ru/sc: Analyzing
+asin_ru/sc              time:   [387.55 µs 388.20 µs 388.89 µs]
+                        thrpt:  [108.05 Melem/s 108.24 Melem/s 108.43 Melem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+Benchmarking asin_ru/cal
+Benchmarking asin_ru/cal: Warming up for 3.0000 s
+Benchmarking asin_ru/cal: Collecting 100 samples in estimated 5.0035 s (118k iterations)
+Benchmarking asin_ru/cal: Analyzing
+asin_ru/cal             time:   [42.214 µs 42.344 µs 42.475 µs]
+                        thrpt:  [96.433 Melem/s 96.731 Melem/s 97.030 Melem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+
+Benchmarking interval_asin/sc
+Benchmarking interval_asin/sc: Warming up for 3.0000 s
+Benchmarking interval_asin/sc: Collecting 100 samples in estimated 5.0602 s (6500 iterations)
+Benchmarking interval_asin/sc: Analyzing
+interval_asin/sc        time:   [776.49 µs 777.59 µs 778.74 µs]
+                        thrpt:  [53.959 Melem/s 54.039 Melem/s 54.115 Melem/s]
+Found 2 outliers among 100 measurements (2.00%)
+  2 (2.00%) high mild
+Benchmarking interval_asin/cal
+Benchmarking interval_asin/cal: Warming up for 3.0000 s
+Benchmarking interval_asin/cal: Collecting 100 samples in estimated 5.0067 s (59k iterations)
+Benchmarking interval_asin/cal: Analyzing
+interval_asin/cal       time:   [84.918 µs 85.063 µs 85.212 µs]
+                        thrpt:  [48.068 Melem/s 48.153 Melem/s 48.235 Melem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+
+Benchmarking libm_asin/sc
+Benchmarking libm_asin/sc: Warming up for 3.0000 s
+Benchmarking libm_asin/sc: Collecting 100 samples in estimated 5.0158 s (24k iterations)
+Benchmarking libm_asin/sc: Analyzing
+libm_asin/sc            time:   [207.65 µs 207.92 µs 208.22 µs]
+                        thrpt:  [201.81 Melem/s 202.10 Melem/s 202.36 Melem/s]
+Found 6 outliers among 100 measurements (6.00%)
+  3 (3.00%) high mild
+  3 (3.00%) high severe
+Benchmarking libm_asin/cal
+Benchmarking libm_asin/cal: Warming up for 3.0000 s
+Benchmarking libm_asin/cal: Collecting 100 samples in estimated 5.0013 s (205k iterations)
+Benchmarking libm_asin/cal: Analyzing
+libm_asin/cal           time:   [24.089 µs 24.513 µs 24.937 µs]
+                        thrpt:  [164.25 Melem/s 167.10 Melem/s 170.04 Melem/s]
+
+Benchmarking acos_rn/sc
+Benchmarking acos_rn/sc: Warming up for 3.0000 s
+Benchmarking acos_rn/sc: Collecting 100 samples in estimated 5.0215 s (12k iterations)
+Benchmarking acos_rn/sc: Analyzing
+acos_rn/sc              time:   [408.72 µs 409.18 µs 409.67 µs]
+                        thrpt:  [102.57 Melem/s 102.69 Melem/s 102.81 Melem/s]
+Found 5 outliers among 100 measurements (5.00%)
+  5 (5.00%) high mild
+Benchmarking acos_rn/cal
+Benchmarking acos_rn/cal: Warming up for 3.0000 s
+Benchmarking acos_rn/cal: Collecting 100 samples in estimated 5.0012 s (92k iterations)
+Benchmarking acos_rn/cal: Analyzing
+acos_rn/cal             time:   [51.913 µs 52.144 µs 52.385 µs]
+                        thrpt:  [78.190 Melem/s 78.552 Melem/s 78.902 Melem/s]
+Found 2 outliers among 100 measurements (2.00%)
+  2 (2.00%) high mild
+
+Benchmarking acos_rd/sc
+Benchmarking acos_rd/sc: Warming up for 3.0000 s
+Benchmarking acos_rd/sc: Collecting 100 samples in estimated 5.0233 s (14k iterations)
+Benchmarking acos_rd/sc: Analyzing
+acos_rd/sc              time:   [352.77 µs 353.05 µs 353.35 µs]
+                        thrpt:  [118.92 Melem/s 119.02 Melem/s 119.12 Melem/s]
+Found 2 outliers among 100 measurements (2.00%)
+  2 (2.00%) high mild
+Benchmarking acos_rd/cal
+Benchmarking acos_rd/cal: Warming up for 3.0000 s
+Benchmarking acos_rd/cal: Collecting 100 samples in estimated 5.0037 s (112k iterations)
+Benchmarking acos_rd/cal: Analyzing
+acos_rd/cal             time:   [42.840 µs 43.328 µs 43.830 µs]
+                        thrpt:  [93.451 Melem/s 94.534 Melem/s 95.612 Melem/s]
+Found 5 outliers among 100 measurements (5.00%)
+  5 (5.00%) high mild
+
+Benchmarking acos_ru/sc
+Benchmarking acos_ru/sc: Warming up for 3.0000 s
+Benchmarking acos_ru/sc: Collecting 100 samples in estimated 5.0324 s (14k iterations)
+Benchmarking acos_ru/sc: Analyzing
+acos_ru/sc              time:   [354.71 µs 355.32 µs 355.97 µs]
+                        thrpt:  [118.04 Melem/s 118.26 Melem/s 118.46 Melem/s]
+Benchmarking acos_ru/cal
+Benchmarking acos_ru/cal: Warming up for 3.0000 s
+Benchmarking acos_ru/cal: Collecting 100 samples in estimated 5.0006 s (103k iterations)
+Benchmarking acos_ru/cal: Analyzing
+acos_ru/cal             time:   [50.340 µs 50.704 µs 51.068 µs]
+                        thrpt:  [80.208 Melem/s 80.782 Melem/s 81.367 Melem/s]
+
+Benchmarking interval_acos/sc
+Benchmarking interval_acos/sc: Warming up for 3.0000 s
+Benchmarking interval_acos/sc: Collecting 100 samples in estimated 5.0049 s (6800 iterations)
+Benchmarking interval_acos/sc: Analyzing
+interval_acos/sc        time:   [731.02 µs 731.60 µs 732.23 µs]
+                        thrpt:  [57.387 Melem/s 57.436 Melem/s 57.481 Melem/s]
+Found 4 outliers among 100 measurements (4.00%)
+  4 (4.00%) high mild
+Benchmarking interval_acos/cal
+Benchmarking interval_acos/cal: Warming up for 3.0000 s
+Benchmarking interval_acos/cal: Collecting 100 samples in estimated 5.0083 s (53k iterations)
+Benchmarking interval_acos/cal: Analyzing
+interval_acos/cal       time:   [94.290 µs 94.469 µs 94.653 µs]
+                        thrpt:  [43.274 Melem/s 43.358 Melem/s 43.441 Melem/s]
+
+Benchmarking libm_acos/sc
+Benchmarking libm_acos/sc: Warming up for 3.0000 s
+Benchmarking libm_acos/sc: Collecting 100 samples in estimated 5.0062 s (29k iterations)
+Benchmarking libm_acos/sc: Analyzing
+libm_acos/sc            time:   [172.18 µs 172.34 µs 172.51 µs]
+                        thrpt:  [243.58 Melem/s 243.82 Melem/s 244.04 Melem/s]
+Found 4 outliers among 100 measurements (4.00%)
+  3 (3.00%) high mild
+  1 (1.00%) high severe
+Benchmarking libm_acos/cal
+Benchmarking libm_acos/cal: Warming up for 3.0000 s
+Benchmarking libm_acos/cal: Collecting 100 samples in estimated 5.0024 s (179k iterations)
+Benchmarking libm_acos/cal: Analyzing
+libm_acos/cal           time:   [25.434 µs 25.906 µs 26.398 µs]
+                        thrpt:  [155.17 Melem/s 158.11 Melem/s 161.04 Melem/s]
+

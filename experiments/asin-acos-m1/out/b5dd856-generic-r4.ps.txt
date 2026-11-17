@@ -1,0 +1,6 @@
+ %CPU COMM
+ 24.8 claude
+ 19.1 /System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer
+ 10.4 /Applications/kitty.app/Contents/MacOS/kitty
+  7.8 /System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent
+  5.4 /System/Volumes/Preboot/Cryptexes/App/System/Applications/Safari.app/Contents/MacOS/Safari

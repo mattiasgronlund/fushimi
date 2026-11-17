@@ -66,11 +66,12 @@ for b in ["unary/horner8_mul_add_P", "unary/horner8_mul_add_M"]:
 print(); table(PRIMITIVES); print()
 print("Above 1 by more than the spread:"); print("\n".join(above) or "none")
 
-tok = sorted(p.parent for p in (here / "token").rglob("7e92e46-token-r1/estimates.json")) if (here / "token").exists() else []
+# The token API's series: criterion keeps `token/<group>` as `token_<group>`.
+tok = sorted(p.parent for p in here.glob("token_*/**/7e92e46-token-r1/estimates.json"))
 if tok:
     print(); print("| Series | operators (ns) | token (ns) | token / operators |"); print("|---|--:|--:|--:|")
     for d in tok:
-        rel = d.parent.relative_to(here / "token").as_posix()
+        rel = d.parent.relative_to(here).as_posix().removeprefix("token_")
         t = json.loads((d / "estimates.json").read_text())["median"]["point_estimate"] / N
         o = min(medians("aarch64-7e92e46", rel))
-        print(f"| {LABELS.get(rel, rel)} | {o:.2f} | {t:.2f} | {t/o:.3f}× |")
+        print(f"| token/{LABELS.get(rel, rel)} | {o:.2f} | {t:.2f} | {t/o:.3f}× |")

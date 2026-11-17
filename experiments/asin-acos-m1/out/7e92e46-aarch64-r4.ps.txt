@@ -1,0 +1,6 @@
+ %CPU COMM
+  9.8 /System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer
+  5.0 /System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent
+  4.5 claude
+  3.3 /Applications/AlDente.app/Contents/MacOS/AlDente
+  3.1 /Applications/kitty.app/Contents/MacOS/kitty

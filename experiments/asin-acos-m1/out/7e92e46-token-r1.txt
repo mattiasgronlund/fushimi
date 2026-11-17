@@ -1,0 +1,300 @@
+    Finished `bench` profile [optimized] target(s) in 0.05s
+     Running benches/intervals.rs (target/release/build/inari-bench/d9ac37e559fb69dd/out/intervals-d9ac37e559fb69dd)
+Benchmarking token/add/PP
+Benchmarking token/add/PP: Warming up for 3.0000 s
+Benchmarking token/add/PP: Collecting 100 samples in estimated 5.0999 s (207k iterations)
+Benchmarking token/add/PP: Analyzing
+token/add/PP            time:   [24.583 µs 24.639 µs 24.711 µs]
+                        thrpt:  [41.439 Melem/s 41.560 Melem/s 41.654 Melem/s]
+Found 6 outliers among 100 measurements (6.00%)
+  4 (4.00%) high mild
+  2 (2.00%) high severe
+Benchmarking token/add/PM
+Benchmarking token/add/PM: Warming up for 3.0000 s
+Benchmarking token/add/PM: Collecting 100 samples in estimated 5.1043 s (207k iterations)
+Benchmarking token/add/PM: Analyzing
+token/add/PM            time:   [24.536 µs 24.563 µs 24.593 µs]
+                        thrpt:  [41.637 Melem/s 41.689 Melem/s 41.735 Melem/s]
+Found 13 outliers among 100 measurements (13.00%)
+  10 (10.00%) high mild
+  3 (3.00%) high severe
+Benchmarking token/add/MM
+Benchmarking token/add/MM: Warming up for 3.0000 s
+Benchmarking token/add/MM: Collecting 100 samples in estimated 5.0986 s (207k iterations)
+Benchmarking token/add/MM: Analyzing
+token/add/MM            time:   [24.511 µs 24.518 µs 24.526 µs]
+                        thrpt:  [41.752 Melem/s 41.766 Melem/s 41.778 Melem/s]
+Found 5 outliers among 100 measurements (5.00%)
+  2 (2.00%) high mild
+  3 (3.00%) high severe
+
+Benchmarking token/mul/PP
+Benchmarking token/mul/PP: Warming up for 3.0000 s
+Benchmarking token/mul/PP: Collecting 100 samples in estimated 5.0095 s (162k iterations)
+Benchmarking token/mul/PP: Analyzing
+token/mul/PP            time:   [30.891 µs 30.910 µs 30.933 µs]
+                        thrpt:  [33.104 Melem/s 33.129 Melem/s 33.149 Melem/s]
+Found 16 outliers among 100 measurements (16.00%)
+  3 (3.00%) high mild
+  13 (13.00%) high severe
+Benchmarking token/mul/PN
+Benchmarking token/mul/PN: Warming up for 3.0000 s
+Benchmarking token/mul/PN: Collecting 100 samples in estimated 5.1490 s (167k iterations)
+Benchmarking token/mul/PN: Analyzing
+token/mul/PN            time:   [30.818 µs 30.860 µs 30.902 µs]
+                        thrpt:  [33.137 Melem/s 33.183 Melem/s 33.227 Melem/s]
+Found 5 outliers among 100 measurements (5.00%)
+  4 (4.00%) high mild
+  1 (1.00%) high severe
+Benchmarking token/mul/PM
+Benchmarking token/mul/PM: Warming up for 3.0000 s
+Benchmarking token/mul/PM: Collecting 100 samples in estimated 5.0180 s (162k iterations)
+Benchmarking token/mul/PM: Analyzing
+token/mul/PM            time:   [30.934 µs 30.991 µs 31.074 µs]
+                        thrpt:  [32.953 Melem/s 33.042 Melem/s 33.102 Melem/s]
+Found 14 outliers among 100 measurements (14.00%)
+  3 (3.00%) high mild
+  11 (11.00%) high severe
+Benchmarking token/mul/NP
+Benchmarking token/mul/NP: Warming up for 3.0000 s
+Benchmarking token/mul/NP: Collecting 100 samples in estimated 5.0031 s (162k iterations)
+Benchmarking token/mul/NP: Analyzing
+token/mul/NP            time:   [30.962 µs 30.990 µs 31.024 µs]
+                        thrpt:  [33.007 Melem/s 33.043 Melem/s 33.072 Melem/s]
+Found 12 outliers among 100 measurements (12.00%)
+  9 (9.00%) high mild
+  3 (3.00%) high severe
+Benchmarking token/mul/NN
+Benchmarking token/mul/NN: Warming up for 3.0000 s
+Benchmarking token/mul/NN: Collecting 100 samples in estimated 5.1410 s (167k iterations)
+Benchmarking token/mul/NN: Analyzing
+token/mul/NN            time:   [30.742 µs 30.765 µs 30.793 µs]
+                        thrpt:  [33.254 Melem/s 33.284 Melem/s 33.310 Melem/s]
+Found 8 outliers among 100 measurements (8.00%)
+  3 (3.00%) high mild
+  5 (5.00%) high severe
+Benchmarking token/mul/NM
+Benchmarking token/mul/NM: Warming up for 3.0000 s
+Benchmarking token/mul/NM: Collecting 100 samples in estimated 5.0138 s (162k iterations)
+Benchmarking token/mul/NM: Analyzing
+token/mul/NM            time:   [30.973 µs 31.008 µs 31.048 µs]
+                        thrpt:  [32.981 Melem/s 33.023 Melem/s 33.061 Melem/s]
+Found 4 outliers among 100 measurements (4.00%)
+  1 (1.00%) high mild
+  3 (3.00%) high severe
+Benchmarking token/mul/MP
+Benchmarking token/mul/MP: Warming up for 3.0000 s
+Benchmarking token/mul/MP: Collecting 100 samples in estimated 5.0133 s (162k iterations)
+Benchmarking token/mul/MP: Analyzing
+token/mul/MP            time:   [30.792 µs 30.837 µs 30.891 µs]
+                        thrpt:  [33.149 Melem/s 33.207 Melem/s 33.256 Melem/s]
+Benchmarking token/mul/MN
+Benchmarking token/mul/MN: Warming up for 3.0000 s
+Benchmarking token/mul/MN: Collecting 100 samples in estimated 5.0101 s (162k iterations)
+Benchmarking token/mul/MN: Analyzing
+token/mul/MN            time:   [30.974 µs 31.016 µs 31.071 µs]
+                        thrpt:  [32.957 Melem/s 33.015 Melem/s 33.060 Melem/s]
+Found 5 outliers among 100 measurements (5.00%)
+  4 (4.00%) high mild
+  1 (1.00%) high severe
+Benchmarking token/mul/MM
+Benchmarking token/mul/MM: Warming up for 3.0000 s
+Benchmarking token/mul/MM: Collecting 100 samples in estimated 5.2142 s (101k iterations)
+Benchmarking token/mul/MM: Analyzing
+token/mul/MM            time:   [51.614 µs 51.728 µs 51.847 µs]
+                        thrpt:  [19.750 Melem/s 19.796 Melem/s 19.840 Melem/s]
+Found 2 outliers among 100 measurements (2.00%)
+  2 (2.00%) high mild
+
+Benchmarking token/mul_tiny/PP
+Benchmarking token/mul_tiny/PP: Warming up for 3.0000 s
+Benchmarking token/mul_tiny/PP: Collecting 100 samples in estimated 5.0096 s (162k iterations)
+Benchmarking token/mul_tiny/PP: Analyzing
+token/mul_tiny/PP       time:   [31.148 µs 31.270 µs 31.425 µs]
+                        thrpt:  [32.585 Melem/s 32.747 Melem/s 32.875 Melem/s]
+Found 15 outliers among 100 measurements (15.00%)
+  12 (12.00%) high mild
+  3 (3.00%) high severe
+Benchmarking token/mul_tiny/PN
+Benchmarking token/mul_tiny/PN: Warming up for 3.0000 s
+Benchmarking token/mul_tiny/PN: Collecting 100 samples in estimated 5.0062 s (162k iterations)
+Benchmarking token/mul_tiny/PN: Analyzing
+token/mul_tiny/PN       time:   [30.811 µs 30.888 µs 30.986 µs]
+                        thrpt:  [33.047 Melem/s 33.152 Melem/s 33.234 Melem/s]
+Found 5 outliers among 100 measurements (5.00%)
+  2 (2.00%) high mild
+  3 (3.00%) high severe
+Benchmarking token/mul_tiny/PM
+Benchmarking token/mul_tiny/PM: Warming up for 3.0000 s
+Benchmarking token/mul_tiny/PM: Collecting 100 samples in estimated 5.0236 s (162k iterations)
+Benchmarking token/mul_tiny/PM: Analyzing
+token/mul_tiny/PM       time:   [31.048 µs 31.122 µs 31.215 µs]
+                        thrpt:  [32.805 Melem/s 32.902 Melem/s 32.982 Melem/s]
+Found 5 outliers among 100 measurements (5.00%)
+  2 (2.00%) high mild
+  3 (3.00%) high severe
+Benchmarking token/mul_tiny/NP
+Benchmarking token/mul_tiny/NP: Warming up for 3.0000 s
+Benchmarking token/mul_tiny/NP: Collecting 100 samples in estimated 5.0143 s (162k iterations)
+Benchmarking token/mul_tiny/NP: Analyzing
+token/mul_tiny/NP       time:   [30.974 µs 31.001 µs 31.033 µs]
+                        thrpt:  [32.997 Melem/s 33.031 Melem/s 33.060 Melem/s]
+Found 10 outliers among 100 measurements (10.00%)
+  9 (9.00%) high mild
+  1 (1.00%) high severe
+Benchmarking token/mul_tiny/NN
+Benchmarking token/mul_tiny/NN: Warming up for 3.0000 s
+Benchmarking token/mul_tiny/NN: Collecting 100 samples in estimated 5.1561 s (167k iterations)
+Benchmarking token/mul_tiny/NN: Analyzing
+token/mul_tiny/NN       time:   [30.776 µs 30.800 µs 30.827 µs]
+                        thrpt:  [33.218 Melem/s 33.246 Melem/s 33.273 Melem/s]
+Found 6 outliers among 100 measurements (6.00%)
+  4 (4.00%) high mild
+  2 (2.00%) high severe
+Benchmarking token/mul_tiny/NM
+Benchmarking token/mul_tiny/NM: Warming up for 3.0000 s
+Benchmarking token/mul_tiny/NM: Collecting 100 samples in estimated 5.0058 s (162k iterations)
+Benchmarking token/mul_tiny/NM: Analyzing
+token/mul_tiny/NM       time:   [31.031 µs 31.067 µs 31.107 µs]
+                        thrpt:  [32.919 Melem/s 32.961 Melem/s 32.999 Melem/s]
+Found 6 outliers among 100 measurements (6.00%)
+  6 (6.00%) high mild
+Benchmarking token/mul_tiny/MP
+Benchmarking token/mul_tiny/MP: Warming up for 3.0000 s
+Benchmarking token/mul_tiny/MP: Collecting 100 samples in estimated 5.0216 s (162k iterations)
+Benchmarking token/mul_tiny/MP: Analyzing
+token/mul_tiny/MP       time:   [30.803 µs 30.846 µs 30.903 µs]
+                        thrpt:  [33.136 Melem/s 33.198 Melem/s 33.243 Melem/s]
+Found 4 outliers among 100 measurements (4.00%)
+  2 (2.00%) high mild
+  2 (2.00%) high severe
+Benchmarking token/mul_tiny/MN
+Benchmarking token/mul_tiny/MN: Warming up for 3.0000 s
+Benchmarking token/mul_tiny/MN: Collecting 100 samples in estimated 5.0113 s (162k iterations)
+Benchmarking token/mul_tiny/MN: Analyzing
+token/mul_tiny/MN       time:   [30.983 µs 31.007 µs 31.032 µs]
+                        thrpt:  [32.998 Melem/s 33.025 Melem/s 33.050 Melem/s]
+Found 2 outliers among 100 measurements (2.00%)
+  2 (2.00%) high mild
+Benchmarking token/mul_tiny/MM
+Benchmarking token/mul_tiny/MM: Warming up for 3.0000 s
+Benchmarking token/mul_tiny/MM: Collecting 100 samples in estimated 5.2054 s (101k iterations)
+Benchmarking token/mul_tiny/MM: Analyzing
+token/mul_tiny/MM       time:   [51.482 µs 51.535 µs 51.595 µs]
+                        thrpt:  [19.847 Melem/s 19.870 Melem/s 19.890 Melem/s]
+Found 6 outliers among 100 measurements (6.00%)
+  1 (1.00%) high mild
+  5 (5.00%) high severe
+
+Benchmarking token/div/PP
+Benchmarking token/div/PP: Warming up for 3.0000 s
+Benchmarking token/div/PP: Collecting 100 samples in estimated 5.1378 s (157k iterations)
+Benchmarking token/div/PP: Analyzing
+token/div/PP            time:   [32.687 µs 32.715 µs 32.751 µs]
+                        thrpt:  [31.267 Melem/s 31.300 Melem/s 31.327 Melem/s]
+Found 9 outliers among 100 measurements (9.00%)
+  4 (4.00%) high mild
+  5 (5.00%) high severe
+Benchmarking token/div/PN
+Benchmarking token/div/PN: Warming up for 3.0000 s
+Benchmarking token/div/PN: Collecting 100 samples in estimated 5.1509 s (157k iterations)
+Benchmarking token/div/PN: Analyzing
+token/div/PN            time:   [32.916 µs 32.952 µs 32.993 µs]
+                        thrpt:  [31.037 Melem/s 31.076 Melem/s 31.109 Melem/s]
+Found 7 outliers among 100 measurements (7.00%)
+  4 (4.00%) high mild
+  3 (3.00%) high severe
+Benchmarking token/div/MP
+Benchmarking token/div/MP: Warming up for 3.0000 s
+Benchmarking token/div/MP: Collecting 100 samples in estimated 5.1600 s (157k iterations)
+Benchmarking token/div/MP: Analyzing
+token/div/MP            time:   [32.927 µs 32.960 µs 33.003 µs]
+                        thrpt:  [31.027 Melem/s 31.068 Melem/s 31.099 Melem/s]
+Found 6 outliers among 100 measurements (6.00%)
+  2 (2.00%) high mild
+  4 (4.00%) high severe
+Benchmarking token/div/NN
+Benchmarking token/div/NN: Warming up for 3.0000 s
+Benchmarking token/div/NN: Collecting 100 samples in estimated 5.1326 s (157k iterations)
+Benchmarking token/div/NN: Analyzing
+token/div/NN            time:   [32.725 µs 32.767 µs 32.817 µs]
+                        thrpt:  [31.204 Melem/s 31.251 Melem/s 31.291 Melem/s]
+Found 7 outliers among 100 measurements (7.00%)
+  5 (5.00%) high mild
+  2 (2.00%) high severe
+Benchmarking token/div/PM
+Benchmarking token/div/PM: Warming up for 3.0000 s
+Benchmarking token/div/PM: Collecting 100 samples in estimated 5.0075 s (2.8M iterations)
+Benchmarking token/div/PM: Analyzing
+token/div/PM            time:   [1.7542 µs 1.7567 µs 1.7600 µs]
+                        thrpt:  [581.80 Melem/s 582.91 Melem/s 583.73 Melem/s]
+Found 17 outliers among 100 measurements (17.00%)
+  6 (6.00%) high mild
+  11 (11.00%) high severe
+
+Benchmarking token/unary/sqrt/P
+Benchmarking token/unary/sqrt/P: Warming up for 3.0000 s
+Benchmarking token/unary/sqrt/P: Collecting 100 samples in estimated 5.1961 s (101k iterations)
+Benchmarking token/unary/sqrt/P: Analyzing
+token/unary/sqrt/P      time:   [51.388 µs 51.413 µs 51.445 µs]
+                        thrpt:  [19.905 Melem/s 19.917 Melem/s 19.927 Melem/s]
+Found 7 outliers among 100 measurements (7.00%)
+  1 (1.00%) high mild
+  6 (6.00%) high severe
+Benchmarking token/unary/sqrt/M
+Benchmarking token/unary/sqrt/M: Warming up for 3.0000 s
+Benchmarking token/unary/sqrt/M: Collecting 100 samples in estimated 5.0605 s (182k iterations)
+Benchmarking token/unary/sqrt/M: Analyzing
+token/unary/sqrt/M      time:   [27.764 µs 27.778 µs 27.799 µs]
+                        thrpt:  [36.835 Melem/s 36.863 Melem/s 36.882 Melem/s]
+Found 6 outliers among 100 measurements (6.00%)
+  3 (3.00%) high mild
+  3 (3.00%) high severe
+Benchmarking token/unary/horner8/P
+Benchmarking token/unary/horner8/P: Warming up for 3.0000 s
+Benchmarking token/unary/horner8/P: Collecting 100 samples in estimated 5.8664 s (15k iterations)
+Benchmarking token/unary/horner8/P: Analyzing
+token/unary/horner8/P   time:   [385.06 µs 385.21 µs 385.39 µs]
+                        thrpt:  [2.6570 Melem/s 2.6583 Melem/s 2.6593 Melem/s]
+Found 10 outliers among 100 measurements (10.00%)
+  4 (4.00%) high mild
+  6 (6.00%) high severe
+Benchmarking token/unary/horner8/M
+Benchmarking token/unary/horner8/M: Warming up for 3.0000 s
+Benchmarking token/unary/horner8/M: Collecting 100 samples in estimated 5.3048 s (10k iterations)
+Benchmarking token/unary/horner8/M: Analyzing
+token/unary/horner8/M   time:   [524.08 µs 524.28 µs 524.52 µs]
+                        thrpt:  [1.9523 Melem/s 1.9531 Melem/s 1.9539 Melem/s]
+Found 12 outliers among 100 measurements (12.00%)
+  8 (8.00%) high mild
+  4 (4.00%) high severe
+Benchmarking token/unary/horner8_mul_add/P
+Benchmarking token/unary/horner8_mul_add/P: Warming up for 3.0000 s
+Benchmarking token/unary/horner8_mul_add/P: Collecting 100 samples in estimated 5.5956 s (25k iterations)
+Benchmarking token/unary/horner8_mul_add/P: Analyzing
+token/unary/horner8_mul_add/P
+                        time:   [221.09 µs 221.17 µs 221.27 µs]
+                        thrpt:  [4.6278 Melem/s 4.6298 Melem/s 4.6316 Melem/s]
+Found 7 outliers among 100 measurements (7.00%)
+  6 (6.00%) high mild
+  1 (1.00%) high severe
+Benchmarking token/unary/horner8_mul_add/M
+Benchmarking token/unary/horner8_mul_add/M: Warming up for 3.0000 s
+Benchmarking token/unary/horner8_mul_add/M: Collecting 100 samples in estimated 5.4935 s (15k iterations)
+Benchmarking token/unary/horner8_mul_add/M: Analyzing
+token/unary/horner8_mul_add/M
+                        time:   [360.49 µs 360.71 µs 360.98 µs]
+                        thrpt:  [2.8367 Melem/s 2.8389 Melem/s 2.8405 Melem/s]
+Found 9 outliers among 100 measurements (9.00%)
+  5 (5.00%) high mild
+  4 (4.00%) high severe
+Benchmarking token/unary/det3/mixed
+Benchmarking token/unary/det3/mixed: Warming up for 3.0000 s
+Benchmarking token/unary/det3/mixed: Collecting 100 samples in estimated 5.4258 s (15k iterations)
+Benchmarking token/unary/det3/mixed: Analyzing
+token/unary/det3/mixed  time:   [357.71 µs 358.23 µs 358.90 µs]
+                        thrpt:  [2.8532 Melem/s 2.8585 Melem/s 2.8627 Melem/s]
+Found 9 outliers among 100 measurements (9.00%)
+  5 (5.00%) high mild
+  4 (4.00%) high severe
+

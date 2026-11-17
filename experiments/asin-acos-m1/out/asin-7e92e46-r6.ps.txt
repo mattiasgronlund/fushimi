@@ -1,0 +1,6 @@
+ %CPU COMM
+ 15.1 /System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer
+  7.2 /usr/sbin/systemstats
+  6.6 /Applications/kitty.app/Contents/MacOS/kitty
+  4.5 /Library/SystemExtensions/70C33EF6-65B2-419B-B810-B3314186A6EF/io.tailscale.ipn.macsys.network-extension.systemextension/Contents/MacOS/io.tailscale.ipn.macsys.network-extension
+  2.7 /usr/sbin/bluetoothd

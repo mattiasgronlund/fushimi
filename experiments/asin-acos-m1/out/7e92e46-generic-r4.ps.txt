@@ -1,0 +1,6 @@
+ %CPU COMM
+ 13.6 /usr/sbin/systemstats
+ 10.6 /System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer
+  3.2 /Applications/kitty.app/Contents/MacOS/kitty
+  2.6 /usr/sbin/bluetoothd
+  2.1 /Library/Application Support/Logitech.localized/LogiOptionsPlus/logioptionsplus_agent.app/Contents/MacOS/logioptionsplus_agent

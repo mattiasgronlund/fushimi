@@ -1,0 +1,6 @@
+ %CPU COMM
+  2.1 claude
+  1.0 /System/Library/ExtensionKit/Extensions/WallpaperAerialsExtension.appex/Contents/MacOS/WallpaperAerialsExtension
+  1.0 /Library/Application Support/Logitech.localized/LogiOptionsPlus/logioptionsplus_agent.app/Contents/MacOS/logioptionsplus_agent
+  0.5 /usr/libexec/airportd
+  0.3 claude

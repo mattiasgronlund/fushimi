@@ -1,0 +1,6 @@
+ %CPU COMM
+  3.6 /Applications/AlDente.app/Contents/MacOS/AlDente
+  2.1 claude
+  1.7 /System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer
+  1.0 /Library/PrivilegedHelperTools/com.apphousekitchen.aldente-pro.helper
+  0.9 zsh

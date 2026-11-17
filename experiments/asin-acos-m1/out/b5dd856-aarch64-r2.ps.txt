@@ -1,0 +1,6 @@
+ %CPU COMM
+  7.8 claude
+  4.3 claude
+  2.7 /Applications/AlDente.app/Contents/MacOS/AlDente
+  2.4 /System/Library/PrivateFrameworks/CoreSuggestions.framework/Versions/A/Support/suggestd
+  1.6 /Library/Application Support/org.pqrs/Karabiner-DriverKit-VirtualHIDDevice/Applications/Karabiner-VirtualHIDDevice-Daemon.app/Contents/MacOS/Karabiner-VirtualHIDDevice-Daemon

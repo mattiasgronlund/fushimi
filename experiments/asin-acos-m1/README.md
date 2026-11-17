@@ -32,7 +32,7 @@ Raw files of issue #5: part A (`asin` and `acos`, `7e92e46` against `daa51d1`) a
 - `out/<baseline>.txt`: criterion's output of every run; `out/<baseline>.ps.txt`: the five
   busiest processes when the run started; `out/build-*.txt`: the `--no-run` builds.
 - `scripts/`: `common.sh` (the `cb`, `idle` and `run` functions of the issue), `a.sh`,
-  `a2.sh` and `b.sh` (the drivers), `table_a.py` and `table_b.py` (the tables of the
+  `a2.sh`, `a6.sh`, `b.sh`, `b4.sh` and `b5.sh` (the drivers), `table_a.py` and `table_b.py` (the tables of the
   comments). Run them from `asin-acos-m1/`, a directory next to the checkouts.
 
 ## Part A
@@ -57,3 +57,34 @@ below 2.5 (from round 4 on, also once no other process was above 15% CPU).
   rounds that started idle, so more rounds don't narrow them; each cell is the lowest median.
 
 Table: `python3 -I scripts/table_a.py criterion r1,r2,r4,r5 r1,r4,r5`.
+
+**Round 6** (after B, 2026-11-16 08:50–09:00 UTC, idle) was added for the `cal` rows. It is
+0.5–1% slower than the others on most series and changes two cells, both within their
+spreads (`acos_rn/cal` at `daa51d1` 13.09 → 12.70 ns, `acos_rd/cal` 10.62 → 10.56 ns):
+`python3 -I scripts/table_a.py criterion r1,r2,r4,r5,r6 r1,r4,r5,r6` (`out/table_a.md`).
+
+## Part B
+
+Commands, in `bench/`: `cargo bench [--features force-generic] --bench primitives --bench
+intervals -- '^[^t]' --save-baseline <commit>-<build>-rK`, interleaved `b5dd856-aarch64`,
+`b5dd856-generic`, `7e92e46-aarch64`, `7e92e46-generic`, round by round (`b.sh`), then
+`b4.sh` and `b5.sh` for the rounds that replaced dropped ones. From round 2 on, each run was
+under `caffeinate -i -s`. The optional `token/*` run: `7e92e46-token-r1`.
+
+- **Kept:** `b5dd856-aarch64` r1–r4; `b5dd856-generic` r1, r3, r4; `7e92e46-aarch64` r1, r4;
+  `7e92e46-generic` r1–r3.
+- **Dropped:**
+  - a first `b5dd856-aarch64` run named `r1 2` (zsh doesn't split `${ROUNDS:-1 2}`),
+    stopped before its first estimate; its logs are `out/misnamed-*`;
+  - `b5dd856-generic-r2` and `7e92e46-aarch64-r2`: the Mac idle-slept from
+    2026-11-16T06:30Z (`pmset -g log`), during both;
+  - `7e92e46-aarch64-r3`: uniformly 3% slower than r1 from `mul/NM` on (load 3.97 at
+    its end);
+  - `7e92e46-generic-r4`: the Mac slept from 2026-11-16T09:28Z, despite `caffeinate`.
+- **Waits:** `suggestd` (70–90% CPU) and `installd` held the runs from 23:12 to 02:54 UTC.
+- **Spread over 3%:** only `force-generic` rows, in rounds that started idle, as in
+  issues #3 and #4: `div/PP` 12%, `div_ru/throughput` 9%, `div/MP` and `sqrt/P` 6%, the
+  3×3 determinant 7% (`b5dd856` 149–160 ns, `7e92e46` 168–173 ns), and a few at 3–5%.
+
+Tables: `python3 -I scripts/table_b.py criterion b5dd856-generic-r2 7e92e46-aarch64-r2
+7e92e46-aarch64-r3 7e92e46-generic-r4` (`out/table_b.md`).

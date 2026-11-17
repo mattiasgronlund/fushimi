@@ -1,0 +1,6 @@
+ %CPU COMM
+ 12.5 /System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer
+  3.8 /Applications/kitty.app/Contents/MacOS/kitty
+  3.1 /usr/libexec/siriknowledged
+  3.0 /System/Library/Frameworks/Contacts.framework/Support/contactsd
+  2.9 /System/Library/CoreServices/Finder.app/Contents/MacOS/Finder

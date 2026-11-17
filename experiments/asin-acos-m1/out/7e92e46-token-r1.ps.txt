@@ -1,0 +1,6 @@
+ %CPU COMM
+  2.8 claude
+  1.6 /usr/sbin/bluetoothd
+  1.1 /usr/libexec/airportd
+  0.9 zsh
+  0.8 /System/Library/ExtensionKit/Extensions/WallpaperAerialsExtension.appex/Contents/MacOS/WallpaperAerialsExtension

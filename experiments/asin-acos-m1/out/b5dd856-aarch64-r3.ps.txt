@@ -1,0 +1,6 @@
+ %CPU COMM
+ 13.0 /System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer
+  3.3 /Applications/kitty.app/Contents/MacOS/kitty
+  2.6 /System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking
+  1.5 /System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent
+  1.5 /usr/libexec/airportd

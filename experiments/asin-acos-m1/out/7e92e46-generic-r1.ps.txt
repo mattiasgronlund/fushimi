@@ -1,0 +1,6 @@
+ %CPU COMM
+  5.9 claude
+  1.1 /System/Library/PrivateFrameworks/CoreDuetContext.framework/Resources/contextstored
+  0.9 zsh
+  0.8 /System/Library/ExtensionKit/Extensions/WallpaperAerialsExtension.appex/Contents/MacOS/WallpaperAerialsExtension
+  0.6 /Library/Application Support/Logitech.localized/LogiOptionsPlus/logioptionsplus_agent.app/Contents/MacOS/logioptionsplus_agent
