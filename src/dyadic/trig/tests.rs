@@ -567,20 +567,66 @@ fn cos_small_u128(t: f64, up: bool) -> Option<f64> {
     Some(f64::from_bits(1.0f64.to_bits() - j + u64::from(up)))
 }
 
+// `sin_small` as it was before row 145, when it shifted the `u128`s h - (l == 0) and h - 2^d
+// by s and divided both by 6.
+fn sin_small_u128(x: f64, up: bool) -> Option<f64> {
+    let b = x.abs().to_bits();
+    let be = b >> 52;
+    if !(997..=1009).contains(&be) {
+        return None;
+    }
+    let f = b & ((1 << 52) - 1);
+    let (h, l) = cube(u128::from(f | 1 << 52));
+    let s = 2086 - 2 * be;
+    let j = ((h - u128::from(l == 0)) >> s) / 6;
+    if ((h - (1u128 << (2 * be - 1953))) >> s) / 6 != j || u128::from(f) <= j {
+        return None;
+    }
+    let neg = x < 0.0;
+    let v = f64::from_bits(b - (j as u64 + 1) + u64::from(up != neg));
+    Some(if neg { -v } else { v })
+}
+
+// `tan_small` as it was before row 145, when it shifted the `u128`s h and h + 2^d by s and
+// divided both by 3.
+fn tan_small_u128(x: f64, up: bool) -> Option<f64> {
+    let b = x.abs().to_bits();
+    let be = b >> 52;
+    if !(997..=1008).contains(&be) {
+        return None;
+    }
+    let f = b & ((1 << 52) - 1);
+    let (h, _) = cube(u128::from(f | 1 << 52));
+    let s = 2086 - 2 * be;
+    let j = (h >> s) / 3;
+    if ((h + (1u128 << (2 * be - 1949))) >> s) / 3 != j || u128::from(f) + j >= 1 << 52 {
+        return None;
+    }
+    let neg = x < 0.0;
+    let v = f64::from_bits(b + j as u64 + u64::from(up != neg));
+    Some(if neg { -v } else { v })
+}
+
 // The rule of small arguments of the function `i` as it was before row 145, as `small` gives
 // the current one.
 fn small_u128(i: usize, x: f64, up: bool) -> Option<f64> {
     match i {
+        SIN => sin_small_u128(x, up),
         COS => cos_small_u128(x.abs(), up),
-        _ => unreachable!("{}", FUNCTIONS[i].0),
+        _ => tan_small_u128(x, up),
     }
 }
 
 // The m in [2^52, 2^53) next to which a test of the rule of small arguments of the function
-// `i` changes its outcome at the biased exponent `be`, for 256 random quotients: for cos, with
-// s as in `cos_small`, the least m with m^2 >= k 2^s and the least with
-// m^2 >= k 2^s + 2^(157 - s), for a random k with k 2^s in [2^104, 2^106), as its test on
-// r = m^2 - k 2^s changes at r = 0 and at r = 2^(157 - s).
+// `i` changes its outcome at the biased exponent `be`, for 256 random quotients.
+// - For cos, with s as in `cos_small`, the least m with m^2 >= k 2^s and the least with
+//   m^2 >= k 2^s + 2^(157 - s), for a random k with k 2^s in [2^104, 2^106), as its test on
+//   r = m^2 - k 2^s changes at r = 0 and at r = 2^(157 - s).
+// - For sin and tan, with s, d and m^3 = h 2^64 + l as in `sin_small` and `tan_small`, and
+//   q = 6 for sin and 3 for tan, the least m with h >= n (`ceil_cbrt`) for n = q J 2^s and the
+//   n next to it at which a test changes: for sin, n + 1, as j counts h - 1 if l = 0, and
+//   n + 2^d, as its test takes h - 2^d; for tan, n - 2^d, as its test takes h + 2^d. J is
+//   random, with q J 2^s in [2^92, 2^95), as h is for m in [2^52, 2^53).
 fn small_rule_edges(rng: &mut Rng, i: usize, be: u64) -> Vec<u128> {
     let mut ms = vec![];
     for _ in 0..256 {
@@ -591,7 +637,22 @@ fn small_rule_edges(rng: &mut Rng, i: usize, be: u64) -> Vec<u128> {
                 let k = u128::from(k0 + rng.below(3 * k0));
                 ms.extend([0, 1 << (157 - s)].map(|r| ceil_sqrt(k << s | r)));
             }
-            _ => unreachable!("{}", FUNCTIONS[i].0),
+            _ => {
+                let s = 2086 - 2 * be;
+                let (q, d) = if i == SIN {
+                    (6, 2 * be - 1953)
+                } else {
+                    (3, 2 * be - 1949)
+                };
+                let j0 = (1u64 << (92 - s)).div_ceil(q);
+                let j1 = ((1u64 << (95 - s)) - 1) / q;
+                let n = u128::from(q * (j0 + rng.below(j1 - j0 + 1))) << s;
+                if i == SIN {
+                    ms.extend([n, n + 1, n + (1 << d)].map(ceil_cbrt));
+                } else {
+                    ms.extend([n, n - (1 << d)].map(ceil_cbrt));
+                }
+            }
         }
     }
     ms
@@ -632,14 +693,17 @@ fn check_u128_form(rng: &mut Rng, i: usize, last: u64) {
     }
 }
 
-// Since row 145, the shifts of `cos_small` by amounts that depend on the exponent are of
-// `u64`s, so that the copies of `cos_dir` built for x86-64 and x86-64-v2 save no callee-saved
-// register (see `cos_small`). This checks that it gives the same results as before, which
-// `cos_small_words` in `rocq/theories/DyCosSmall.v` shows of its model at every argument.
+// Since row 145, the shifts of the rules of small arguments by amounts that depend on the
+// exponent are of `u64`s, so that the functions that call them save fewer callee-saved
+// registers in some builds (see `cos_small`, `sin_small` and `tan_small`). This checks that
+// they give the same results as before, which `cos_small_words`, `sin_small_words` and
+// `tan_small_words` in `rocq/theories/` show of their models at every argument.
 #[test]
 fn small_rules_match_their_u128_forms() {
     let mut rng = Rng(145);
-    check_u128_form(&mut rng, COS, 1008);
+    for (i, last) in [(SIN, 1009), (COS, 1008), (TAN, 1008)] {
+        check_u128_form(&mut rng, i, last);
+    }
 }
 
 // Arguments at which the rules of small arguments fall through to `ziv`, which the search of

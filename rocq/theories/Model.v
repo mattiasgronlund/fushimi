@@ -5095,38 +5095,44 @@ Definition cos_small (t : f64) (up : bool) : option f64 :=
 
 (** [fn sin_small(x: f64, up: bool) -> Option<f64>], where [x.abs()] is
     [fabs x], [x < 0.0] is [lt x zero], [a != b] of two [bool]s is
-    [xorb], [-v] is [opp v], [/ 6] of a [u128] is [Z.div], [j as u64],
-    for the [j < 2^25] there, keeps the value, the differences
-    [h - u128::from(l == 0)] and [h - (1u128 << (2 * be - 1953))], which
-    are not negative, as [h >= 2^92], [b - (j as u64 + 1)], which is not
-    negative after the test [f <= j], and [2 * be - 1953] are computed
-    without a check, and the rest is as in [cos_small]. *)
+    [xorb], [-v] is [opp v], [/ 6] of a [u64] is [Z.div],
+    [(y >> 64) as u64], for the [u128]s [y < 2^95] there, keeps the
+    value, which is below [2^31], [u128::from] of a [u64] and [<< 2] of
+    it, which stays below [2^66], keep the value, the differences
+    [h - u128::from(l == 0)] and [h - w], which are not negative, as
+    [h >= 2^92], [b - (j + 1)], which is not negative after the test
+    [f <= j], [2022 - 2 * be], [2 * be - 1955], the shifts, which are by
+    less than 64, or 128 for [>> 64], and [6 * j] are computed without a
+    check, and the rest is as in [cos_small]. *)
 Definition sin_small (x : f64) (up : bool) : option f64 :=
   let b := to_bits (fabs x) in
   let be := Z.shiftr b 52 in
   if negb ((997 <=? be) && (be <=? 1009)) then None else
   let f := Z.land b (Z.shiftl 1 52 - 1) in
   let '(h, l) := cube (Z.lor f (Z.shiftl 1 52)) in
-  let s := 2086 - 2 * be in
-  let j := Z.shiftr (h - Z.b2z (l =? 0)) s / 6 in
-  if negb (Z.shiftr (h - Z.shiftl 1 (2 * be - 1953)) s / 6 =? j) || (f <=? j) then None else
+  let e := 2022 - 2 * be in
+  let j := Z.shiftr (Z.shiftr (h - Z.b2z (l =? 0)) 64) e / 6 in
+  let w := Z.shiftl (Z.shiftl 1 (2 * be - 1955)) 2 in
+  if (Z.shiftr (Z.shiftr (h - w) 64) e <? 6 * j) || (f <=? j) then None else
   let neg := lt x zero in
   let v := from_bits (b - (j + 1) + Z.b2z (xorb up neg)) in
   Some (if neg then opp v else v).
 
 (** [fn tan_small(x: f64, up: bool) -> Option<f64>], where [/ 3] of a
-    [u128] is [Z.div], [j as u64], for the [j < 2^24] there, keeps the
-    value, [2 * be - 1949] and the sums are computed without a check,
-    and the rest is as in [sin_small]. *)
+    [u64] is [Z.div], [((h + w) >> 64) as u64], for the [h + w < 2^96]
+    there, keeps the value, [<< 4] of a [u128] below [2^64] keeps the
+    value, [2 * be - 1953], the sums and [3 * j + 3] are computed without
+    a check, and the rest is as in [sin_small]. *)
 Definition tan_small (x : f64) (up : bool) : option f64 :=
   let b := to_bits (fabs x) in
   let be := Z.shiftr b 52 in
   if negb ((997 <=? be) && (be <=? 1008)) then None else
   let f := Z.land b (Z.shiftl 1 52 - 1) in
   let '(h, _) := cube (Z.lor f (Z.shiftl 1 52)) in
-  let s := 2086 - 2 * be in
-  let j := Z.shiftr h s / 3 in
-  if negb (Z.shiftr (h + Z.shiftl 1 (2 * be - 1949)) s / 3 =? j) || (Z.shiftl 1 52 <=? f + j)
+  let e := 2022 - 2 * be in
+  let j := Z.shiftr (Z.shiftr h 64) e / 3 in
+  let w := Z.shiftl (Z.shiftl 1 (2 * be - 1953)) 4 in
+  if (3 * j + 3 <=? Z.shiftr (Z.shiftr (h + w) 64) e) || (Z.shiftl 1 52 <=? f + j)
   then None else
   let neg := lt x zero in
   let v := from_bits (b + j + Z.b2z (xorb up neg)) in

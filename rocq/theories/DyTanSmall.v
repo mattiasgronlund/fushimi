@@ -155,6 +155,58 @@ assert (P5 : 0 < (IZR M * g) ^ 5) by (apply pow_lt; exact Ht0).
 split; lra.
 Qed.
 
+(** [tan_small] shifts the high word of [y], [Z.shiftr y 64], by [e = s -
+    64] where this shifts [y] by [s], builds [2^d] as [2^(d - 4)] shifted
+    by 4, and tests [B >= 3 j + 3] for [B = Z.shiftr (h + 2^d) s] where
+    this tests [B / 3 <> j], which is the same, as [B >= Z.shiftr h s].
+    So it is the function below, on which [tan_small_rule] works. *)
+Local Lemma tan_small_words :
+  forall x up,
+  (DyadicTrig.tan_small x up =
+  let b := to_bits (fabs x) in
+  let be := Z.shiftr b 52 in
+  if negb ((997 <=? be) && (be <=? 1008)) then None else
+  let f := Z.land b (Z.shiftl 1 52 - 1) in
+  let '(h, _) := DyadicTrig.cube (Z.lor f (Z.shiftl 1 52)) in
+  let s := 2086 - 2 * be in
+  let j := Z.shiftr h s / 3 in
+  if negb (Z.shiftr (h + Z.shiftl 1 (2 * be - 1949)) s / 3 =? j) || (Z.shiftl 1 52 <=? f + j)
+  then None else
+  let neg := lt x zero in
+  let v := from_bits (b + j + Z.b2z (xorb up neg)) in
+  Some (if neg then opp v else v))%Z.
+Proof.
+intros x up. unfold DyadicTrig.tan_small. cbv zeta.
+set (be := Z.shiftr (to_bits (fabs x)) 52).
+match goal with |- (if ?c then _ else _) = _ => destruct c eqn:HR end; [reflexivity|].
+assert (Hbe : (997 <= be <= 1008)%Z).
+{ apply Bool.negb_false_iff, andb_prop in HR as [H1 H2].
+  apply Z.leb_le in H1, H2. lia. }
+destruct (DyadicTrig.cube _) as [h l]. cbv beta iota.
+(* [e = 2022 - 2 be >= 6], so shifting the high word by [e] shifts [y] by
+   [s = 64 + e], and [d - 4 = 2 be - 1953 >= 41]. *)
+assert (Hs : forall y, (Z.shiftr (Z.shiftr y 64) (2022 - 2 * be) =
+  Z.shiftr y (2086 - 2 * be))%Z).
+{ intros y. rewrite Z.shiftr_shiftr by lia. f_equal. lia. }
+assert (Hw : (Z.shiftl (Z.shiftl 1 (2 * be - 1953)) 4 = Z.shiftl 1 (2 * be - 1949))%Z).
+{ rewrite Z.shiftl_shiftl by lia. f_equal. lia. }
+rewrite !Hs, Hw.
+set (A := Z.shiftr h (2086 - 2 * be)).
+set (B := Z.shiftr (h + Z.shiftl 1 (2 * be - 1949)) (2086 - 2 * be)).
+assert (HAB : (A <= B)%Z).
+{ unfold A, B. rewrite !Z.shiftr_div_pow2 by lia.
+  apply Z.div_le_mono; [apply Z.pow_pos_nonneg; lia|].
+  assert (0 <= Z.shiftl 1 (2 * be - 1949))%Z by (apply Z.shiftl_nonneg; lia). lia. }
+(* As [A <= B], [B / 3 >= A / 3], so [B / 3 <> A / 3] is [B / 3 >= A / 3 +
+   1], which is [B >= 3 (A / 3) + 3]. [lia] needs the division by 3
+   spelled out. *)
+replace (3 * (A / 3) + 3 <=? B)%Z with (negb (B / 3 =? A / 3))%Z; [reflexivity|].
+pose proof (Z.div_mod A 3 ltac:(lia)). pose proof (Z.mod_pos_bound A 3 ltac:(lia)).
+pose proof (Z.div_mod B 3 ltac:(lia)). pose proof (Z.mod_pos_bound B 3 ltac:(lia)).
+destruct (Z.leb_spec (3 * (A / 3) + 3) B), (Z.eqb_spec (B / 3) (A / 3));
+  try reflexivity; exfalso; lia.
+Qed.
+
 (** Where [tan_small x up] returns [v], [v] is [tan x] rounded in the
     direction [up]. *)
 Lemma tan_small_rule :
@@ -164,7 +216,7 @@ Lemma tan_small_rule :
 Proof.
 intros x up v Fx H.
 destruct (small_bits x Fx) as (Hb & Et & Hsh & Hland).
-unfold DyadicTrig.tan_small in H. cbv beta zeta in H.
+rewrite tan_small_words in H. cbv beta zeta in H.
 rewrite Hsh, Hland in H.
 set (b := to_bits (fabs x)) in *.
 set (E := (b / 2 ^ 52)%Z) in *.

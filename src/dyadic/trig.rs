@@ -427,6 +427,19 @@ fn cos_small(t: f64, up: bool) -> Option<f64> {
 // They are the `f64`s whose bits are those of t minus j + 1, and those plus 1, if the stored
 // significand f of t is above j, so that the first is in the binade of t. sin is odd, so the
 // rounding of sin x for x < 0 is minus that of sin t in the other direction.
+// Its shifts by amounts that depend on `be` are of `u64`s, as in `cos_small`: for the `u128`s
+// y below 2^95 here, y >> s is the high word of y, below 2^31, shifted by
+// e = s - 64 = 2022 - 2 be in [4, 28], and 2^d is 2^(d - 2) << 2, for d - 2 in [39, 63]. As
+// h - 2^d <= h - (l == 0), ((h - 2^d) >> s) / 6 differs from j exactly when
+// (h - 2^d) >> s < 6 j, which takes no second division. The block this replaces, with its
+// `u128` shifts by s and d and its second division, took three callee-saved registers in the
+// copies of `sin_dir`, which saved them on every call past their tiny tests; this one takes
+// one in those built for x86-64 and x86-64-v2, and none in the one built for haswell.
+// In a crate that links `cr`, built for x86-64 or x86-64-v2, sin rounded down or up then takes
+// 5.0 to 5.1 fewer instructions per call in both copies on the sets of 4,096 calls named at
+// `cos_small`, and 7.2 fewer on the `f64`s nearest to 2^-26 (cachegrind, row 145). The haswell
+// build takes 7.4 to 8.5 fewer on those sets, 8.7 fewer on the `f64`s nearest to 2^-26, and 7.3
+// fewer on its hard cases.
 fn sin_small(x: f64, up: bool) -> Option<f64> {
     let b = x.abs().to_bits();
     let be = b >> 52;
@@ -435,13 +448,14 @@ fn sin_small(x: f64, up: bool) -> Option<f64> {
     }
     let f = b & ((1 << 52) - 1);
     let (h, l) = cube(u128::from(f | 1 << 52));
-    let s = 2086 - 2 * be;
-    let j = ((h - u128::from(l == 0)) >> s) / 6;
-    if ((h - (1u128 << (2 * be - 1953))) >> s) / 6 != j || u128::from(f) <= j {
+    let e = 2022 - 2 * be;
+    let j = (((h - u128::from(l == 0)) >> 64) as u64 >> e) / 6;
+    let w = u128::from(1u64 << (2 * be - 1955)) << 2;
+    if (((h - w) >> 64) as u64 >> e) < 6 * j || f <= j {
         return None;
     }
     let neg = x < 0.0;
-    let v = f64::from_bits(b - (j as u64 + 1) + u64::from(up != neg));
+    let v = f64::from_bits(b - (j + 1) + u64::from(up != neg));
     Some(if neg { -v } else { v })
 }
 
@@ -456,6 +470,18 @@ fn sin_small(x: f64, up: bool) -> Option<f64> {
 // t + j g and t + (j + 1) g. They are the `f64`s whose bits are those of t plus j, and those
 // plus 1, if f + j < 2^52 for the stored significand f of t, so that the first is in the
 // binade of t. tan is odd, as sin is.
+// Its shifts by amounts that depend on `be` are of `u64`s, as in `sin_small`: for the `u128`s
+// y = h and h + 2^d, below 2^96 here, y >> s is the high word of y, below 2^32, shifted by
+// e = s - 64 = 2022 - 2 be in [6, 28], and 2^d is 2^(d - 4) << 4, for d - 4 in [41, 63]. As
+// (h + 2^d) >> s >= h >> s, ((h + 2^d) >> s) / 3 differs from j exactly when
+// (h + 2^d) >> s >= 3 j + 3. The copies of `tan_dir` then save one callee-saved register in
+// place of three, as those of `sin_dir` do, and the one built for haswell none in place of
+// one.
+// In a crate that links `cr`, built for x86-64 or x86-64-v2, tan rounded down or up then takes
+// 4.9 to 5.1 fewer instructions per call in both copies on the sets named at `cos_small`, and
+// 7.7 fewer on the `f64`s nearest to 2^-26 (cachegrind, row 145). The haswell build takes 2.5
+// to 2.6 fewer on those sets, 8.5 fewer on the `f64`s nearest to 2^-26, and 3.0 fewer on its
+// hard cases.
 fn tan_small(x: f64, up: bool) -> Option<f64> {
     let b = x.abs().to_bits();
     let be = b >> 52;
@@ -464,13 +490,14 @@ fn tan_small(x: f64, up: bool) -> Option<f64> {
     }
     let f = b & ((1 << 52) - 1);
     let (h, _) = cube(u128::from(f | 1 << 52));
-    let s = 2086 - 2 * be;
-    let j = (h >> s) / 3;
-    if ((h + (1u128 << (2 * be - 1949))) >> s) / 3 != j || u128::from(f) + j >= 1 << 52 {
+    let e = 2022 - 2 * be;
+    let j = ((h >> 64) as u64 >> e) / 3;
+    let w = u128::from(1u64 << (2 * be - 1953)) << 4;
+    if (((h + w) >> 64) as u64 >> e) >= 3 * j + 3 || f + j >= 1 << 52 {
         return None;
     }
     let neg = x < 0.0;
-    let v = f64::from_bits(b + j as u64 + u64::from(up != neg));
+    let v = f64::from_bits(b + j + u64::from(up != neg));
     Some(if neg { -v } else { v })
 }
 

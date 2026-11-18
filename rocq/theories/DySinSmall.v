@@ -72,6 +72,61 @@ assert (Hj : (0 <= j)%Z) by (rewrite Ej; apply Z.div_pos; lia).
 split; [exact Hj|]. split; lia.
 Qed.
 
+(** [sin_small] shifts the high word of [y], [Z.shiftr y 64], by [e = s -
+    64] where this shifts [y] by [s], builds [2^d] as [2^(d - 2)] shifted
+    by 2, and tests [B < 6 j] for [B = Z.shiftr (h - 2^d) s] where this
+    tests [B / 6 <> j], which is the same, as
+    [B <= Z.shiftr (h - Z.b2z (l =? 0)) s], whose quotient by 6 is [j],
+    for [d >= 1]. So it is the function below, on which [sin_small_rule]
+    works. *)
+Local Lemma sin_small_words :
+  forall x up,
+  (DyadicTrig.sin_small x up =
+  let b := to_bits (fabs x) in
+  let be := Z.shiftr b 52 in
+  if negb ((997 <=? be) && (be <=? 1009)) then None else
+  let f := Z.land b (Z.shiftl 1 52 - 1) in
+  let '(h, l) := DyadicTrig.cube (Z.lor f (Z.shiftl 1 52)) in
+  let s := 2086 - 2 * be in
+  let j := Z.shiftr (h - Z.b2z (l =? 0)) s / 6 in
+  if negb (Z.shiftr (h - Z.shiftl 1 (2 * be - 1953)) s / 6 =? j) || (f <=? j) then None else
+  let neg := lt x zero in
+  let v := from_bits (b - (j + 1) + Z.b2z (xorb up neg)) in
+  Some (if neg then opp v else v))%Z.
+Proof.
+intros x up. unfold DyadicTrig.sin_small. cbv zeta.
+set (b := to_bits (fabs x)).
+set (be := Z.shiftr b 52).
+destruct ((997 <=? be) && (be <=? 1009))%Z eqn:HE; cbn [negb]; [|reflexivity].
+apply Bool.andb_true_iff in HE. destruct HE as [HE1 HE2]. apply Z.leb_le in HE1, HE2.
+set (f := Z.land b (Z.shiftl 1 52 - 1)).
+(* No fact about [cube] is needed: both sides use its words the same way. *)
+destruct (DyadicTrig.cube (Z.lor f (Z.shiftl 1 52))) as [h l].
+cbn beta iota.
+(* Shifting by 64 and then by [e = 2022 - 2 be >= 4] is shifting by [s = 64 + e]. *)
+rewrite !Z.shiftr_shiftr by lia.
+replace (64 + (2022 - 2 * be))%Z with (2086 - 2 * be)%Z by lia.
+(* [2^(d - 2)] shifted by 2 is [2^d], for [d - 2 = 2 be - 1955 >= 39]. *)
+rewrite Z.shiftl_shiftl by lia.
+replace (2 * be - 1955 + 2)%Z with (2 * be - 1953)%Z by lia.
+set (s := (2086 - 2 * be)%Z).
+set (d := (2 * be - 1953)%Z).
+set (A := Z.shiftr (h - Z.b2z (l =? 0)) s).
+set (B := Z.shiftr (h - Z.shiftl 1 d) s).
+(* [B <= A], as [2^d >= 2] is above [Z.b2z (l =? 0) <= 1]. *)
+assert (HBA : (B <= A)%Z).
+{ assert (Hd : (2 <= Z.shiftl 1 d)%Z).
+  { rewrite Z.shiftl_1_l. change 2%Z with (2 ^ 1)%Z at 1. apply Z.pow_le_mono_r; lia. }
+  unfold A, B. rewrite !Z.shiftr_div_pow2 by lia.
+  apply Z.div_le_mono; [apply Z.pow_pos_nonneg; lia|].
+  destruct (l =? 0)%Z; cbn [Z.b2z]; lia. }
+(* With [B <= A], [B < 6 (A / 6)] exactly when [B / 6 <> A / 6]. [lia] needs the
+   quotients by 6 as equations. *)
+replace (B <? 6 * (A / 6))%Z with (negb (B / 6 =? A / 6))%Z; [reflexivity|].
+destruct (Z.ltb_spec B (6 * (A / 6))), (Z.eqb_spec (B / 6) (A / 6)); cbn [negb];
+  first [reflexivity | exfalso; Z.div_mod_to_equations; lia].
+Qed.
+
 (** Where [sin_small x up] returns [v], [v] is [sin x] rounded in the
     direction [up]. With [t = |x| = m g], [g = 2^(be - 1075)] and the
     bounds of [sin_small_int], [t^3/6 <= (j + 1) g] and [j g < t^3/6 -
@@ -87,7 +142,7 @@ Lemma sin_small_rule :
 Proof.
 intros x up v Fx.
 destruct (small_bits x Fx) as (Hb & Et & Es & El).
-unfold DyadicTrig.sin_small. cbv zeta.
+rewrite sin_small_words. cbv zeta.
 set (b := to_bits (fabs x)) in *.
 rewrite Es, El. clear Es El.
 set (E := (b / 2^52)%Z) in *.
