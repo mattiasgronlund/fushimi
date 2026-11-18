@@ -110,16 +110,25 @@ pub(crate) struct Encl<const N: usize> {
 // Calls `f` with a zeroed scratch of `len` limbs, the number that the caller's slices take,
 // which is at most 12 N + 16: on the stack for the precisions up to 256 bits, which Ziv's
 // strategy tries first, and on the heap above. On the stack it is the first `len` limbs of the
-// smallest of 8, 16, 32 and 64 limbs that holds them, a test of constants once `with_buf` is
-// inlined, so that an operation zeroes about the limbs that it uses rather than 64 of them.
+// smallest of 8, 16, 24, ..., 64 limbs that holds them (12 N + 16 <= 64), a test of constants
+// once `with_buf` is inlined, so that an operation zeroes fewer than 8 limbs more than its
+// slices take.
 fn with_buf<const N: usize, R>(len: usize, f: impl FnOnce(&mut [u64]) -> R) -> R {
     if N <= 4 {
         if len <= 8 {
             f(&mut [0; 8][..len])
         } else if len <= 16 {
             f(&mut [0; 16][..len])
+        } else if len <= 24 {
+            f(&mut [0; 24][..len])
         } else if len <= 32 {
             f(&mut [0; 32][..len])
+        } else if len <= 40 {
+            f(&mut [0; 40][..len])
+        } else if len <= 48 {
+            f(&mut [0; 48][..len])
+        } else if len <= 56 {
+            f(&mut [0; 56][..len])
         } else {
             f(&mut [0; 64][..len])
         }
