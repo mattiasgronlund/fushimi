@@ -109,7 +109,10 @@ jobs:
   # first; the steps named "without FMA" run the second, and the last of them
   # does so in a build for a Nehalem, whose kernel picks its copy in the same way.
   baseline:
-    runs-on: ubuntu-latest
+    # Not `ubuntu-latest`, now GitHub's Ubuntu 26.04 image, which installs the
+    # `amd64v3` builds of its packages (for `x86-64-v3`): QEMU's Nehalem cannot
+    # run their dynamic loader.
+    runs-on: ubuntu-24.04
 
     env:
       RUSTDOCFLAGS: -Ctarget-cpu=x86-64 -Dwarnings
@@ -118,13 +121,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The cache of the other jobs under another key: they run on that Ubuntu
+      # 26.04 image, whose `gcc` is the `amd64v3` build and targets `x86-64-v3`,
+      # and GMP and MPFR built there stop the QEMU steps below with SIGILL.
       - uses: actions/cache@v4
         with:
           path: |
             ~/.cache/gmp-mpfr-sys
-          key: ${{ runner.os }}-${{ secrets.CACHE_VERSION }}-${{ hashFiles('Cargo.toml') }}
+          key: ${{ runner.os }}-baseline-${{ secrets.CACHE_VERSION }}-${{ hashFiles('Cargo.toml') }}
           restore-keys: |
-            ${{ runner.os }}-${{ secrets.CACHE_VERSION }}-
+            ${{ runner.os }}-baseline-${{ secrets.CACHE_VERSION }}-
 
       - uses: actions-rs/toolchain@v1
         with:
