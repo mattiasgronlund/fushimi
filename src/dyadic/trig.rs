@@ -375,21 +375,41 @@ fn cube(m: u128) -> (u128, u64) {
 // 2^(104 - 2 s) below the second, more than t^4 / 24, so that cos t lies between them too.
 // In both cases cos t lies strictly between 1 - j 2^-53 and the next `f64`, for
 // j = k + (r != 0), as their bits are those of 1 minus j and that plus 1.
+// Its shifts by amounts that depend on `be` are of the two `u64` words of m^2 = hi 2^64 + lo.
+// With s = 64 + e, for e = 2034 - 2 be in [18, 40], k = hi >> e and
+// r = (hi mod 2^e) 2^64 + lo, which is not 0 exactly when (hi << (64 - e)) | lo is not, as
+// that `u64` shift drops the bits of hi from e up. floor(r / 2^e) is
+// v = (hi << (64 - e)) + (lo >> e), whose two terms have no bit in common, so that
+// r >= 2^(157 - s) = 2^(93 - e) exactly when v >= 2^(93 - 2 e). The `u128` shifts by s that
+// this replaces took a callee-saved register in the copies of `cos_dir` built for x86-64 and
+// x86-64-v2, which saved it on every call past their tiny tests, and none in the one built for
+// haswell. This block takes none, so that those copies save none, and the FMA copy sets up its
+// frame only around its call of `ziv`.
+// In a crate that links `cr`, built for x86-64 or x86-64-v2, cos rounded down or up then takes
+// 4.0 to 4.6 fewer instructions per call in the FMA copy and 2.0 to 2.6 fewer in the Dekker
+// copy, over 4,096 calls uniform in [0.1, 10), [-10, 10) and [-π/4, π/4), of either sign with
+// a magnitude log-uniform in [2^-30, 2^1024) and in [2^60, 2^1024), and on the `f64`s nearest
+// to the multiples of π/2, and 7 fewer in both on the 4,096 `f64`s nearest to 2^-26, of
+// random sign (cachegrind, row 145). The haswell build takes 4.5 fewer on those, 1.9 fewer on
+// its hard cases in `src/cr/tests/mpfr/hard_cases.wc`, and as many as before, or at most 0.1
+// fewer, on the others.
 fn cos_small(t: f64, up: bool) -> Option<f64> {
     let b = t.to_bits();
     let be = b >> 52;
     if !(997..=1008).contains(&be) {
         return None;
     }
-    let m = u128::from((b & ((1 << 52) - 1)) | 1 << 52);
-    let s = 2098 - 2 * be;
-    let sq = m * m;
-    let k = sq >> s;
-    let r = sq & ((1u128 << s) - 1);
-    if r != 0 && r >> (157 - s) == 0 {
+    let m = (b & ((1 << 52) - 1)) | 1 << 52;
+    let sq = u128::from(m) * u128::from(m);
+    let (hi, lo) = ((sq >> 64) as u64, sq as u64);
+    let e = 2034 - 2 * be;
+    let k = hi >> e;
+    let v = (hi << (64 - e)) + (lo >> e);
+    let nz = (hi << (64 - e) | lo) != 0;
+    if nz && v >> (93 - 2 * e) == 0 {
         return None;
     }
-    let j = k as u64 + u64::from(r != 0);
+    let j = k + u64::from(nz);
     Some(f64::from_bits(1.0f64.to_bits() - j + u64::from(up)))
 }
 

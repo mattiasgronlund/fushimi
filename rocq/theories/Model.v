@@ -5070,22 +5070,28 @@ Definition cube (m : Z) : Z * Z :=
 
 (** [fn cos_small(t: f64, up: bool) -> Option<f64>], where
     [(997..=1008).contains(&be)] is [(997 <=? be) && (be <=? 1008)],
-    [u128::from] of an integer and [k as u64], for the [k < 2^24] there,
-    keep the value, [u64::from] of a [bool] is [Z.b2z],
-    [1.0f64.to_bits()] is [0x3ff0000000000000], and [2098 - 2 * be],
-    [157 - s], the shifts, which are by less than 128, and the bits of
-    the result, which stay below [2^64], are computed without a check. *)
+    [u128::from] of an integer and [(sq >> 64) as u64], for the
+    [sq < 2^106] there, keep the value, [sq as u64] and
+    [hi << (64 - e)] are [mod 2 ^ 64], [u64::from] of a [bool] is
+    [Z.b2z], [1.0f64.to_bits()] is [0x3ff0000000000000], and
+    [2034 - 2 * be], [64 - e], [93 - 2 * e], the shifts, which are by
+    less than 64, or 128 for [sq >> 64], the sum [v], whose two terms
+    have no bit in common, and the bits of the result, which stay below
+    [2^64], are computed without a check. *)
 Definition cos_small (t : f64) (up : bool) : option f64 :=
   let b := to_bits t in
   let be := Z.shiftr b 52 in
   if negb ((997 <=? be) && (be <=? 1008)) then None else
   let m := Z.lor (Z.land b (Z.shiftl 1 52 - 1)) (Z.shiftl 1 52) in
-  let s := 2098 - 2 * be in
   let sq := m * m in
-  let k := Z.shiftr sq s in
-  let r := Z.land sq (Z.shiftl 1 s - 1) in
-  if negb (r =? 0) && (Z.shiftr r (157 - s) =? 0) then None else
-  Some (from_bits (0x3ff0000000000000 - (k + Z.b2z (negb (r =? 0))) + Z.b2z up)).
+  let hi := Z.shiftr sq 64 in
+  let lo := sq mod 2 ^ 64 in
+  let e := 2034 - 2 * be in
+  let k := Z.shiftr hi e in
+  let v := Z.shiftl hi (64 - e) mod 2 ^ 64 + Z.shiftr lo e in
+  let nz := negb (Z.lor (Z.shiftl hi (64 - e) mod 2 ^ 64) lo =? 0) in
+  if nz && (Z.shiftr v (93 - 2 * e) =? 0) then None else
+  Some (from_bits (0x3ff0000000000000 - (k + Z.b2z nz) + Z.b2z up)).
 
 (** [fn sin_small(x: f64, up: bool) -> Option<f64>], where [x.abs()] is
     [fabs x], [x < 0.0] is [lt x zero], [a != b] of two [bool]s is

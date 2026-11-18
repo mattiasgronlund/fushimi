@@ -51,6 +51,72 @@ Qed.
 Local Lemma some_eq : forall a b : f64, Some a = Some b -> a = b.
 Proof. intros a b E. injection E. easy. Qed.
 
+(** [cos_small] takes [k] and the tests on [r] from the two 64-bit words
+    [hi] and [lo] of [sq = hi 2^64 + lo]: with [s = 64 + e],
+    [k = sq / 2^s = hi / 2^e], [r = sq mod 2^s = (hi mod 2^e) 2^64 + lo],
+    and [v = r / 2^e]. So it is the function below, which computes [k] and
+    [r] from [sq] directly, and on which [cos_small_rule] works. *)
+Local Lemma cos_small_words :
+  forall t up,
+  (DyadicTrig.cos_small t up =
+  let b := to_bits t in
+  let be := Z.shiftr b 52 in
+  if negb ((997 <=? be) && (be <=? 1008)) then None else
+  let m := Z.lor (Z.land b (Z.shiftl 1 52 - 1)) (Z.shiftl 1 52) in
+  let s := 2098 - 2 * be in
+  let sq := m * m in
+  let k := Z.shiftr sq s in
+  let r := Z.land sq (Z.shiftl 1 s - 1) in
+  if negb (r =? 0) && (Z.shiftr r (157 - s) =? 0) then None else
+  Some (from_bits (0x3ff0000000000000 - (k + Z.b2z (negb (r =? 0))) + Z.b2z up)))%Z.
+Proof.
+intros t up. unfold DyadicTrig.cos_small. cbv zeta.
+set (be := Z.shiftr (to_bits t) 52).
+destruct ((997 <=? be) && (be <=? 1008))%Z eqn:HR; [| reflexivity].
+apply andb_prop in HR as [H1 H2]. apply Z.leb_le in H1, H2.
+set (sq := (Z.lor (Z.land (to_bits t) (Z.shiftl 1 52 - 1)) (Z.shiftl 1 52) *
+  Z.lor (Z.land (to_bits t) (Z.shiftl 1 52 - 1)) (Z.shiftl 1 52))%Z).
+(* [s = 64 + e] and [157 - s = 93 - e], for [e = 2034 - 2 be]. *)
+set (e := (2034 - 2 * be)%Z).
+assert (He : (18 <= e <= 40)%Z) by (unfold e; lia).
+replace (2098 - 2 * be)%Z with (64 + e)%Z by (unfold e; lia).
+replace (157 - (64 + e))%Z with (93 - e)%Z by lia.
+clearbody sq e.
+(* [k]: [(sq >> 64) >> e = sq >> s]. Then every shift as a product or a
+   quotient, and the mask [2^s - 1] as [mod 2^s]. *)
+rewrite (Z.shiftr_shiftr sq 64 e) by lia.
+rewrite Z.shiftl_1_l, !Z.shiftl_mul_pow2, !Z.shiftr_div_pow2 by lia.
+replace (2^(64 + e) - 1)%Z with (Z.ones (64 + e)) by (rewrite Z.ones_equiv; lia).
+rewrite Z.land_ones by lia.
+assert (P64 : (0 < 2^64)%Z) by reflexivity.
+assert (Pe : (0 < 2^e)%Z) by (apply Z.pow_pos_nonneg; lia).
+assert (Pf : (0 < 2^(64 - e))%Z) by (apply Z.pow_pos_nonneg; lia).
+assert (Hp : (2^64 = 2^e * 2^(64 - e))%Z).
+{ rewrite <- Z.pow_add_r by lia. f_equal. lia. }
+set (hi := (sq / 2^64)%Z). set (lo := (sq mod 2^64)%Z).
+(* [hi << (64 - e)] mod [2^64] keeps the low [e] bits of [hi]. *)
+assert (EX : (hi * 2^(64 - e) mod 2^64 = hi mod 2^e * 2^(64 - e))%Z).
+{ rewrite Hp. apply Z.mul_mod_distr_r; lia. }
+(* [r = sq mod (2^64 2^e) = lo + 2^64 (hi mod 2^e)]. *)
+assert (Er : (sq mod 2^(64 + e) = lo + 2^64 * (hi mod 2^e))%Z).
+{ rewrite (Z.pow_add_r 2 64 e), Z.rem_mul_r by lia. reflexivity. }
+rewrite EX, Er.
+pose proof (Z.mod_pos_bound hi (2^e) Pe) as Hhm.
+pose proof (Z.mod_pos_bound sq (2^64) P64) as Hlo.
+set (hm := (hi mod 2^e)%Z) in *. fold lo in Hlo.
+(* [nz]: neither word is negative, so their [lor] is 0 exactly where [r]
+   is. *)
+assert (EZ : (Z.lor (hm * 2^(64 - e)) lo =? 0)%Z = (lo + 2^64 * hm =? 0)%Z).
+{ apply Bool.eq_iff_eq_true. rewrite !Z.eqb_eq, Z.lor_eq_0_iff. nia. }
+(* [v = r / 2^e], so [v >> (93 - 2 e) = r >> (93 - e)]. *)
+assert (Ev : ((lo + 2^64 * hm) / 2^(93 - e) =
+  (hm * 2^(64 - e) + lo / 2^e) / 2^(93 - 2 * e))%Z).
+{ replace (93 - e)%Z with (e + (93 - 2 * e))%Z by lia.
+  rewrite (Z.pow_add_r 2 e (93 - 2 * e)), <- Z.div_div by lia.
+  f_equal. rewrite Hp, <- Z.div_add_l by lia. f_equal. ring. }
+rewrite EZ, Ev. reflexivity.
+Qed.
+
 (** Where [cos_small |x| up] returns [v], [v] is [cos x] rounded in the
     direction [up]. *)
 Lemma cos_small_rule :
@@ -60,7 +126,7 @@ Lemma cos_small_rule :
 Proof.
 intros x up v Fx H.
 destruct (small_bits x Fx) as (Hb & Ev & Esh & Eland).
-unfold DyadicTrig.cos_small in H. cbv zeta in H.
+rewrite cos_small_words in H. cbv zeta in H.
 rewrite Esh, Eland in H.
 set (b := to_bits (fabs x)) in *.
 set (E := (b / 2^52)%Z) in *.

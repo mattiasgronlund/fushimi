@@ -547,6 +547,101 @@ fn small_rules_near_their_centres() {
     }
 }
 
+// `cos_small` as it was before row 145, when it shifted the `u128` m^2 by s, which
+// `small_rules_match_their_u128_forms` compares it with.
+fn cos_small_u128(t: f64, up: bool) -> Option<f64> {
+    let b = t.to_bits();
+    let be = b >> 52;
+    if !(997..=1008).contains(&be) {
+        return None;
+    }
+    let m = u128::from((b & ((1 << 52) - 1)) | 1 << 52);
+    let s = 2098 - 2 * be;
+    let sq = m * m;
+    let k = sq >> s;
+    let r = sq & ((1u128 << s) - 1);
+    if r != 0 && r >> (157 - s) == 0 {
+        return None;
+    }
+    let j = k as u64 + u64::from(r != 0);
+    Some(f64::from_bits(1.0f64.to_bits() - j + u64::from(up)))
+}
+
+// The rule of small arguments of the function `i` as it was before row 145, as `small` gives
+// the current one.
+fn small_u128(i: usize, x: f64, up: bool) -> Option<f64> {
+    match i {
+        COS => cos_small_u128(x.abs(), up),
+        _ => unreachable!("{}", FUNCTIONS[i].0),
+    }
+}
+
+// The m in [2^52, 2^53) next to which a test of the rule of small arguments of the function
+// `i` changes its outcome at the biased exponent `be`, for 256 random quotients: for cos, with
+// s as in `cos_small`, the least m with m^2 >= k 2^s and the least with
+// m^2 >= k 2^s + 2^(157 - s), for a random k with k 2^s in [2^104, 2^106), as its test on
+// r = m^2 - k 2^s changes at r = 0 and at r = 2^(157 - s).
+fn small_rule_edges(rng: &mut Rng, i: usize, be: u64) -> Vec<u128> {
+    let mut ms = vec![];
+    for _ in 0..256 {
+        match i {
+            COS => {
+                let s = 2098 - 2 * be;
+                let k0 = 1u64 << (104 - s);
+                let k = u128::from(k0 + rng.below(3 * k0));
+                ms.extend([0, 1 << (157 - s)].map(|r| ceil_sqrt(k << s | r)));
+            }
+            _ => unreachable!("{}", FUNCTIONS[i].0),
+        }
+    }
+    ms
+}
+
+// Compares the rule of small arguments of the function `i`, whose range of biased exponents
+// ends at `last`, with its form before row 145, bit for bit, in both directions and at both
+// signs, at each biased exponent from 996 to `last` + 1 and at these m in [2^52, 2^53): the
+// 4,096 least and the 4,096 greatest, those with one bit set below the leading one or one bit
+// cleared, 4,096 random ones, and those next to the m of `small_rule_edges`.
+fn check_u128_form(rng: &mut Rng, i: usize, last: u64) {
+    for be in 996..=last + 1 {
+        let mut ms: Vec<u128> = (0..4096)
+            .flat_map(|d| [(1 << 52) + d, (1 << 53) - 1 - d])
+            .collect();
+        for j in 0..52 {
+            ms.extend([(1 << 52) | 1 << j, ((1 << 53) - 1) ^ 1 << j]);
+        }
+        ms.extend((0..4096).map(|_| (1 << 52) | u128::from(rng.below(1 << 52))));
+        if (997..=last).contains(&be) {
+            for m in small_rule_edges(rng, i, be) {
+                ms.extend([m - 1, m, m + 1]);
+            }
+        }
+        for m in ms.into_iter().filter(|m| (1 << 52..1 << 53).contains(m)) {
+            let x = from_parts(be, m);
+            for (y, up) in [(x, false), (x, true), (-x, false), (-x, true)] {
+                assert_eq!(
+                    small(i, y, up).map(f64::to_bits),
+                    small_u128(i, y, up).map(f64::to_bits),
+                    "{}_small({:e}, {})",
+                    FUNCTIONS[i].0,
+                    y,
+                    up
+                );
+            }
+        }
+    }
+}
+
+// Since row 145, the shifts of `cos_small` by amounts that depend on the exponent are of
+// `u64`s, so that the copies of `cos_dir` built for x86-64 and x86-64-v2 save no callee-saved
+// register (see `cos_small`). This checks that it gives the same results as before, which
+// `cos_small_words` in `rocq/theories/DyCosSmall.v` shows of its model at every argument.
+#[test]
+fn small_rules_match_their_u128_forms() {
+    let mut rng = Rng(145);
+    check_u128_form(&mut rng, COS, 1008);
+}
+
 // Arguments at which the rules of small arguments fall through to `ziv`, which the search of
 // `small_rules_near_their_centres` found, as (function, x): all those that it found in the
 // binade [2^-26, 2^-25). The search does not take sin at 2^-26, at which `sin_small` falls
