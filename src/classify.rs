@@ -6,16 +6,19 @@ use std::mem::transmute;
 // `IntervalClass`). Each `bitmask` is below 4, so the casts to `u8` keep the values, and the
 // result is below 16.
 //
-// It is the `classify_bits` of `Baseline` (`src/simd/token.rs`), except where the build's backend
-// is one of `src/simd/x86_64.rs` (`sse42`, `fma` or `avx512f`), where this function is not
-// compiled: there `Baseline`, like the copies of `V2` and `V3` in every build that has them, calls
-// the `classify_bits` of that file, which computes the same class code with one `movmskps`. The
-// body is here, in a function that is not generic, rather than in `Interval::classify_with` with
-// the methods `bitmask`, `ge` and `le` of `Baseline`: in a build for plain `x86-64`, rustc 1.98.1
-// compiled that generic body with the portable `bitmask`, `ge` and `le` to a mask in a vector
-// register whose sign bits were read back, at 11 more instructions per call of `classify` and 21
-// more per call of `classify2` than this body, which it compiles to a flag per lane's comparison
-// (`ucomisd` and `setae`).
+// It is the `classify_bits` of `Baseline` (`src/simd/token.rs`), except in the x86-64 builds with
+// neither `docsrs` nor `force-generic`, where this function is not compiled: there `Baseline`,
+// like the copies of `V2` and `V3` in every build that has them, calls the `classify_bits` of
+// `src/simd/x86_64.rs`, which computes the same class code with one `movmskps`. These are the
+// builds whose backend is one of that file (`sse42`, `fma` or `avx512f`), and those without
+// `sse4.2`, such as a build for plain `x86-64`, whose backend is the portable one. The body is
+// here, in a function that is not generic, rather than in `Interval::classify_with` with the
+// methods `bitmask`, `ge` and `le` of `Baseline`: in a build for plain `x86-64` in which
+// `Baseline` called this function, as it now does there only with `docsrs` or `force-generic`,
+// rustc 1.98.1 compiled that generic body with the portable `bitmask`, `ge` and `le` to a mask
+// in a vector register whose sign bits were read back, at 11 more instructions per call of
+// `classify` and 21 more per call of `classify2` than this body, which it compiled to a flag per
+// lane's comparison (`ucomisd` and `setae`).
 //
 // `x` is a reference: with `x: F64X2`, rustc 1.98.1 compiled `<Interval as Mul>::mul` and
 // `<Interval as Div>::div` of a build for plain `x86-64` with the feature `force-generic` so that
@@ -23,9 +26,10 @@ use std::mem::transmute;
 // instructions per call in the classes counted. With `x: &F64X2`, they read the lanes from the
 // operand.
 //
-// The `cfg` is the complement of that of the `classify_bits` of `Baseline` that calls the one of
-// `src/simd/x86_64.rs`.
-#[cfg(not(all(target_arch = "x86_64", not(inari_generic_backend), not(docsrs))))]
+// The `cfg` is that of the `classify_bits` of `Baseline` that calls this function: the complement
+// of the union of the `cfg`s of the two that call the one of `src/simd/x86_64.rs`, as `build.rs`
+// sets `inari_generic_backend` wherever `force-generic` is on.
+#[cfg(not(all(target_arch = "x86_64", not(feature = "force-generic"), not(docsrs))))]
 #[inline]
 pub(crate) fn classify_bits(x: &F64X2) -> u8 {
     // `rocq/theories/Model.v` transcribes this function in `classify`, its transcription of
@@ -49,10 +53,13 @@ impl Interval {
     #[inline]
     pub(crate) fn classify_with<S: Simd>(self, s: S) -> IntervalClass {
         // `rocq/theories/Model.v` transcribes this function for an `s` whose backend is the
-        // portable one, with the `classify_bits` above, for the proofs of `(Dec)Interval::abs`,
-        // `(Dec)Interval::atan2`, `(Dec)Interval::div`, `(Dec)Interval::mul`,
+        // portable one and whose `classify_bits` is the one above: every `s` whose backend is
+        // the portable one but `Baseline` and `CrateBaseline` in an x86-64 build without
+        // `sse4.2`, such as one for plain `x86-64`, and without the feature `force-generic`,
+        // whose `classify_bits` is that of `src/simd/x86_64.rs`. It does so for the proofs of
+        // `(Dec)Interval::abs`, `(Dec)Interval::atan2`, `(Dec)Interval::div`, `(Dec)Interval::mul`,
         // `(Dec)Interval::mul_add`, `(Dec)Interval::mul_rev_to_pair`, `(Dec)Interval::powi`,
-        // `(Dec)Interval::recip` and `(Dec)Interval::sqr`. `classify_defined` in
+        // `(Dec)Interval::recip` and `(Dec)Interval::sqr`. For such an `s`, `classify_defined` in
         // `rocq/theories/Abs.v` shows, for the portable backend, that `transmute` gets the
         // discriminant of a variant whenever `self` is `valid`, as the comment on
         // `Interval::rep` defines it.
@@ -62,18 +69,20 @@ impl Interval {
     // `#[inline]`, for the reason given on `classify_with`.
     #[inline]
     pub(crate) fn classify2_with<S: Simd>(self, s: S, rhs: Self) -> IntervalClass2 {
-        // `rocq/theories/Model.v` transcribes this function for an `s` whose backend is the
-        // portable one, for the proofs of `(Dec)Interval::atan2`, `(Dec)Interval::div`,
+        // `rocq/theories/Model.v` transcribes this function for an `s` for which it transcribes
+        // `classify_with`, for the proofs of `(Dec)Interval::atan2`, `(Dec)Interval::div`,
         // `(Dec)Interval::mul`, `(Dec)Interval::mul_add` and `(Dec)Interval::mul_rev_to_pair`.
         // `classify2_pair` in `rocq/theories/Classify2.v` shows that `transmute` gets the
         // discriminant of the variant for the classes of `self` and `rhs` whenever
-        // `classify_with` is defined on both.
+        // `classify_with` is defined on both, for such an `s`.
         unsafe { transmute(((self.classify_with(s) as u8) << 4) | rhs.classify_with(s) as u8) }
     }
 
     // `classify_with` called with `Baseline`, whose backend is the build's, for the operations
     // that have no `*_with` form, such as `Interval::abs`. `rocq/theories/Model.v` transcribes it
-    // as `classify_with`, so it has to be updated along with it.
+    // as `classify_with`, in a build where `Baseline` is an `s` for which it transcribes
+    // `classify_with`: one whose backend is the portable one, but not an x86-64 build without
+    // `sse4.2` and without the feature `force-generic`. So it has to be updated along with it.
     #[inline]
     pub(crate) fn classify(self) -> IntervalClass {
         self.classify_with(Baseline)

@@ -15,6 +15,10 @@
 //   sse4.2 (x86-64-v2)                        sse42          sse42           fma (copies)
 //   plain x86-64                              generic        sse42 (copies)  fma (copies)
 //
+// In the row of plain `x86-64`, every method of `Baseline` but `classify_bits` calls the portable
+// backend; `classify_bits`, as at `V2` and `V3`, is that of `src/simd/x86_64.rs`, which uses only
+// SSE and SSE2 (see `Baseline` below).
+//
 // A copy is a function with the level's target features that calls the backend function, which
 // is `#[inline(always)]` in such a build, so that the copy compiles it with those features. The
 // thin layers of `src/simd/x86_64.rs` and its submodules are `#[inline(always)]` in every build,
@@ -31,9 +35,13 @@ mod sealed {
     // `Interval::classify_with` and `classify2_with` (`src/classify.rs`) call for them. Each
     // method computes what the function of the same name computes in the backend that the token
     // gives (the table above), and `classify_bits` what `crate::classify::classify_bits` computes
-    // with the `bitmask`, `ge`, `le` and `splat` of that backend (where it is one of
-    // `src/simd/x86_64.rs`, it is the `classify_bits` of that file). `classify_bits` takes `x` by
-    // reference, as `crate::classify::classify_bits` does, for the reason given there.
+    // with the `bitmask`, `ge`, `le` and `splat` of that backend. Where that backend is one of
+    // `src/simd/x86_64.rs`, and for `Baseline` and `CrateBaseline` in an x86-64 build without
+    // `force-generic` whose backend is the portable one (one without `sse4.2`, such as for plain
+    // `x86-64`), `classify_bits` is the one of `src/simd/x86_64.rs`, which computes the same class
+    // code on every argument: it makes the same comparisons of the lanes with zero, and packs
+    // their results into the same bits. `classify_bits` takes `x` by reference, as
+    // `crate::classify::classify_bits` does, for the reason given there.
     // `src/simd/generic.rs` says what its functions compute. The other backends need not compute
     // the same on every argument: where an argument is a NaN, or the arguments are zeros of
     // opposite signs, `max` of `src/simd/x86_64.rs` (`_mm_max_pd`) can return another value than
@@ -280,7 +288,10 @@ pub fn dispatch<W: WithLevel>(w: W) -> W::Output {
 
 // The build's backend, which the operations of `Interval` and `DecInterval` that have a `*_with`
 // form call through `Baseline` (or through `CrateBaseline` below, whose backend is the same) when
-// they take no token (for an `Interval` `x`, `x + y` is `x.add_with(Baseline, y)`).
+// they take no token (for an `Interval` `x`, `x + y` is `x.add_with(Baseline, y)`). The
+// `classify_bits` of `Baseline` is that of `src/simd/x86_64.rs` in every x86-64 build without
+// `force-generic` and `docsrs`, also where the build's backend is the portable one (see
+// `classify_bits` below).
 //
 // A function that a user's crate can inline or instantiate, such as `add_with`, can call only
 // functions that the crate exports. So `add_ru`, `div_ru` and `mul_ru`, which the crate's
@@ -365,21 +376,47 @@ impl sealed::Backend for Baseline {
         crate::simd::add_ru(x, y)
     }
 
-    #[cfg(not(all(target_arch = "x86_64", not(inari_generic_backend), not(docsrs))))]
+    #[cfg(not(all(target_arch = "x86_64", not(feature = "force-generic"), not(docsrs))))]
     #[inline(always)]
     fn classify_bits(self, x: &F64X2) -> u8 {
         crate::classify::classify_bits(x)
     }
 
-    // Where the build's backend is one of `src/simd/x86_64.rs` (`sse42`, `fma` or `avx512f`), as
-    // where `src/simd.rs` selects it (with `docsrs`, it takes `unimplemented.rs`, and
-    // `inari_generic_backend` is not set), the `classify_bits` of that file, which the copies of
-    // `V2` and `V3` below call too. Where `fma` or `avx512f` is the backend, the classification
-    // then puts no `vzeroupper` into the operations that classify (see that function).
+    // Where the build's backend is one of `src/simd/x86_64.rs` (`sse42`, `fma` or `avx512f`), the
+    // `classify_bits` of that file, which the copies of `V2` and `V3` below call too. These are
+    // the x86-64 builds without `inari_generic_backend` and `docsrs`: `build.rs` does not look at
+    // `docsrs`, with which `src/simd.rs` takes `unimplemented.rs`. Where `fma` or `avx512f` is the
+    // backend, the classification then puts no `vzeroupper` into the operations that classify
+    // (see that function).
     #[cfg(all(target_arch = "x86_64", not(inari_generic_backend), not(docsrs)))]
     #[inline(always)]
     fn classify_bits(self, x: &F64X2) -> u8 {
         super::x86_64::classify_bits(*x)
+    }
+
+    // In the other x86-64 builds without `force-generic` and `docsrs`, those without `sse4.2`
+    // (such as one for plain `x86-64`), whose backend is the portable one, the `classify_bits` of
+    // `src/simd/x86_64.rs` too, which the copies of `V2` and `V3` below call there as well. It
+    // uses only SSE and SSE2 intrinsics, which every x86-64 CPU has, and `to_m128d` passes it the
+    // `F64X2` of these builds, `[f64; 2]`, as an `__m128d`. In a crate that links inari, built for
+    // `x86-64` in Cargo's default release profile, a call of `Interval::recip` or `Interval::sqr`
+    // took 8 fewer instructions with it than with that of `src/classify.rs`, and one of
+    // `Interval::mul`, `Interval::div`, `Interval::mul_add` or `Interval::mul_rev_to_pair` 11 to 16
+    // fewer, in the classes counted (cachegrind, row 152).
+    //
+    // `build.rs` sets `inari_generic_backend` on x86-64 exactly where `sse4.2` is missing or
+    // `force-generic` is on, so the `cfg`s of this arm and the one above, which are disjoint,
+    // together hold in exactly the x86-64 builds without `force-generic` and `docsrs`, and that
+    // of the first arm is their complement: each build compiles one of the three.
+    #[cfg(all(
+        target_arch = "x86_64",
+        inari_generic_backend,
+        not(feature = "force-generic"),
+        not(docsrs)
+    ))]
+    #[inline(always)]
+    fn classify_bits(self, x: &F64X2) -> u8 {
+        x86_64::classify_bits(to_m128d(*x))
     }
 
     #[cfg(not(all(inari_generic_backend, target_arch = "x86_64")))]
@@ -783,9 +820,11 @@ macro_rules! level {
             level!(@sqrt1_ru_copy $sq, $backend, [$($f),*]);
         }
 
-        // The copies take the place of the backend functions that are not thin layers, and the
-        // thin layers of `src/simd/x86_64.rs` those of the build, which in a plain `x86-64`
-        // build are the portable backend's.
+        // The copies take the place of the backend functions that are not thin layers (but the
+        // `sqrt1_ru` of `V2`, see below), and the thin layers of `src/simd/x86_64.rs` (but
+        // `splat`) those of the build. In a plain `x86-64` build, those of the build are the
+        // portable backend's, except `classify_bits`: that of `Baseline` is the one of
+        // `src/simd/x86_64.rs` there too (see `Baseline` above).
         #[cfg($copies)]
         impl sealed::Backend for $t {
             #[inline(always)]
@@ -794,8 +833,8 @@ macro_rules! level {
                 from_m128d(unsafe { $m::add_ru(to_m128d(x), to_m128d(y)) })
             }
 
-            // The `classify_bits` of `src/simd/x86_64.rs`, as that of `Baseline` where the build's
-            // backend is one of that file.
+            // The `classify_bits` of `src/simd/x86_64.rs`, as that of `Baseline` in every build
+            // that has the copies.
             #[inline(always)]
             fn classify_bits(self, x: &F64X2) -> u8 {
                 x86_64::classify_bits(to_m128d(*x))

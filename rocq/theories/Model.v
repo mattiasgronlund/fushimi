@@ -6825,14 +6825,25 @@ Definition quadrants (pt : point) (a b : f64) : f64 * f64 :=
     [mul_rev_to_pair] calls the divisions of [div_with] with
     [CrateBaseline] too. These methods and divisions call the backend of
     their token [s], as in [s.add_ru(x, y)], and are transcribed here for
-    an [s] whose backend is the portable one.
+    an [s] whose backend is the portable one. For [mul_with], [div_with],
+    [mul_add_with], [recip_with] and [sqr_with], which classify their
+    arguments with [classify_with] or [classify2_with], [s] is also one
+    for which [classify] transcribes [classify_with] (see the comment on
+    [classify] below). [x * y], [x / y], [Interval::abs],
+    [Interval::atan2], [Interval::mul_add], [Interval::mul_rev_to_pair],
+    [Interval::recip] and [Interval::sqr], which classify their arguments
+    with the token [Baseline] or [CrateBaseline], and the operations above
+    that call one of them, such as [Interval::cos] and [Interval::powi],
+    are thus transcribed here only for a build whose [Baseline] is such an
+    [s]; [CrateBaseline], whose backend and [classify_bits] are those of
+    [Baseline], is then one too.
     [add_with], [sub_with], [mul_with], [div_with], [mul_add_with],
     [recip_with], [sqr_with] and [sqrt_with] of [impl DecInterval] call
     those of [impl Interval] with their token [s], and are transcribed
-    here for such an [s] too. Such an [s] exists only in a build whose
-    backend is the portable one, so the functions that they call without
-    [s], such as [is_empty] and [Self::zero()], are the portable backend's
-    there too. The
+    here for the same [s] as those. Such an [s] exists only in a build
+    whose backend is the portable one, so the functions that they call
+    without [s], such as [is_empty] and [Self::zero()], are the portable
+    backend's there too. The
     bodies of these eight methods of [impl DecInterval] are the macros
     [dec_add_sub_mul_with_body!] and [dec_div_with_body!] of
     [src/arith.rs] and [dec_mul_add_with_body!], [dec_recip_with_body!],
@@ -7609,10 +7620,14 @@ Definition subset (self rhs : Interval) : bool :=
   is_empty self || Generic.all (Generic.le (rep self) (rep rhs)).
 
 (** [pub(crate) fn classify_with<S: Simd>(self, s: S) -> IntervalClass],
-    for an [s] whose backend is the portable one, where
+    for an [s] whose backend is the portable one and whose
     [s.classify_bits(&self.rep)] is [pub(crate) fn classify_bits(x: &F64X2)
     -> u8] of [src/classify.rs], written inline here, whose [let x = *x]
-    reads [rep self]; [pub(crate) fn classify(self) -> IntervalClass] is
+    reads [rep self]. That is every [s] whose backend is the portable one
+    but [Baseline] and [CrateBaseline] in an x86-64 build without
+    [sse4.2], such as plain [x86-64], and without the feature
+    [force-generic], whose [classify_bits] is that of [src/simd/x86_64.rs].
+    [pub(crate) fn classify(self) -> IntervalClass] is
     [self.classify_with(Baseline)]. The casts [bitmask(...) as u8] in
     [classify_bits] keep the value, which is below 4, and are left out. *)
 Definition classify (self : Interval) : option IntervalClass :=
@@ -7623,10 +7638,11 @@ Definition classify (self : Interval) : option IntervalClass :=
   transmute_class (Z.lor l ge_zero).
 
 (** [pub(crate) fn classify2_with<S: Simd>(self, s: S, rhs: Self) ->
-    IntervalClass2], for an [s] whose backend is the portable one, where the
-    casts [self.classify_with(s) as u8] and [rhs.classify_with(s) as u8] are
-    [class_discriminant]; [pub(crate) fn classify2(self, rhs: Self) ->
-    IntervalClass2] is [self.classify2_with(Baseline, rhs)]. *)
+    IntervalClass2], for an [s] for which [classify] above transcribes
+    [classify_with], where the casts [self.classify_with(s) as u8] and
+    [rhs.classify_with(s) as u8] are [class_discriminant];
+    [pub(crate) fn classify2(self, rhs: Self) -> IntervalClass2] is
+    [self.classify2_with(Baseline, rhs)]. *)
 Definition classify2 (self rhs : Interval) :
     option (IntervalClass * IntervalClass) :=
   let* c1 := classify self in
@@ -7806,7 +7822,8 @@ Definition cancel_plus (self rhs : Interval) : option Interval :=
 Definition zero : Interval := {| rep := Generic.splat zero |}.
 
 (** [pub fn sqr_with<S: Simd>(self, s: S) -> Self], for an [s] whose
-    backend is the portable one; [pub fn sqr(self) -> Self] is
+    backend is the portable one and for which [classify] transcribes
+    [classify_with]; [pub fn sqr(self) -> Self] is
     [self.sqr_with(CrateBaseline)]. Its [s.mul_ru] calls
     [mul_ru_impl::<HAS_FMA>], or [mul_ru_rust_abi], whose body is that of
     [mul_ru_impl::<HAS_FMA>] up to eta, so [has_fma] is an argument, as for
@@ -7835,8 +7852,9 @@ Definition sqr (has_fma : bool) (self : Interval) : option Interval :=
   end.
 
 (** [pub fn mul_with<S: Simd>(self, s: S, rhs: Self) -> Self] of
-    [impl Interval], for an [s] whose backend is the portable one: its
-    body is [mul_with_body!(self, s, rhs)], which binds [lhs], [s] and
+    [impl Interval], for an [s] whose backend is the portable one and for
+    which [classify] transcribes [classify_with]: its body is
+    [mul_with_body!(self, s, rhs)], which binds [lhs], [s] and
     [rhs] to its arguments; [fn mul(self, rhs: Self) -> Self] of
     [impl Mul for Interval] is [mul_with_body!(self, CrateBaseline, rhs)],
     the same body with [CrateBaseline] for [s], whose backend is that of
@@ -7914,7 +7932,8 @@ Definition mul (has_fma : bool) (self rhs : Interval) : option Interval :=
 
 (** [pub fn mul_add_with<S: Simd>(self, s: S, rhs: Self, addend: Self) -> Self]
     of [impl Interval] in [src/basic.rs], for an [s] whose backend is the
-    portable one; [pub fn mul_add(self, rhs: Self, addend: Self) -> Self] is
+    portable one and for which [classify] transcribes [classify_with];
+    [pub fn mul_add(self, rhs: Self, addend: Self) -> Self] is
     [self.mul_add_with(Baseline, rhs, addend)]. Its [s.mul_add_ru] calls
     [mul_add_ru_impl::<HAS_FMA>], so
     [has_fma] is an argument, as for [mul], and the variants of
@@ -8069,7 +8088,8 @@ Definition div_p_p1 (has_fma : bool) (self rhs : Interval) : option Interval :=
   Some {| rep := r |}.
 
 (** [pub fn recip_with<S: Simd>(self, s: S) -> Self], for an [s] whose
-    backend is the portable one; [pub fn recip(self) -> Self] is
+    backend is the portable one and for which [classify] transcribes
+    [classify_with]; [pub fn recip(self) -> Self] is
     [self.recip_with(CrateBaseline)]. [has_fma] is as for the divisions
     above, and [-1.0] is [opp (of_u64 1)], as in [sign]. *)
 Definition recip (has_fma : bool) (self : Interval) : option Interval :=
@@ -8100,7 +8120,8 @@ Definition recip (has_fma : bool) (self : Interval) : option Interval :=
   end.
 
 (** [pub fn div_with<S: Simd>(self, s: S, rhs: Self) -> Self] of
-    [impl Interval], for an [s] whose backend is the portable one;
+    [impl Interval], for an [s] whose backend is the portable one and for
+    which [classify] transcribes [classify_with];
     [fn div(self, rhs: Self) -> Self] of [impl Div for Interval] is
     [self.div_with(CrateBaseline, rhs)]. [has_fma] is as for the
     divisions above, and the variants of [IntervalClass2] and
@@ -8828,7 +8849,8 @@ Definition sign : DecInterval -> DecInterval :=
   impl_dec Interval.sign (fun x y => eq (Interval.inf_raw x) zero).
 
 (** [pub fn sqr_with<S: Simd>(self, s: S) -> Self] of [impl DecInterval],
-    for an [s] whose backend is the portable one: its body is the macro
+    for an [s] whose backend is the portable one and for which
+    [Interval.classify] transcribes [classify_with]: its body is the macro
     [dec_sqr_with_body!] with [self.x().sqr_with(s)] for the interval,
     which it evaluates only if [self] is not NaI, and with
     [Self::set_dec_impl], which [set_dec] transcribes, where
@@ -8915,8 +8937,9 @@ Definition sub (self rhs : DecInterval) : option DecInterval :=
     Some (set_dec x (dec_min (dec self) (dec rhs))).
 
 (** [pub fn mul_with<S: Simd>(self, s: S, rhs: Self) -> Self] of
-    [impl DecInterval], for an [s] whose backend is the portable one: its
-    body is the macro [dec_add_sub_mul_with_body!] with
+    [impl DecInterval], for an [s] whose backend is the portable one and
+    for which [Interval.classify] transcribes [classify_with]: its body is
+    the macro [dec_add_sub_mul_with_body!] with
     [self.x().mul_with(s, rhs.x())] for the interval, which it evaluates
     only if neither [self] nor [rhs] is NaI, and with
     [Self::set_dec_impl], which [set_dec] transcribes, where
@@ -8935,8 +8958,9 @@ Definition mul (has_fma : bool) (self rhs : DecInterval) : option DecInterval :=
     Some (set_dec x (dec_min (dec self) (dec rhs))).
 
 (** [pub fn mul_add_with<S: Simd>(self, s: S, rhs: Self, addend: Self) -> Self]
-    of [impl DecInterval], for an [s] whose backend is the portable one:
-    its body is the macro [dec_mul_add_with_body!] with
+    of [impl DecInterval], for an [s] whose backend is the portable one
+    and for which [Interval.classify] transcribes [classify_with]: its
+    body is the macro [dec_mul_add_with_body!] with
     [self.x().mul_add_with(s, rhs.x(), addend.x())] for the interval,
     which it evaluates only if none of [self], [rhs] and [addend] is NaI,
     and with [Self::set_dec_impl], which [set_dec] transcribes, where
@@ -8957,7 +8981,8 @@ Definition mul_add (has_fma : bool) (self rhs addend : DecInterval) :
     Some (set_dec x (dec_min (dec self) (dec_min (dec rhs) (dec addend)))).
 
 (** [pub fn recip_with<S: Simd>(self, s: S) -> Self] of [impl DecInterval],
-    for an [s] whose backend is the portable one: its body is the macro
+    for an [s] whose backend is the portable one and for which
+    [Interval.classify] transcribes [classify_with]: its body is the macro
     [dec_recip_with_body!] with [self.x().recip_with(s)] for the interval,
     which it evaluates only if [self] is not NaI, and with
     [Self::set_dec_impl], which [set_dec] transcribes, where
@@ -8974,8 +8999,9 @@ Definition recip (has_fma : bool) (self : DecInterval) : option DecInterval :=
     Some (set_dec x d).
 
 (** [pub fn div_with<S: Simd>(self, s: S, rhs: Self) -> Self] of
-    [impl DecInterval], for an [s] whose backend is the portable one: its
-    body is the macro [dec_div_with_body!] with
+    [impl DecInterval], for an [s] whose backend is the portable one and
+    for which [Interval.classify] transcribes [classify_with]: its body is
+    the macro [dec_div_with_body!] with
     [self.x().div_with(s, rhs.x())] for the interval, which it evaluates
     only if neither [self] nor [rhs] is NaI, and with
     [Self::set_dec_impl], which [set_dec] transcribes, where

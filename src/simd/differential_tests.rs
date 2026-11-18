@@ -5,9 +5,9 @@
 // paths of the generic one, and is compared with it.
 // In a build that compiles the copies of the backend functions of the tokens `V2`
 // and `V3` (`src/simd/token.rs`), `mod tokens` compares those in the same way.
-// `classify_bits_baseline` compares the `classify_bits` of `Baseline` with its
-// formula in the functions of the generic backend, in every build that compiles
-// these tests.
+// `classify_bits_baseline` compares the `classify_bits` of `Baseline`, on x86-64
+// that of `src/simd/x86_64.rs`, with its formula in the functions of the generic
+// backend, in every build that compiles these tests.
 // Both the FMA and the Dekker (no FMA) variants of the generic backend are tested.
 // On aarch64, the generic backend is also compared with the hardware's rounding,
 // with the rounding mode switched in FPCR (the `_fpcr` functions of `aarch64`:
@@ -1298,13 +1298,12 @@ fn check_classify_bits<S: super::Simd>(r: &mut Report, s: S, x: [f64; 2]) {
 // checked against the codes of `IntervalClass`. `Baseline` is the reference of the token tests:
 // the tests `classes_*` of `src/simd/token/tests.rs` compare the `classify_with` and
 // `classify2_with` of each level with `classify` and `classify2`, which call the `classify_bits`
-// of `Baseline`, so it needs a test of its own. In an x86-64 build with a backend of
-// `src/simd/x86_64/`, it runs `classify_bits` of `src/simd/x86_64.rs`, the body that `V2` and
-// `V3` run too (in their copies, or by calling that of `Baseline`), so there those tests compare
-// that body with itself. In an aarch64 or wasm32 build, it runs the `classify_bits` of
-// `src/classify.rs` with the functions of the build's backend. In a build for plain `x86-64`,
-// it runs that function with those of the generic backend, the reference itself, so there only
-// the codes of `IntervalClass` check it.
+// of `Baseline`, so it needs a test of its own. In an x86-64 build, whose backend is one of
+// `src/simd/x86_64/` or, for plain `x86-64`, the portable one, it runs the `classify_bits` of
+// `src/simd/x86_64.rs`, the body that `V2` and `V3` run too (in their copies, or by calling that
+// of `Baseline`), so there those tests compare that body with itself. In an aarch64 or wasm32
+// build, it runs the `classify_bits` of `src/classify.rs` with the functions of the build's
+// backend.
 #[test]
 fn classify_bits_baseline() {
     use crate::{classify::IntervalClass::*, const_interval, Interval as I};

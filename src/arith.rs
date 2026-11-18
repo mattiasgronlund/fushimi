@@ -312,9 +312,10 @@ impl Interval {
     #[inline(always)]
     #[must_use]
     pub fn mul_with<S: Simd>(self, s: S, rhs: Self) -> Self {
-        // Proved correct in `rocq/theories/Mul.v` for an `s` whose backend is the portable one.
-        // `rocq/theories/Model.v` transcribes this function for such an `s`, so it has to be
-        // updated along with it and with `mul_with_body!`, which is its body.
+        // Proved correct in `rocq/theories/Mul.v` for an `s` whose backend is the portable one
+        // and whose `classify_bits` is that of `src/classify.rs`. `rocq/theories/Model.v`
+        // transcribes this function for such an `s`, so it has to be updated along with it and
+        // with `mul_with_body!`, which is its body.
         mul_with_body!(self, s, rhs)
     }
 }
@@ -363,9 +364,9 @@ impl Interval {
     #[inline(always)]
     #[must_use]
     pub fn div_with<S: Simd>(self, s: S, rhs: Self) -> Self {
-        // Proved correct in `rocq/theories/Div.v` for an `s` whose backend is the portable one.
-        // `rocq/theories/Model.v` transcribes this function for such an `s`, so it has to be
-        // updated along with it.
+        // Proved correct in `rocq/theories/Div.v` for an `s` whose backend is the portable one
+        // and whose `classify_bits` is that of `src/classify.rs`. `rocq/theories/Model.v`
+        // transcribes this function for such an `s`, so it has to be updated along with it.
         // [a, b] / [c, d] =
         //
         //    |  M  |     N0    |     N1     |     P0    |     P1     | Z
@@ -615,7 +616,8 @@ impl DecInterval {
     #[must_use]
     pub fn mul_with<S: Simd>(self, s: S, rhs: Self) -> Self {
         // Proved correct in `rocq/theories/Mul.v` for an `s` whose backend is the portable one
-        // if `self` and `rhs` are `com` only when `self.x()` and `rhs.x()` are common, which
+        // and whose `classify_bits` is that of `src/classify.rs`, if `self` and `rhs` are `com`
+        // only when `self.x()` and `rhs.x()` are common, which
         // `rocq/theories/ComCommon.v` proves of every `DecInterval` that the library makes.
         // `rocq/theories/Model.v` transcribes this function for such an `s`, so it has to be
         // updated along with it and with `dec_add_sub_mul_with_body!`, which is its body.
@@ -677,7 +679,8 @@ impl DecInterval {
     #[must_use]
     pub fn div_with<S: Simd>(self, s: S, rhs: Self) -> Self {
         // Proved correct in `rocq/theories/Div.v` for an `s` whose backend is the portable one
-        // if `self` and `rhs` are `com` only when `self.x()` and `rhs.x()` are common, which
+        // and whose `classify_bits` is that of `src/classify.rs`, if `self` and `rhs` are `com`
+        // only when `self.x()` and `rhs.x()` are common, which
         // `rocq/theories/ComCommon.v` proves of every `DecInterval` that the library makes.
         // `rocq/theories/Model.v` transcribes this function for such an `s`, so it has to be
         // updated along with it and with `dec_div_with_body!`, which is its body.

@@ -463,8 +463,8 @@ impl Interval {
     #[must_use]
     pub fn mul_add_with<S: Simd>(self, s: S, rhs: Self, addend: Self) -> Self {
         // Proved correct in `rocq/theories/MulAdd.v` for an `s` whose backend is the portable
-        // one. `rocq/theories/Model.v` transcribes this function for such an `s`, so it has to
-        // be updated along with it.
+        // one and whose `classify_bits` is that of `src/classify.rs`. `rocq/theories/Model.v`
+        // transcribes this function for such an `s`, so it has to be updated along with it.
         if addend.is_empty() {
             return Self::EMPTY; // *
         }
@@ -591,8 +591,8 @@ impl Interval {
     #[must_use]
     pub fn recip_with<S: Simd>(self, s: S) -> Self {
         // Proved correct in `rocq/theories/Recip.v` for an `s` whose backend is the portable
-        // one. `rocq/theories/Model.v` transcribes this function for such an `s`, so it has to
-        // be updated along with it.
+        // one and whose `classify_bits` is that of `src/classify.rs`. `rocq/theories/Model.v`
+        // transcribes this function for such an `s`, so it has to be updated along with it.
         use IntervalClass::*;
         match self.classify_with(s) {
             E | Z => Self::EMPTY,
@@ -675,9 +675,9 @@ impl Interval {
     #[inline(always)]
     #[must_use]
     pub fn sqr_with<S: Simd>(self, s: S) -> Self {
-        // Proved correct in `rocq/theories/Sqr.v` for an `s` whose backend is the portable one.
-        // `rocq/theories/Model.v` transcribes this function for such an `s`, so it has to be
-        // updated along with it.
+        // Proved correct in `rocq/theories/Sqr.v` for an `s` whose backend is the portable one
+        // and whose `classify_bits` is that of `src/classify.rs`. `rocq/theories/Model.v`
+        // transcribes this function for such an `s`, so it has to be updated along with it.
         use IntervalClass::*;
         match self.classify_with(s) {
             E => Self::EMPTY,
@@ -972,10 +972,11 @@ impl DecInterval {
     #[must_use]
     pub fn mul_add_with<S: Simd>(self, s: S, rhs: Self, addend: Self) -> Self {
         // Proved correct in `rocq/theories/MulAdd.v` for an `s` whose backend is the portable
-        // one if `self` and `rhs` are `com` only when `self.x()` and `rhs.x()` are common,
-        // which `rocq/theories/ComCommon.v` proves of every `DecInterval` that the library
-        // makes. `rocq/theories/Model.v` transcribes this function for such an `s`, so it has
-        // to be updated along with it and with `dec_mul_add_with_body!`, which is its body.
+        // one and whose `classify_bits` is that of `src/classify.rs`, if `self` and `rhs` are
+        // `com` only when `self.x()` and `rhs.x()` are common, which `rocq/theories/ComCommon.v`
+        // proves of every `DecInterval` that the library makes. `rocq/theories/Model.v`
+        // transcribes this function for such an `s`, so it has to be updated along with it and
+        // with `dec_mul_add_with_body!`, which is its body.
         dec_mul_add_with_body!(
             self,
             rhs,
@@ -1033,7 +1034,8 @@ impl DecInterval {
     #[must_use]
     pub fn recip_with<S: Simd>(self, s: S) -> Self {
         // Proved correct in `rocq/theories/Recip.v` for an `s` whose backend is the portable
-        // one if `self` is `com` only when `self.x()` is common, which
+        // one and whose `classify_bits` is that of `src/classify.rs`, if `self` is `com` only
+        // when `self.x()` is common, which
         // `rocq/theories/ComCommon.v` proves of every `DecInterval` that the library makes.
         // `rocq/theories/Model.v` transcribes this function for such an `s`, so it has to be
         // updated along with it and with `dec_recip_with_body!`, which is its body.
@@ -1085,9 +1087,10 @@ impl DecInterval {
     #[inline(always)]
     #[must_use]
     pub fn sqr_with<S: Simd>(self, s: S) -> Self {
-        // Proved correct in `rocq/theories/Sqr.v` for an `s` whose backend is the portable one.
-        // `rocq/theories/Model.v` transcribes this function for such an `s`, so it has to be
-        // updated along with it and with `dec_sqr_with_body!`, which is its body.
+        // Proved correct in `rocq/theories/Sqr.v` for an `s` whose backend is the portable one
+        // and whose `classify_bits` is that of `src/classify.rs`. `rocq/theories/Model.v`
+        // transcribes this function for such an `s`, so it has to be updated along with it and
+        // with `dec_sqr_with_body!`, which is its body.
         dec_sqr_with_body!(self, self.x().sqr_with(s), Self::set_dec_impl)
     }
 

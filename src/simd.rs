@@ -136,10 +136,14 @@ cfg_if::cfg_if! {
     } else if #[cfg(target_arch = "x86_64")] {
         // Plain `x86-64`, without `sse4.2`, takes the portable backend. The `sse42` and `fma`
         // backends are compiled only as those of the tokens `V2` and `V3` (`src/simd/token.rs`).
+        // The `classify_bits` of `Baseline` calls that of `x86_64` in place of that of
+        // `src/classify.rs`: its intrinsics are of SSE and SSE2, which every x86-64 CPU has.
         mod generic;
         pub(crate) use generic::*;
 
-        #[allow(dead_code, unused_imports)] // Only what the tokens' copies call is used.
+        // Only what the tokens' copies and the `classify_bits` of `Baseline` call is used; the
+        // tests also use the `sqrt1_rd_mxcsr` and `sqrt1_ru_mxcsr` of `sse42`.
+        #[allow(dead_code, unused_imports)]
         mod x86_64;
         #[cfg(test)]
         mod differential_tests;

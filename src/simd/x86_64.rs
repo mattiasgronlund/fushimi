@@ -251,9 +251,11 @@ cfg_if::cfg_if! {
         }
     } else {
         // Plain `x86-64`, without `sse4.2`: `src/simd.rs` takes the portable backend, and
-        // compiles this module only as the backends of the tokens `V2` and `V3`
+        // compiles this module as the backends of the tokens `V2` and `V3`
         // (`src/simd/token.rs`), whose copies of the functions below compile them with the
-        // target features of `x86-64-v2` and `x86-64-v3`.
+        // target features of `x86-64-v2` and `x86-64-v3`, and for the `classify_bits` above,
+        // which the `classify_bits` of `Baseline` calls in place of that of `src/classify.rs`:
+        // its intrinsics are of SSE and SSE2, which every x86-64 CPU has.
         mod lanewise;
         pub(super) mod sse42;
         pub(super) mod fma;
