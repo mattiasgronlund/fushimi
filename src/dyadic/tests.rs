@@ -680,13 +680,20 @@ mod mpfr {
 fn identities<const N: usize>(rng: &mut Rng) {
     for _ in 0..n_cases::<N>() {
         let (a, b) = (rng.dyadic::<N>(300), rng.dyadic::<N>(300));
-        // down <= up always.
-        for (lo, hi) in [
+        // down <= up always, also for the division by a mantissa of several limbs and the
+        // square root, which run every slice of their scratch.
+        let mag = Dyadic { neg: false, ..a };
+        let mut pairs = vec![
             (a.add(&b, false), a.add(&b, true)),
             (a.mul(&b, false), a.mul(&b, true)),
             (a.mul_u64(3, false), a.mul_u64(3, true)),
             (a.div_u64(3, false), a.div_u64(3, true)),
-        ] {
+            (mag.sqrt(false), mag.sqrt(true)),
+        ];
+        if !b.is_zero() {
+            pairs.push((a.div(&b, false), a.div(&b, true)));
+        }
+        for (lo, hi) in pairs {
             check_normal(&lo);
             check_normal(&hi);
             assert!(lo <= hi, "{:?} {:?}", a, b);
@@ -710,7 +717,9 @@ fn exact_identities() {
     identities::<1>(&mut Rng(11));
     identities::<2>(&mut Rng(12));
     identities::<3>(&mut Rng(13));
+    identities::<4>(&mut Rng(14));
     identities::<5>(&mut Rng(15));
+    identities::<8>(&mut Rng(18));
     identities::<16>(&mut Rng(16));
     identities::<64>(&mut Rng(64));
 }

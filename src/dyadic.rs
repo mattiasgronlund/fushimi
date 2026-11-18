@@ -107,13 +107,24 @@ pub(crate) struct Encl<const N: usize> {
     pub(crate) hi: Dyadic<N>,
 }
 
-// Calls `f` with a zeroed scratch of at least 12 N + 16 limbs: on the stack for the precisions
-// up to 256 bits, which Ziv's strategy tries first, and on the heap above.
-fn with_buf<const N: usize, R>(f: impl FnOnce(&mut [u64]) -> R) -> R {
+// Calls `f` with a zeroed scratch of `len` limbs, the number that the caller's slices take,
+// which is at most 12 N + 16: on the stack for the precisions up to 256 bits, which Ziv's
+// strategy tries first, and on the heap above. On the stack it is the first `len` limbs of the
+// smallest of 8, 16, 32 and 64 limbs that holds them, a test of constants once `with_buf` is
+// inlined, so that an operation zeroes about the limbs that it uses rather than 64 of them.
+fn with_buf<const N: usize, R>(len: usize, f: impl FnOnce(&mut [u64]) -> R) -> R {
     if N <= 4 {
-        f(&mut [0; 64])
+        if len <= 8 {
+            f(&mut [0; 8][..len])
+        } else if len <= 16 {
+            f(&mut [0; 16][..len])
+        } else if len <= 32 {
+            f(&mut [0; 32][..len])
+        } else {
+            f(&mut [0; 64][..len])
+        }
     } else {
-        f(&mut vec![0; 12 * N + 16])
+        f(&mut vec![0; len])
     }
 }
 
@@ -253,7 +264,8 @@ impl<const N: usize> Dyadic<N> {
         // `wrapping_sub` read as unsigned.
         let d = x.exp.wrapping_sub(y.exp) as u64;
         let e = x.exp.checked_sub(64).expect("exponent overflow");
-        with_buf::<N, _>(|buf| {
+        // w (N + 2 limbs) and wy (N + 1).
+        with_buf::<N, _>(2 * N + 3, |buf| {
             let (w, rest) = buf.split_at_mut(N + 2);
             let wy = &mut rest[..N + 1];
             // The window w = x.m * 2^64, in units of 2^(x.exp - 64), with a limb above for the
@@ -294,7 +306,7 @@ impl<const N: usize> Dyadic<N> {
             return Self::ZERO;
         }
         let e = self.exp.checked_add(other.exp).expect("exponent overflow");
-        with_buf::<N, _>(|buf| {
+        with_buf::<N, _>(2 * N, |buf| {
             // The product of the mantissas is exact in 2N limbs.
             let w = &mut buf[..2 * N];
             limbs::mul_into(w, &self.m, &other.m);
@@ -307,7 +319,7 @@ impl<const N: usize> Dyadic<N> {
         if self.is_zero() || k == 0 {
             return Self::ZERO;
         }
-        with_buf::<N, _>(|buf| {
+        with_buf::<N, _>(N + 1, |buf| {
             // m * k is exact in N + 1 limbs.
             let w = &mut buf[..N + 1];
             w[..N].copy_from_slice(&self.m);
@@ -323,7 +335,8 @@ impl<const N: usize> Dyadic<N> {
             return Self::ZERO;
         }
         let e = self.exp.checked_sub(64).expect("exponent overflow");
-        with_buf::<N, _>(|buf| {
+        // x and q, N + 1 limbs each.
+        with_buf::<N, _>(2 * N + 2, |buf| {
             // |self| = (m * 2^64) * 2^(exp - 64) = (q + r / k) * k * 2^(exp - 64). As k < 2^64,
             // q >= 2^(p - 1), as `round` asks of a sticky quotient.
             let (x, q) = buf.split_at_mut(N + 1);
@@ -347,7 +360,9 @@ impl<const N: usize> Dyadic<N> {
             .checked_sub(other.exp)
             .and_then(|e| e.checked_sub(64 * N as i64))
             .expect("exponent overflow");
-        with_buf::<N, _>(|buf| {
+        // x and q (2 N limbs each), r (N), and the scratch of `div_rem` for x and other.m
+        // (2 N + N + 2).
+        with_buf::<N, _>(8 * N + 2, |buf| {
             // |self / other| = (q + r / other.m) * 2^(self.exp - other.exp - p) for the
             // quotient q and remainder r of self.m * 2^p by other.m. As
             // 2^(p - 1) <= self.m, other.m < 2^p, q >= 2^(p - 1), as `round` asks of a sticky
@@ -375,7 +390,9 @@ impl<const N: usize> Dyadic<N> {
         // 0 < t < 1 exactly when s^2 != X. As 2^(2p - 1) <= X, s >= 2^(p - 1), as `round` asks.
         let delta = self.exp.rem_euclid(2) as u64;
         let e = self.exp.div_euclid(2) - 32 * N as i64;
-        with_buf::<N, _>(|buf| {
+        // x (2 N + 1 limbs), s (N + 1), and the scratch of `isqrt` for them (7 N + 7), which
+        // then holds sq (2 N + 2).
+        with_buf::<N, _>(10 * N + 9, |buf| {
             let (x, rest) = buf.split_at_mut(2 * N + 1);
             let (s, rest) = rest.split_at_mut(N + 1);
             limbs::shl_into(x, &self.m, 64 * N as u64 + delta);
