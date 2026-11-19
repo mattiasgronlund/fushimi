@@ -2676,13 +2676,13 @@ Definition fast_tanh_near (fma : bool) (x : f64) : option f64 :=
     by the macro [level_entry!] of [src/dyadic/level.rs] from its body, a
     function such as [exp_dir_with] that takes [FMA]. The definitions
     below transcribe the bodies; those for [exp], [exp2], [exp10],
-    [sinh] and [cosh], and for [exp_near], [exp2_near] and [cosh_near],
-    first transcribe their test for a tiny [|x|], and then the other tests
-    of the body of the entry, such as [exp_near_entry] for [exp_near].
-    The functions make that test before they call their entry where
-    [TINY_IN_CALLER], which is [!cfg!(inari_kernel_dispatch)], is true,
-    and the body makes it as its first test where it is false, so that
-    the order of the tests is the same in both builds. [cosh] and
+    [sinh], [tanh] and [cosh], and for [exp_near], [exp2_near] and
+    [cosh_near], first transcribe their test for a tiny [|x|], and then
+    the other tests of the body of the entry, such as [exp_near_entry] for
+    [exp_near]. The functions make that test before they call their entry
+    where [TINY_IN_CALLER], which is [!cfg!(inari_kernel_dispatch)], is
+    true, and the body makes it as its first test where it is false, so
+    that the order of the tests is the same in both builds. [cosh] and
     [cosh_near] make it on [t = x.abs()], and pass their entries,
     [cosh_dir] and [cosh_near_abs], [abs_or_x(t, x)], which is [t] where
     [TINY_IN_CALLER] is true and [x] where it is false: the body takes
@@ -2800,20 +2800,26 @@ Definition cosh_dir_with (x : f64) (up : bool) : option f64 :=
     match fast_cosh_dir false t up with Some r => Some r | None => ziv (ev_cosh t) up 1 end
   else Some (cosh_big t up).
 
-(** [pub(crate) fn tanh(x: f64, up: bool) -> f64], which calls
-    [tanh_dir::<true>(x)] if [up] and [tanh_dir::<false>(x)] otherwise:
-    this is the body of [fn tanh_dir<const UP: bool>(x: f64) -> f64] with
-    [up] for [UP]. *)
+(** [pub(crate) fn tanh(x: f64, up: bool) -> f64], which returns
+    [toward_zero(x, up)] if [TINY_IN_CALLER && x.abs() < TINY_HYP] and
+    otherwise calls [tanh_dir::<true>(x)] if [up] and
+    [tanh_dir::<false>(x)] otherwise. The body of
+    [fn tanh_dir<const UP: bool>(x: f64) -> f64] first returns
+    [toward_zero(x, UP)] if [!TINY_IN_CALLER && x.abs() < TINY_HYP], and
+    then makes the other tests. So in both builds (see above) this is the
+    test [x.abs() < TINY_HYP] followed by the other tests of that body,
+    with [up] for [UP], where the last [else if UP { a } else { b }] is
+    [Some (if up then a else b)]. *)
 Definition tanh_dir_with (x : f64) (up : bool) : option f64 :=
-  if is_nan x then Some x
+  if lt (fabs x) tiny_hyp then Some (toward_zero x up)
+  else if lt (fabs x) (from_bits 0x4033000000000000) (* 19.0 *) then
+    match fast_tanh_dir false x up with Some r => Some r | None => ziv (ev_tanh x) up 1 end
+  else if is_nan x then Some x
   else if eq x infinity then Some one
   else if eq x neg_infinity then Some m_one
   else if ge x (from_bits 0x4033000000000000) (* 19.0 *) then
     Some (if up then one else one_minus_ulp)
-  else if le x (from_bits 0xc033000000000000) (* -19.0 *) then
-    Some (if up then opp one_minus_ulp else m_one)
-  else if lt (fabs x) tiny_hyp then Some (toward_zero x up)
-  else match fast_tanh_dir false x up with Some r => Some r | None => ziv (ev_tanh x) up 1 end.
+  else Some (if up then opp one_minus_ulp else m_one).
 
 End Driver.
 

@@ -781,8 +781,8 @@ fn fast_path_agrees_with_kernel() {
     }
 }
 
-// `exp`, `exp2`, `exp10` or `sinh` at `x`, or `cosh` at t = |x| passed as `x`, toward -∞ and
-// toward +∞, with `down` and `up` for the bodies of its entries `exp_dir::<false>` and
+// `exp`, `exp2`, `exp10`, `sinh` or `tanh` at `x`, or `cosh` at t = |x| passed as `x`, toward -∞
+// and toward +∞, with `down` and `up` for the bodies of its entries `exp_dir::<false>` and
 // `exp_dir::<true>` or the others (`cosh_dir::<false>` and `cosh_dir::<true>`, given t):
 // `rule(x, false)` and `rule(x, true)` where |x| < `tiny`, which the function returns before
 // it calls its entries (or, without `TINY_IN_CALLER`, the body returns by its first test), and
@@ -816,9 +816,9 @@ fn tiny_first_near(x: f64, tiny: f64, rule: Near, near: Near) -> f64 {
 
 // The function `i` of `FUNCTIONS` at `x`, toward -∞, toward +∞ and to nearest, by the bodies of
 // its entries with `FMA` for the products (`level_entry!`), and by their rule for a tiny |x|
-// where it applies: for `exp`, `exp2`, `exp10`, `sinh` and `cosh` toward -∞ and toward +∞
-// (`tiny_first`), and for `exp` and `exp2` (`tiny_first_near`) and `cosh` (1 below `TINY_NEAR`)
-// to nearest.
+// where it applies: for `exp`, `exp2`, `exp10`, `sinh`, `tanh` and `cosh` toward -∞ and toward
+// +∞ (`tiny_first`), and for `exp` and `exp2` (`tiny_first_near`) and `cosh` (1 below
+// `TINY_NEAR`) to nearest.
 fn bodies<const FMA: bool>(i: usize, x: f64) -> [f64; 3] {
     match i {
         EXP => {
@@ -881,11 +881,16 @@ fn bodies<const FMA: bool>(i: usize, x: f64) -> [f64; 3] {
             };
             [down, up, near]
         }
-        TANH => [
-            tanh_dir_with::<FMA, false>(x),
-            tanh_dir_with::<FMA, true>(x),
-            tanh_near_with::<FMA>(x),
-        ],
+        TANH => {
+            let [down, up] = tiny_first(
+                x,
+                TINY_HYP,
+                toward_zero,
+                tanh_dir_with::<FMA, false>,
+                tanh_dir_with::<FMA, true>,
+            );
+            [down, up, tanh_near_with::<FMA>(x)]
+        }
         _ => unreachable!(),
     }
 }

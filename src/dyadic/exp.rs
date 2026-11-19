@@ -138,7 +138,7 @@ pub(super) const TINY_HYP: f64 = 1.0 / 67_108_864.0;
 const TINY_EXP: f64 = f64::EPSILON / 4.0;
 const TINY_EXP10: f64 = f64::EPSILON / 16.0;
 
-// Whether `exp`, `exp2`, `exp10`, `sinh` and `cosh`, and `exp_near`, `exp2_near` and
+// Whether `exp`, `exp2`, `exp10`, `sinh`, `tanh` and `cosh`, and `exp_near`, `exp2_near` and
 // `cosh_near`, test for a tiny |x| themselves, before they call their entry, and not its body.
 // In a build with the dispatch (`level_entry!`), the body makes the test, as its first one:
 // the caller is compiled without the target features of the body's copies, and there the test
@@ -1361,8 +1361,12 @@ fn cosh_near_with<const FMA: bool>(a: f64) -> f64 {
 /// tanh x rounded toward +∞ if `up` and toward -∞ otherwise.
 #[inline(always)]
 pub(crate) fn tanh(x: f64, up: bool) -> f64 {
-    // A copy per direction, where `up` is a constant.
-    if up {
+    // The rule for a tiny |x| first, as in `exp`.
+    if TINY_IN_CALLER && x.abs() < TINY_HYP {
+        // x - x^3 / 3 <= tanh x <= x for x in [0, 1], and tanh is odd.
+        toward_zero(x, up)
+    } else if up {
+        // A copy per direction, where `up` is a constant.
         tanh_dir::<true>(x)
     } else {
         tanh_dir::<false>(x)
@@ -1370,14 +1374,30 @@ pub(crate) fn tanh(x: f64, up: bool) -> f64 {
 }
 
 level_entry! {
-    // `tanh` toward +∞ if `UP` and toward -∞ otherwise.
+    // `tanh` toward +∞ if `UP` and toward -∞ otherwise, for an x that `tanh` has not returned
+    // for: NaN, ±∞, or |x| >= `TINY_HYP`, or any x without `TINY_IN_CALLER`.
     fn tanh_dir<const UP: bool>(x: f64) -> f64 = tanh_dir_with;
 }
 
-// The body of `tanh_dir`, with `FMA` for the products (`level_entry!`).
+// The body of `tanh_dir`, with `FMA` for the products (`level_entry!`). One test sends NaN, ±∞
+// and |x| >= 19 to their rules, after the fast path. In a build with the dispatch, the fast
+// path then comes right after the rule for a tiny |x| and that test, where LLVM can see that
+// the test of `fast_tanh_pos` for t < 2^-27 fails, and drops it. In a build without it, `tanh`
+// makes the rule for a tiny |x| before it calls `tanh_dir`, which keeps the test (objdump, in a
+// crate that links `cr`).
 #[inline(always)]
 fn tanh_dir_with<const FMA: bool, const UP: bool>(x: f64) -> f64 {
-    if x.is_nan() {
+    if !TINY_IN_CALLER && x.abs() < TINY_HYP {
+        // As in `tanh`.
+        toward_zero(x, UP)
+    } else if x.abs() < 19.0 {
+        if let Some(r) = fast_tanh_dir::<FMA>(x, UP) {
+            r
+        } else {
+            ziv(&Tanh(x), UP, 1)
+        }
+    } else if x.is_nan() {
+        // NaN fails the test |x| < 19, as do ±∞ and the other x with |x| >= 19.
         x
     } else if x == f64::INFINITY {
         1.0
@@ -1390,19 +1410,11 @@ fn tanh_dir_with<const FMA: bool, const UP: bool>(x: f64) -> f64 {
         } else {
             1.0 - f64::EPSILON / 2.0
         }
-    } else if x <= -19.0 {
-        if UP {
-            -(1.0 - f64::EPSILON / 2.0)
-        } else {
-            -1.0
-        }
-    } else if x.abs() < TINY_HYP {
-        // x - x^3 / 3 <= tanh x <= x for x in [0, 1], and tanh is odd.
-        toward_zero(x, UP)
-    } else if let Some(r) = fast_tanh_dir::<FMA>(x, UP) {
-        r
+    } else if UP {
+        // x <= -19, and tanh is odd.
+        -(1.0 - f64::EPSILON / 2.0)
     } else {
-        ziv(&Tanh(x), UP, 1)
+        -1.0
     }
 }
 

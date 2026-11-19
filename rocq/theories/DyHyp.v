@@ -74,7 +74,7 @@ Qed.
 
 (** If [|x| < l] and [x >= l] are false for a finite [x], then [x <= -l]
     ([ml] is [-l]): the last branch of [sinh_dir_with], of
-    [sinh_near_with] and of [tanh_near_with]. *)
+    [tanh_dir_with], of [sinh_near_with] and of [tanh_near_with]. *)
 Lemma hyp_big_neg :
   forall x l ml, is_finite x = true -> is_finite l = true -> is_finite ml = true ->
   B2R ml = (- B2R l)%R -> lt (fabs x) l = false -> ge x l = false -> le x ml = true.
@@ -472,17 +472,22 @@ Lemma tanh_dir_post :
   post up (tanh (B2R x)) v.
 Proof.
 intros z post Hp Hz x up v Fx H. unfold DyadicExp.tanh_dir_with in H.
+destruct (lt (fabs x) DyadicExp.tiny_hyp) eqn:G3; cbv iota in H.
+{ injection H as <-. apply Hp. exact (tanh_tiny_rule x up Fx G3). }
+destruct (lt (fabs x) (from_bits 0x4033000000000000)) eqn:G4; cbv iota in H.
+{ destruct (DyadicExp.fast_tanh_dir false x up) eqn:F; cbv iota in H.
+  { injection H as <-. apply Hp. exact (fast_tanh_dir_correct false x up _ Fx F). }
+  apply (Hz (DyadicExp.ev_tanh x) up 1%nat); [|exact H].
+  intros n a Hn Ha. exact (ev_tanh_correct x n a Hn Ha). }
 rewrite (fin_not_nan x Fx), (fin_neq_inf x Fx), (fin_neq_ninf x Fx) in H. cbv iota in H.
 destruct (ge x (from_bits 0x4033000000000000)) eqn:G1; cbv iota in H.
 { injection H as <-. apply Hp. exact (tanh_big_rule x up Fx G1). }
-destruct (le x (from_bits 0xc033000000000000)) eqn:G2; cbv iota in H.
-{ injection H as <-. apply Hp. exact (tanh_big_neg_rule x up Fx G2). }
-destruct (lt (fabs x) DyadicExp.tiny_hyp) eqn:G3; cbv iota in H.
-{ injection H as <-. apply Hp. exact (tanh_tiny_rule x up Fx G3). }
-destruct (DyadicExp.fast_tanh_dir false x up) eqn:F; cbv iota in H.
-{ injection H as <-. apply Hp. exact (fast_tanh_dir_correct false x up _ Fx F). }
-apply (Hz (DyadicExp.ev_tanh x) up 1%nat); [|exact H].
-intros n a Hn Ha. exact (ev_tanh_correct x n a Hn Ha).
+(* [|x| < 19] and [x >= 19] are false, so [x <= -19]. *)
+assert (G2 : le x (from_bits 0xc033000000000000) = true).
+{ apply (hyp_big_neg x (from_bits 0x4033000000000000));
+    [exact Fx | reflexivity | reflexivity | | exact G4 | exact G1].
+  rewrite hyp_lit_19, hyp_lit_m19. lra. }
+injection H as <-. apply Hp. exact (tanh_big_neg_rule x up Fx G2).
 Qed.
 
 Theorem tanh_dir_correct :
