@@ -12,7 +12,8 @@
     integers), [sin t] lies strictly between the [f64]s [t - (j + 1) g]
     and [t - j g], whose patterns are those of [t] minus [j + 1] and that
     plus 1. [sin] is odd, so for [x < 0] the rule rounds [sin t] in the
-    other direction and negates it ([sin_small_rule]). *)
+    other direction and negates it by setting the sign bit of its pattern
+    ([bits_sign], [sin_small_rule]). *)
 
 From Stdlib Require Import ZArith Reals Lra Lia.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
@@ -91,8 +92,8 @@ Local Lemma sin_small_words :
   let j := Z.shiftr (h - Z.b2z (l =? 0)) s / 6 in
   if negb (Z.shiftr (h - Z.shiftl 1 (2 * be - 1953)) s / 6 =? j) || (f <=? j) then None else
   let neg := lt x zero in
-  let v := from_bits (b - (j + 1) + Z.b2z (xorb up neg)) in
-  Some (if neg then opp v else v))%Z.
+  Some (from_bits
+    (Z.lor (b - (j + 1) + Z.b2z (xorb up neg)) (Z.shiftl (Z.b2z neg) 63))))%Z.
 Proof.
 intros x up. unfold DyadicTrig.sin_small. cbv zeta.
 set (b := to_bits (fabs x)).
@@ -246,8 +247,11 @@ destruct (Rlt_bool_spec (B2R x) 0) as [Hn | Hp].
   rewrite Rabs_left in Ea by exact Hn.
   replace (B2R x) with (- (IZR m * g)) by lra.
   rewrite sin_neg, Bool.xorb_true_r.
+  (* Setting bit 63 of the pattern negates it. *)
+  rewrite (bits_sign true) by (destruct (negb up); cbn [Z.b2z]; lia).
   apply bits_bracket_opp; [lia | exact Hj1 |]. rewrite Hc0, Hc1. split; lra.
 - (* [x = t]. *)
   rewrite Rabs_pos_eq in Ea by exact Hp. rewrite Ea, Bool.xorb_false_r.
+  rewrite (bits_sign false) by (destruct up; cbn [Z.b2z]; lia).
   apply bits_bracket; [lia | exact Hj1 |]. rewrite Hc0, Hc1. split; lra.
 Qed.

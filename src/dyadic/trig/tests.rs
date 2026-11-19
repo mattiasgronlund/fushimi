@@ -695,9 +695,11 @@ fn check_u128_form(rng: &mut Rng, i: usize, last: u64) {
 
 // Since row 145, the shifts of the rules of small arguments by amounts that depend on the
 // exponent are of `u64`s, so that the functions that call them save fewer callee-saved
-// registers in some builds (see `cos_small`, `sin_small` and `tan_small`). This checks that
-// they give the same results as before, which `cos_small_words`, `sin_small_words` and
-// `tan_small_words` in `rocq/theories/` show of their models at every argument.
+// registers in some builds (see `cos_small`, `sin_small` and `tan_small`), and since row 163,
+// `sin_small` sets the sign bit of its result where it negated it. This checks that they give
+// the same results as before, which `cos_small_words`, `sin_small_words` and `tan_small_words`
+// in `rocq/theories/` show of their models at every argument for the changes of row 145, and
+// `bits_sign` for that of row 163.
 #[test]
 fn small_rules_match_their_u128_forms() {
     let mut rng = Rng(145);

@@ -437,7 +437,8 @@ fn cos_small(t: f64, up: bool) -> Option<f64> {
 // then j < c - w < c <= j + 1, so sin t lies strictly between t - (j + 1) g and t - j g.
 // They are the `f64`s whose bits are those of t minus j + 1, and those plus 1, if the stored
 // significand f of t is above j, so that the first is in the binade of t. sin is odd, so the
-// rounding of sin x for x < 0 is minus that of sin t in the other direction.
+// rounding of sin x for x < 0 is minus that of sin t in the other direction, whose bits are
+// those of the positive finite `f64` with bit 63, its sign, set.
 // Its shifts by amounts that depend on `be` are of `u64`s, as in `cos_small`: for the `u128`s
 // y below 2^95 here, y >> s is the high word of y, below 2^31, shifted by
 // e = s - 64 = 2022 - 2 be in [4, 28], and 2^d is 2^(d - 2) << 2, for d - 2 in [39, 63]. As
@@ -451,6 +452,15 @@ fn cos_small(t: f64, up: bool) -> Option<f64> {
 // `cos_small`, and 7.2 fewer on the `f64`s nearest to 2^-26 (cachegrind, row 145). The haswell
 // build takes 7.4 to 8.5 fewer on those sets, 8.7 fewer on the `f64`s nearest to 2^-26, and 7.3
 // fewer on its hard cases.
+// Setting the sign bit in place of `if neg { -v } else { v }` drops the branch on the sign from
+// the copies of `sin_dir`. In a crate that links `cr`, built for Haswell, or for x86-64 on a
+// CPU with FMA or without, sin rounded down or up then takes half a conditional branch fewer
+// per call on the 4,096 `f64`s nearest to 2^-26, of random sign, half of which reach this
+// rule, and a quarter of a mispredicted one fewer, but 0.25 and 0.75 more instructions, and on
+// the same `f64`s made positive, half a branch fewer and 0.5 and 1.0 more instructions, with
+// as many mispredictions as before (cachegrind, row 163). Timed in such a crate built for
+// Haswell, less the time of the old build's timing loop, a call on the first set took 2.4 ns
+// where it had taken 3.3 to 3.5, and one on the second about as long as before (row 162).
 fn sin_small(x: f64, up: bool) -> Option<f64> {
     let b = x.abs().to_bits();
     let be = b >> 52;
@@ -466,8 +476,9 @@ fn sin_small(x: f64, up: bool) -> Option<f64> {
         return None;
     }
     let neg = x < 0.0;
-    let v = f64::from_bits(b - (j + 1) + u64::from(up != neg));
-    Some(if neg { -v } else { v })
+    Some(f64::from_bits(
+        (b - (j + 1) + u64::from(up != neg)) | u64::from(neg) << 63,
+    ))
 }
 
 // tan x rounded toward +∞ if `up` and toward -∞ otherwise, for an |x| in [2^-26, 2^-14) at

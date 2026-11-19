@@ -5169,10 +5169,11 @@ Definition cos_small (t : f64) (up : bool) : option f64 :=
 
 (** [fn sin_small(x: f64, up: bool) -> Option<f64>], where [x.abs()] is
     [fabs x], [x < 0.0] is [lt x zero], [a != b] of two [bool]s is
-    [xorb], [-v] is [opp v], [/ 6] of a [u64] is [Z.div],
-    [(y >> 64) as u64], for the [u128]s [y < 2^95] there, keeps the
-    value, which is below [2^31], [u128::from] of a [u64] and [<< 2] of
-    it, which stays below [2^66], keep the value, the differences
+    [xorb], [|] of [u64]s is [Z.lor], [u64::from(neg) << 63], which is
+    0 or [2^63], is [Z.shiftl (Z.b2z neg) 63], [/ 6] of a [u64] is
+    [Z.div], [(y >> 64) as u64], for the [u128]s [y < 2^95] there, keeps
+    the value, which is below [2^31], [u128::from] of a [u64] and [<< 2]
+    of it, which stays below [2^66], keep the value, the differences
     [h - u128::from(l == 0)] and [h - w], which are not negative, as
     [h >= 2^92], [b - (j + 1)], which is not negative after the test
     [f <= j], [2022 - 2 * be], [2 * be - 1955], the shifts, which are by
@@ -5189,8 +5190,8 @@ Definition sin_small (x : f64) (up : bool) : option f64 :=
   let w := Z.shiftl (Z.shiftl 1 (2 * be - 1955)) 2 in
   if (Z.shiftr (Z.shiftr (h - w) 64) e <? 6 * j) || (f <=? j) then None else
   let neg := lt x zero in
-  let v := from_bits (b - (j + 1) + Z.b2z (xorb up neg)) in
-  Some (if neg then opp v else v).
+  Some (from_bits
+    (Z.lor (b - (j + 1) + Z.b2z (xorb up neg)) (Z.shiftl (Z.b2z neg) 63))).
 
 (** [fn tan_small(x: f64, up: bool) -> Option<f64>], where [/ 3] of a
     [u64] is [Z.div], [((h + w) >> 64) as u64], for the [h + w < 2^96]

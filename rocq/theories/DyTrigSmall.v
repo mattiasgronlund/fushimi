@@ -6,7 +6,8 @@
     normal [f64] ([magnitude_normal]), the fields of the pattern of [|x|]
     ([small_bits]), the roundings of a real that lies strictly between the
     [f64]s of two consecutive patterns, or of its opposite ([bits_bracket]
-    and [bits_bracket_opp]), and the cube of [cube] ([cube_correct]).
+    and [bits_bracket_opp]), the opposite of an [f64] by its sign bit
+    ([bits_sign]), and the cube of [cube] ([cube_correct]).
     [DyCosSmall.v], [DySinSmall.v] and [DyTanSmall.v] use them. *)
 
 From Stdlib Require Import ZArith Reals Lra Lia.
@@ -128,6 +129,39 @@ apply (rnd_bracket (opp (from_bits (c + 1))) (opp (from_bits c)) up (- r)).
   rewrite succ_opp, pred_succ by first [exact Gc | typeclasses eauto].
   reflexivity.
 - unfold opp. rewrite !B2R_Bopp, Elo, Ehi. lra.
+Qed.
+
+(** Bit 63 of the pattern of a finite [f64] is its sign: setting it in
+    the pattern [c] of a finite [f64] whose sign bit is clear gives the
+    [f64] [opp (from_bits c)], and [Z.shiftl 0 63] sets no bit. *)
+Lemma bits_sign :
+  forall (s : bool) c, (0 <= c < 2047 * 2^52)%Z ->
+  from_bits (Z.lor c (Z.shiftl (Z.b2z s) 63)) =
+  (if s then opp (from_bits c) else from_bits c).
+Proof.
+intros s c Hc.
+destruct s; cbn [Z.b2z].
+2: { rewrite Z.shiftl_0_l, Z.lor_0_r. reflexivity. }
+change (Z.shiftl 1 63) with (2^63)%Z.
+(* [c < 2^63] has no bit in common with [2^63], as [c = c & (2^63 - 1)]. *)
+assert (H0 : Z.land c (2^63) = 0%Z).
+{ replace c with (Z.land c (Z.ones 63))
+    by (rewrite Z.land_ones by easy; apply Z.mod_small; lia).
+  rewrite <- Z.land_assoc.
+  change (Z.land (Z.ones 63) (2^63)) with 0%Z.
+  apply Z.land_0_r. }
+rewrite <- Z.lxor_lor, <- Z.add_nocarry_lxor by exact H0.
+replace (c + 2^63)%Z with (sign_bit true + c)%Z by (unfold sign_bit; ring).
+(* Both are finite, with the value [- magnitude c] and the sign [true]. *)
+destruct (from_bits_finite true c Hc) as (F1 & S1 & E1).
+destruct (from_bits_finite false c Hc) as (F0 & S0 & E0).
+change (sign_bit false) with 0%Z in F0, S0, E0. rewrite Z.add_0_l in F0, S0, E0.
+unfold opp. apply B2R_Bsign_inj.
+- exact F1.
+- rewrite is_finite_Bopp. exact F0.
+- rewrite B2R_Bopp, E1, E0. reflexivity.
+- rewrite Bsign_Bopp by (revert F0; destruct (from_bits c); easy).
+  rewrite S1, S0. reflexivity.
 Qed.
 
 (** [cube m] splits [m^3] at bit 64, for [0 <= m < 2^53]. *)
