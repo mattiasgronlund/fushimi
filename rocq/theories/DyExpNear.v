@@ -526,14 +526,19 @@ Proof.
 intros x v Fx H. unfold DyadicExp.exp_near_with in H.
 destruct (lt (fabs x) DyadicExp.tiny_exp) eqn:G3; cbv iota in H.
 { injection H as <-. exact (exp_one_near x Fx G3). }
+destruct (lt x (from_bits 0x4086300000000000) && gt x (from_bits 0xc087500000000000)) eqn:G0;
+  cbv iota in H.
+{ destruct (DyadicExp.fast_exp_near false x) eqn:F; cbv iota in H.
+  { injection H as <-. exact (fast_exp_near_correct false x _ Fx F). }
+  exact (ziv_near_strict_correct _ _ _ _ (fun n a Hn Ha => ev_exp_correct x n a Hn Ha) H). }
 rewrite (fin_not_nan x Fx), (fin_neq_inf x Fx), (fin_neq_ninf x Fx) in H. cbn [orb] in H.
 destruct (ge x (from_bits 0x4086300000000000)) eqn:G1; cbv iota in H.
 { injection H as <-. exact (exp_inf_near x Fx G1). }
-destruct (le x (from_bits 0xc087500000000000)) eqn:G2; cbv iota in H.
-{ injection H as <-. exact (exp_zero_near x Fx G2). }
-destruct (DyadicExp.fast_exp_near false x) eqn:F; cbv iota in H.
-{ injection H as <-. exact (fast_exp_near_correct false x _ Fx F). }
-exact (ziv_near_strict_correct _ _ _ _ (fun n a Hn Ha => ev_exp_correct x n a Hn Ha) H).
+(* [x < 710 && x > -746] and [x >= 710] are false, so [x <= -746]. *)
+assert (G2 : le x (from_bits 0xc087500000000000) = true)
+  by (apply (range_low x (from_bits 0x4086300000000000));
+      [exact Fx | reflexivity | reflexivity | exact G0 | exact G1]).
+injection H as <-. exact (exp_zero_near x Fx G2).
 Qed.
 
 Theorem exp2_near_correct :
@@ -544,14 +549,19 @@ Proof.
 intros x v Fx H. unfold DyadicExp.exp2_near_with in H.
 destruct (lt (fabs x) DyadicExp.tiny_exp) eqn:G3; cbv iota in H.
 { injection H as <-. exact (exp2_one_near x Fx G3). }
+destruct (le (from_bits 0xc090cc0000000000) x && lt x (from_bits 0x4090000000000000)) eqn:G0;
+  cbv iota in H.
+{ destruct (DyadicExp.fast_exp2_near false x) eqn:F; cbv iota in H.
+  { injection H as <-. exact (fast_exp2_near_correct false x _ Fx (tiny_exp_false x Fx G3) F). }
+  exact (ziv_near_strict_correct _ _ _ _ (fun n a Hn Ha => ev_exp2_correct x n a Hn Ha) H). }
 rewrite (fin_not_nan x Fx), (fin_neq_inf x Fx), (fin_neq_ninf x Fx) in H. cbn [orb] in H.
 destruct (ge x (from_bits 0x4090000000000000)) eqn:G1; cbv iota in H.
 { injection H as <-. exact (exp2_inf_near x Fx G1). }
-destruct (lt x (from_bits 0xc090cc0000000000)) eqn:G2; cbv iota in H.
-{ injection H as <-. exact (exp2_zero_near x Fx G2). }
-destruct (DyadicExp.fast_exp2_near false x) eqn:F; cbv iota in H.
-{ injection H as <-. exact (fast_exp2_near_correct false x _ Fx (tiny_exp_false x Fx G3) F). }
-exact (ziv_near_strict_correct _ _ _ _ (fun n a Hn Ha => ev_exp2_correct x n a Hn Ha) H).
+(* [-1075 <= x && x < 1024] and [x >= 1024] are false, so [x < -1075]. *)
+assert (G2 : lt x (from_bits 0xc090cc0000000000) = true)
+  by (apply (range_low_ge x (from_bits 0x4090000000000000));
+      [exact Fx | reflexivity | reflexivity | exact G0 | exact G1]).
+injection H as <-. exact (exp2_zero_near x Fx G2).
 Qed.
 
 Theorem exp10_near_correct :
@@ -562,19 +572,25 @@ Proof.
 intros x v Fx H. unfold DyadicExp.exp10_near_with in H.
 destruct (lt (fabs x) DyadicExp.tiny_exp10) eqn:G3; cbv iota in H.
 { injection H as <-. exact (exp10_one_near x Fx G3). }
+destruct (lt x (from_bits 0x4073500000000000) && gt x (from_bits 0xc074400000000000)) eqn:G0;
+  cbv iota in H.
+{ destruct (le DyadicExp.one x && le x (from_bits 0x4036000000000000) && eq x (ffloor x))
+    eqn:G4; cbv iota in H.
+  { injection H as <-. exact (exp10_int_near x Fx G4). }
+  destruct (eq x (from_bits 0x4037000000000000)) eqn:G5; cbv iota in H.
+  { injection H as <-. exact (exp10_23_near x Fx G5). }
+  destruct (DyadicExp.fast_exp10_near false x) eqn:F; cbv iota in H.
+  { injection H as <-.
+    exact (fast_exp10_near_correct false x _ Fx (tiny_exp10_false x Fx G3) F). }
+  exact (ziv_near_strict_correct _ _ _ _ (fun n a Hn Ha => ev_exp10_correct x n a Hn Ha) H). }
 rewrite (fin_not_nan x Fx), (fin_neq_inf x Fx), (fin_neq_ninf x Fx) in H. cbn [orb] in H.
 destruct (ge x (from_bits 0x4073500000000000)) eqn:G1; cbv iota in H.
 { injection H as <-. exact (exp10_inf_near x Fx G1). }
-destruct (le x (from_bits 0xc074400000000000)) eqn:G2; cbv iota in H.
-{ injection H as <-. exact (exp10_zero_near x Fx G2). }
-destruct (le DyadicExp.one x && le x (from_bits 0x4036000000000000) && eq x (ffloor x))
-  eqn:G4; cbv iota in H.
-{ injection H as <-. exact (exp10_int_near x Fx G4). }
-destruct (eq x (from_bits 0x4037000000000000)) eqn:G5; cbv iota in H.
-{ injection H as <-. exact (exp10_23_near x Fx G5). }
-destruct (DyadicExp.fast_exp10_near false x) eqn:F; cbv iota in H.
-{ injection H as <-. exact (fast_exp10_near_correct false x _ Fx (tiny_exp10_false x Fx G3) F). }
-exact (ziv_near_strict_correct _ _ _ _ (fun n a Hn Ha => ev_exp10_correct x n a Hn Ha) H).
+(* [x < 309 && x > -324] and [x >= 309] are false, so [x <= -324]. *)
+assert (G2 : le x (from_bits 0xc074400000000000) = true)
+  by (apply (range_low x (from_bits 0x4073500000000000));
+      [exact Fx | reflexivity | reflexivity | exact G0 | exact G1]).
+injection H as <-. exact (exp10_zero_near x Fx G2).
 Qed.
 
 Theorem sinh_near_correct :

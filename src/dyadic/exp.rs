@@ -879,26 +879,30 @@ level_entry! {
     fn exp_dir<const UP: bool>(x: f64) -> f64 = exp_dir_with;
 }
 
-// The body of `exp_dir`, with `FMA` for the products (`level_entry!`).
+// The body of `exp_dir`, with `FMA` for the products (`level_entry!`). One test sends NaN, ±∞
+// and the x out of (-746, 710) to their rules, after the fast path, as in `sinh_dir`.
 #[inline(always)]
 fn exp_dir_with<const FMA: bool, const UP: bool>(x: f64) -> f64 {
     if !TINY_IN_CALLER && x.abs() < TINY_EXP {
         // As in `exp`.
         near_one(x, UP)
+    } else if x < 710.0 && x > -746.0 {
+        if let Some(r) = fast_exp_dir::<FMA>(x, UP) {
+            r
+        } else {
+            ziv(&Exp(x), UP, 1)
+        }
     } else if x.is_nan() || x == f64::INFINITY {
+        // NaN fails the test -746 < x < 710, as do ±∞ and the other x out of that range.
         x
     } else if x == f64::NEG_INFINITY {
         0.0
     } else if x >= 710.0 {
         // e^x > 2^1024, as 710 > 1024 ln 2 = 709.78...
         overflow(UP)
-    } else if x <= -746.0 {
-        // e^x < 2^-1075, as -746 < -1075 ln 2 = -745.13...
-        underflow(UP)
-    } else if let Some(r) = fast_exp_dir::<FMA>(x, UP) {
-        r
     } else {
-        ziv(&Exp(x), UP, 1)
+        // x <= -746: e^x < 2^-1075, as -746 < -1075 ln 2 = -745.13...
+        underflow(UP)
     }
 }
 
@@ -907,7 +911,8 @@ level_entry! {
     pub(crate) fn exp_near(x: f64) -> f64 = exp_near_with;
 }
 
-// The body of `exp_near`, with `FMA` for the products (`level_entry!`).
+// The body of `exp_near`, with `FMA` for the products (`level_entry!`). One test sends NaN, ±∞
+// and the x out of (-746, 710) to their rules, after the fast path, as in `exp_dir`.
 #[inline(always)]
 fn exp_near_with<const FMA: bool>(x: f64) -> f64 {
     // The rule for a tiny |x| comes first, before the tests for the special values, as in
@@ -915,19 +920,22 @@ fn exp_near_with<const FMA: bool>(x: f64) -> f64 {
     if x.abs() < TINY_EXP {
         // 1 - 2^-54 < 1 + x <= e^x <= 1 / (1 - x) < 1 + 2^-53.
         1.0
+    } else if x < 710.0 && x > -746.0 {
+        if let Some(r) = fast_exp_near::<FMA>(x) {
+            r
+        } else {
+            ziv_near(&Exp(x), 1)
+        }
     } else if x.is_nan() || x == f64::INFINITY {
+        // NaN fails the test -746 < x < 710, as do ±∞ and the other x out of that range.
         x
     } else if x == f64::NEG_INFINITY {
         0.0
     } else if x >= 710.0 {
         f64::INFINITY
-    } else if x <= -746.0 {
-        // e^x < 2^-1075, half of the least subnormal number.
-        0.0
-    } else if let Some(r) = fast_exp_near::<FMA>(x) {
-        r
     } else {
-        ziv_near(&Exp(x), 1)
+        // x <= -746: e^x < 2^-1075, half of the least subnormal number.
+        0.0
     }
 }
 
@@ -952,24 +960,29 @@ level_entry! {
     fn exp2_dir<const UP: bool>(x: f64) -> f64 = exp2_dir_with;
 }
 
-// The body of `exp2_dir`, with `FMA` for the products (`level_entry!`).
+// The body of `exp2_dir`, with `FMA` for the products (`level_entry!`). One test sends NaN, ±∞
+// and the x out of [-1075, 1024) to their rules, after the fast path, as in `exp_dir`.
 #[inline(always)]
 fn exp2_dir_with<const FMA: bool, const UP: bool>(x: f64) -> f64 {
     if !TINY_IN_CALLER && x.abs() < TINY_EXP {
         // As in `exp2`.
         near_one(x, UP)
+    } else if (-1075.0..1024.0).contains(&x) {
+        if let Some(r) = fast_exp2_dir::<FMA>(x, UP) {
+            r
+        } else {
+            ziv(&Exp2(x), UP, 1)
+        }
     } else if x.is_nan() || x == f64::INFINITY {
+        // NaN fails the test -1075 <= x < 1024, as do ±∞ and the other x out of that range.
         x
     } else if x == f64::NEG_INFINITY {
         0.0
     } else if x >= 1024.0 {
         overflow(UP)
-    } else if x < -1075.0 {
-        underflow(UP)
-    } else if let Some(r) = fast_exp2_dir::<FMA>(x, UP) {
-        r
     } else {
-        ziv(&Exp2(x), UP, 1)
+        // x < -1075.
+        underflow(UP)
     }
 }
 
@@ -978,26 +991,32 @@ level_entry! {
     pub(crate) fn exp2_near(x: f64) -> f64 = exp2_near_with;
 }
 
-// The body of `exp2_near`, with `FMA` for the products (`level_entry!`).
+// The body of `exp2_near`, with `FMA` for the products (`level_entry!`). One test sends NaN, ±∞
+// and the x out of [-1075, 1024) to their rules, after the fast path, as in `exp_dir`.
 #[inline(always)]
 fn exp2_near_with<const FMA: bool>(x: f64) -> f64 {
     // The rule for a tiny |x| first, as in `exp_near`.
     if x.abs() < TINY_EXP {
         // 2^x = e^(x ln 2), and |x ln 2| < |x|.
         1.0
+    } else if (-1075.0..1024.0).contains(&x) {
+        // At -1075 itself, where 2^x is the midpoint of 0 and 2^-1074, the fast path fails and
+        // the exact enclosure of `ziv_near` settles the tie, to +0.
+        if let Some(r) = fast_exp2_near::<FMA>(x) {
+            r
+        } else {
+            ziv_near(&Exp2(x), 1)
+        }
     } else if x.is_nan() || x == f64::INFINITY {
+        // NaN fails the test -1075 <= x < 1024, as do ±∞ and the other x out of that range.
         x
     } else if x == f64::NEG_INFINITY {
         0.0
     } else if x >= 1024.0 {
         f64::INFINITY
-    } else if x < -1075.0 {
-        // 2^x < 2^-1075. At -1075 itself the enclosure is exact, and its tie goes to +0.
-        0.0
-    } else if let Some(r) = fast_exp2_near::<FMA>(x) {
-        r
     } else {
-        ziv_near(&Exp2(x), 1)
+        // x < -1075: 2^x < 2^-1075.
+        0.0
     }
 }
 
@@ -1022,28 +1041,32 @@ level_entry! {
     fn exp10_dir<const UP: bool>(x: f64) -> f64 = exp10_dir_with;
 }
 
-// The body of `exp10_dir`, with `FMA` for the products (`level_entry!`).
+// The body of `exp10_dir`, with `FMA` for the products (`level_entry!`). One test sends NaN, ±∞
+// and the x out of (-324, 309) to their rules, after the fast path, as in `exp_dir`.
 #[inline(always)]
 fn exp10_dir_with<const FMA: bool, const UP: bool>(x: f64) -> f64 {
     if !TINY_IN_CALLER && x.abs() < TINY_EXP10 {
         // As in `exp10`.
         near_one(x, UP)
+    } else if x < 309.0 && x > -324.0 {
+        if (1.0..=22.0).contains(&x) && x == x.floor() {
+            POW10[x as usize]
+        } else if let Some(r) = fast_exp10_dir::<FMA>(x, UP) {
+            r
+        } else {
+            ziv(&Exp10(x), UP, 1)
+        }
     } else if x.is_nan() || x == f64::INFINITY {
+        // NaN fails the test -324 < x < 309, as do ±∞ and the other x out of that range.
         x
     } else if x == f64::NEG_INFINITY {
         0.0
     } else if x >= 309.0 {
         // 10^x > 2^1024, as 309 > 1024 log10(2) = 308.25...
         overflow(UP)
-    } else if x <= -324.0 {
-        // 10^x < 2^-1075, as -324 < -1075 log10(2) = -323.6...
-        underflow(UP)
-    } else if (1.0..=22.0).contains(&x) && x == x.floor() {
-        POW10[x as usize]
-    } else if let Some(r) = fast_exp10_dir::<FMA>(x, UP) {
-        r
     } else {
-        ziv(&Exp10(x), UP, 1)
+        // x <= -324: 10^x < 2^-1075, as -324 < -1075 log10(2) = -323.6...
+        underflow(UP)
     }
 }
 

@@ -27,14 +27,15 @@ Open Scope Z_scope.
 (** Where [ziv_strict] returns, [Dyadic.ziv] returns the same: the goal
     [<body with ziv_strict> = Some v -> <body with Dyadic.ziv> = Some v]
     of a function of this file, split at its guards, which name neither
-    driver. *)
+    driver. A branch that calls no driver is the same on both sides, and
+    one that calls it is closed by [ziv_strict_ziv], in either branch of
+    an [if], as in [exp_dir_with], where the call is in a [then]. *)
 Local Ltac dir_strict :=
   repeat match goal with
-  | |- (if ?c then _ else _) = Some _ -> _ => destruct c; [exact (fun h => h)|]
-  | |- match ?c with Some _ => _ | None => _ end = Some _ -> _ =>
-      destruct c; [exact (fun h => h)|]
+  | |- (if ?c then _ else _) = Some _ -> _ => destruct c
+  | |- match ?c with Some _ => _ | None => _ end = Some _ -> _ => destruct c
   end;
-  apply ziv_strict_ziv.
+  first [exact (fun h => h) | apply ziv_strict_ziv].
 
 (** ** Helpers *)
 
@@ -102,6 +103,37 @@ intros x. destruct (is_finite x) eqn:F.
   change (B2R zero) with 0%R.
   destruct (Rlt_bool_spec (B2R x) 0); split; intros Hb; (discriminate Hb || lra).
 - destruct x as [s|s| |s m e H]; try discriminate F; cbn [B2R]; split; intros; lra.
+Qed.
+
+(** If [x < hi && x > lo] and [x >= hi] are false for a finite [x], then
+    [x <= lo]: the last branch of [exp_dir_with] and [exp10_dir_with], and
+    of their [_near_with]. *)
+Lemma range_low :
+  forall x hi lo, is_finite x = true -> is_finite hi = true -> is_finite lo = true ->
+  (lt x hi && gt x lo) = false -> ge x hi = false -> le x lo = true.
+Proof.
+intros x hi lo Fx Fh Fl G G1.
+unfold ge in G1. rewrite Bleb_correct in G1 by assumption.
+unfold lt, gt in G. rewrite !Bltb_correct in G by assumption.
+unfold le. rewrite Bleb_correct by assumption. apply Rle_bool_true.
+destruct (Rle_bool_spec (B2R hi) (B2R x)) as [_|A]; [discriminate G1|].
+destruct (Rlt_bool_spec (B2R x) (B2R hi)) as [_|C]; [cbn [andb] in G|lra].
+destruct (Rlt_bool_spec (B2R lo) (B2R x)) as [_|B]; [discriminate G | exact B].
+Qed.
+
+(** If [lo <= x && x < hi] and [x >= hi] are false for a finite [x], then
+    [x < lo]: the last branch of [exp2_dir_with] and [exp2_near_with]. *)
+Lemma range_low_ge :
+  forall x hi lo, is_finite x = true -> is_finite hi = true -> is_finite lo = true ->
+  (le lo x && lt x hi) = false -> ge x hi = false -> lt x lo = true.
+Proof.
+intros x hi lo Fx Fh Fl G G1.
+unfold ge in G1. rewrite Bleb_correct in G1 by assumption.
+unfold le, lt in G. rewrite Bleb_correct, Bltb_correct in G by assumption.
+unfold lt. rewrite Bltb_correct by assumption. apply Rlt_bool_true.
+destruct (Rle_bool_spec (B2R hi) (B2R x)) as [_|A]; [discriminate G1|].
+destruct (Rlt_bool_spec (B2R x) (B2R hi)) as [_|C]; [|lra].
+destruct (Rle_bool_spec (B2R lo) (B2R x)) as [_|B]; [discriminate G | exact B].
 Qed.
 
 (** [x.ceil()] is the integer above [x]. *)
@@ -447,15 +479,20 @@ Proof.
 intros z post Hp Hz x up v Fx H. unfold DyadicExp.exp_dir_with in H.
 destruct (lt (fabs x) DyadicExp.tiny_exp) eqn:G3; cbv iota in H.
 { injection H as <-. apply Hp. exact (exp_tiny_rule x up Fx G3). }
+destruct (lt x (from_bits 0x4086300000000000) && gt x (from_bits 0xc087500000000000)) eqn:G0;
+  cbv iota in H.
+{ destruct (DyadicExp.fast_exp_dir false x up) eqn:F; cbv iota in H.
+  { injection H as <-. apply Hp. exact (fast_exp_dir_correct false x up _ Fx F). }
+  apply (Hz (DyadicExp.ev_exp x) up 1%nat); [|exact H].
+  intros n a Hn Ha. exact (ev_exp_correct x n a Hn Ha). }
 rewrite (fin_not_nan x Fx), (fin_neq_inf x Fx), (fin_neq_ninf x Fx) in H. cbn [orb] in H.
 destruct (ge x (from_bits 0x4086300000000000)) eqn:G1; cbv iota in H.
 { injection H as <-. apply Hp. exact (exp_overflow_rule x up Fx G1). }
-destruct (le x (from_bits 0xc087500000000000)) eqn:G2; cbv iota in H.
-{ injection H as <-. apply Hp. exact (exp_underflow_rule x up Fx G2). }
-destruct (DyadicExp.fast_exp_dir false x up) eqn:F; cbv iota in H.
-{ injection H as <-. apply Hp. exact (fast_exp_dir_correct false x up _ Fx F). }
-apply (Hz (DyadicExp.ev_exp x) up 1%nat); [|exact H].
-intros n a Hn Ha. exact (ev_exp_correct x n a Hn Ha).
+(* [x < 710 && x > -746] and [x >= 710] are false, so [x <= -746]. *)
+assert (G2 : le x (from_bits 0xc087500000000000) = true)
+  by (apply (range_low x (from_bits 0x4086300000000000));
+      [exact Fx | reflexivity | reflexivity | exact G0 | exact G1]).
+injection H as <-. apply Hp. exact (exp_underflow_rule x up Fx G2).
 Qed.
 
 Theorem exp_dir_correct :
@@ -486,15 +523,21 @@ Proof.
 intros z post Hp Hz x up v Fx H. unfold DyadicExp.exp2_dir_with in H.
 destruct (lt (fabs x) DyadicExp.tiny_exp) eqn:G3; cbv iota in H.
 { injection H as <-. apply Hp. exact (exp2_tiny_rule x up Fx G3). }
+destruct (le (from_bits 0xc090cc0000000000) x && lt x (from_bits 0x4090000000000000)) eqn:G0;
+  cbv iota in H.
+{ destruct (DyadicExp.fast_exp2_dir false x up) eqn:F; cbv iota in H.
+  { injection H as <-. apply Hp.
+    exact (fast_exp2_dir_correct false x up _ Fx (tiny_exp_false x Fx G3) F). }
+  apply (Hz (DyadicExp.ev_exp2 x) up 1%nat); [|exact H].
+  intros n a Hn Ha. exact (ev_exp2_correct x n a Hn Ha). }
 rewrite (fin_not_nan x Fx), (fin_neq_inf x Fx), (fin_neq_ninf x Fx) in H. cbn [orb] in H.
 destruct (ge x (from_bits 0x4090000000000000)) eqn:G1; cbv iota in H.
 { injection H as <-. apply Hp. exact (exp2_overflow_rule x up Fx G1). }
-destruct (lt x (from_bits 0xc090cc0000000000)) eqn:G2; cbv iota in H.
-{ injection H as <-. apply Hp. exact (exp2_underflow_rule x up Fx G2). }
-destruct (DyadicExp.fast_exp2_dir false x up) eqn:F; cbv iota in H.
-{ injection H as <-. apply Hp. exact (fast_exp2_dir_correct false x up _ Fx (tiny_exp_false x Fx G3) F). }
-apply (Hz (DyadicExp.ev_exp2 x) up 1%nat); [|exact H].
-intros n a Hn Ha. exact (ev_exp2_correct x n a Hn Ha).
+(* [-1075 <= x && x < 1024] and [x >= 1024] are false, so [x < -1075]. *)
+assert (G2 : lt x (from_bits 0xc090cc0000000000) = true)
+  by (apply (range_low_ge x (from_bits 0x4090000000000000));
+      [exact Fx | reflexivity | reflexivity | exact G0 | exact G1]).
+injection H as <-. apply Hp. exact (exp2_underflow_rule x up Fx G2).
 Qed.
 
 Theorem exp2_dir_correct :
@@ -525,18 +568,24 @@ Proof.
 intros z post Hp Hz x up v Fx H. unfold DyadicExp.exp10_dir_with in H.
 destruct (lt (fabs x) DyadicExp.tiny_exp10) eqn:G3; cbv iota in H.
 { injection H as <-. apply Hp. exact (exp10_tiny_rule x up Fx G3). }
+destruct (lt x (from_bits 0x4073500000000000) && gt x (from_bits 0xc074400000000000)) eqn:G0;
+  cbv iota in H.
+{ destruct (le DyadicExp.one x && le x (from_bits 0x4036000000000000) && eq x (ffloor x))
+    eqn:G4; cbv iota in H.
+  { injection H as <-. apply Hp. exact (exp10_int_rule x up Fx G4). }
+  destruct (DyadicExp.fast_exp10_dir false x up) eqn:F; cbv iota in H.
+  { injection H as <-. apply Hp.
+    exact (fast_exp10_dir_correct false x up _ Fx (tiny_exp10_false x Fx G3) F). }
+  apply (Hz (DyadicExp.ev_exp10 x) up 1%nat); [|exact H].
+  intros n a Hn Ha. exact (ev_exp10_correct x n a Hn Ha). }
 rewrite (fin_not_nan x Fx), (fin_neq_inf x Fx), (fin_neq_ninf x Fx) in H. cbn [orb] in H.
 destruct (ge x (from_bits 0x4073500000000000)) eqn:G1; cbv iota in H.
 { injection H as <-. apply Hp. exact (exp10_overflow_rule x up Fx G1). }
-destruct (le x (from_bits 0xc074400000000000)) eqn:G2; cbv iota in H.
-{ injection H as <-. apply Hp. exact (exp10_underflow_rule x up Fx G2). }
-destruct (le DyadicExp.one x && le x (from_bits 0x4036000000000000) && eq x (ffloor x)) eqn:G4;
-  cbv iota in H.
-{ injection H as <-. apply Hp. exact (exp10_int_rule x up Fx G4). }
-destruct (DyadicExp.fast_exp10_dir false x up) eqn:F; cbv iota in H.
-{ injection H as <-. apply Hp. exact (fast_exp10_dir_correct false x up _ Fx (tiny_exp10_false x Fx G3) F). }
-apply (Hz (DyadicExp.ev_exp10 x) up 1%nat); [|exact H].
-intros n a Hn Ha. exact (ev_exp10_correct x n a Hn Ha).
+(* [x < 309 && x > -324] and [x >= 309] are false, so [x <= -324]. *)
+assert (G2 : le x (from_bits 0xc074400000000000) = true)
+  by (apply (range_low x (from_bits 0x4073500000000000));
+      [exact Fx | reflexivity | reflexivity | exact G0 | exact G1]).
+injection H as <-. apply Hp. exact (exp10_underflow_rule x up Fx G2).
 Qed.
 
 Theorem exp10_dir_correct :

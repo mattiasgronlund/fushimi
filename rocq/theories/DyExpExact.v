@@ -156,19 +156,17 @@ destruct (Z.eq_dec m 0) as [-> | Nm].
 (* [1 <= |m|]: no rule applies, and [ev_exp2] encloses [2^m] by a point. *)
 assert (Am : 1 <= Rabs (IZR m)) by (rewrite <- abs_IZR; apply IZR_le; lia).
 unfold DyadicExp.exp2_dir_with.
-rewrite (fin_not_nan x Fx), (fin_neq_inf x Fx), (fin_neq_ninf x Fx). cbn [orb].
-assert (G1 : ge x (from_bits 0x4090000000000000) = false).
-{ destruct (ge x _) eqn:G; [exfalso | reflexivity].
-  apply ge_R in G; [| exact Fx | vm_compute; reflexivity].
-  assert (L : B2R (from_bits 0x4090000000000000) = 1024)
+(* [-1074 <= m <= 1023] ([f64_pow2]), so [x = m] passes the range test. *)
+assert (G0 : le (from_bits 0xc090cc0000000000) x && lt x (from_bits 0x4090000000000000) = true).
+{ assert (L1 : B2R (from_bits 0xc090cc0000000000) = -1075)
     by (lit_B2R; cbn [bpow radix_val radix2]; lra).
-  rewrite L, Xm in G. apply le_IZR in G. lia. }
-assert (G2 : lt x (from_bits 0xc090cc0000000000) = false).
-{ destruct (lt x _) eqn:G; [exfalso | reflexivity].
-  apply lt_R in G; [| exact Fx | vm_compute; reflexivity].
-  assert (L : B2R (from_bits 0xc090cc0000000000) = -1075)
+  assert (L2 : B2R (from_bits 0x4090000000000000) = 1024)
     by (lit_B2R; cbn [bpow radix_val radix2]; lra).
-  rewrite L, Xm in G. apply lt_IZR in G. lia. }
+  unfold le, lt. rewrite Bleb_correct, Bltb_correct by (exact Fx || (vm_compute; reflexivity)).
+  rewrite L1, L2, Xm.
+  rewrite Rle_bool_true by (apply IZR_le; lia).
+  rewrite Rlt_bool_true by (apply IZR_lt; lia).
+  reflexivity. }
 assert (G3 : lt (fabs x) DyadicExp.tiny_exp = false).
 { destruct (lt (fabs x) _) eqn:G; [exfalso | reflexivity].
   apply fabs_lt_R in G; [| exact Fx | vm_compute; reflexivity].
@@ -177,7 +175,7 @@ assert (G3 : lt (fabs x) DyadicExp.tiny_exp = false).
     reflexivity. }
   assert (L1 : bpow radix2 (-54) < 1) by (cbn [bpow radix_val radix2]; lra).
   rewrite Xm in G. lra. }
-rewrite G1, G2, G3.
+rewrite G3, G0.
 destruct (DyadicExp.fast_exp2_dir false x up) eqn:F; cbv iota.
 { f_equal. exact (fast_exp2_exact x up v _ Fx Fv H (tiny_exp_false x Fx G3) F). }
 apply Hz; [exact Fv | rewrite Vm; apply powerRZ_NOR; lra | lia |].
@@ -218,19 +216,16 @@ destruct (Z.eq_dec m 0) as [-> | Nm].
 assert (L22 : B2R (from_bits 0x4036000000000000) = 22)
   by (lit_B2R; cbn [bpow radix_val radix2]; lra).
 unfold DyadicExp.exp10_dir_with.
-rewrite (fin_not_nan x Fx), (fin_neq_inf x Fx), (fin_neq_ninf x Fx). cbn [orb].
-assert (G1 : ge x (from_bits 0x4073500000000000) = false).
-{ destruct (ge x _) eqn:G; [exfalso | reflexivity].
-  apply ge_R in G; [| exact Fx | vm_compute; reflexivity].
-  assert (L : B2R (from_bits 0x4073500000000000) = 309)
+(* [0 <= m <= 22] ([f64_pow10]), so [x = m] passes the range test. *)
+assert (G0 : lt x (from_bits 0x4073500000000000) && gt x (from_bits 0xc074400000000000) = true).
+{ assert (L1 : B2R (from_bits 0x4073500000000000) = 309)
     by (lit_B2R; cbn [bpow radix_val radix2]; lra).
-  rewrite L, Xm in G. apply le_IZR in G. lia. }
-assert (G2 : le x (from_bits 0xc074400000000000) = false).
-{ destruct (le x _) eqn:G; [exfalso | reflexivity].
-  apply le_R in G; [| exact Fx | vm_compute; reflexivity].
-  assert (L : B2R (from_bits 0xc074400000000000) = -324)
+  assert (L2 : B2R (from_bits 0xc074400000000000) = -324)
     by (lit_B2R; cbn [bpow radix_val radix2]; lra).
-  rewrite L, Xm in G. apply le_IZR in G. lia. }
+  unfold lt, gt. rewrite !Bltb_correct by (exact Fx || (vm_compute; reflexivity)).
+  rewrite L1, L2, Xm.
+  rewrite !Rlt_bool_true by (apply IZR_lt; lia).
+  reflexivity. }
 assert (G3 : lt (fabs x) DyadicExp.tiny_exp10 = false).
 { destruct (lt (fabs x) _) eqn:G; [exfalso | reflexivity].
   apply fabs_lt_R in G; [| exact Fx | vm_compute; reflexivity].
@@ -249,7 +244,7 @@ assert (G4 : le DyadicExp.one x && le x (from_bits 0x4036000000000000) && eq x (
   change (round_mode mode_DN) with Zfloor. rewrite Zfloor_IZR.
   rewrite Rle_bool_true, Rle_bool_true, Req_bool_true by (reflexivity || (apply IZR_le; lia)).
   reflexivity. }
-rewrite G1, G2, G3, G4. f_equal.
+rewrite G3, G0, G4. f_equal.
 (* [to_i64 x] is [m]: [Btrunc x] is [trunc m = m]. *)
 assert (Ht : DyadicExp.to_i64 x = m).
 { assert (Et : IZR (Btrunc x) = IZR m)
