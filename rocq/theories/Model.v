@@ -2672,13 +2672,14 @@ Definition fast_tanh_near (fma : bool) (x : f64) : option f64 :=
     [exp], [exp2], [exp10], [sinh], [cosh] and [tanh] try the fast path
     before [ziv], and their forms rounded to nearest before [ziv_near].
     The fast path takes [FMA] as the argument [fma]. Each entry of the
-    file, such as [exp_dir], [cosh_dir] and [exp_near], is defined by the
-    macro [level_entry!] of [src/dyadic/level.rs] from its body, a
+    file, such as [exp_dir], [cosh_dir] and [exp_near_entry], is defined
+    by the macro [level_entry!] of [src/dyadic/level.rs] from its body, a
     function such as [exp_dir_with] that takes [FMA]. The definitions
     below transcribe the bodies; those for [exp], [exp2], [exp10],
-    [sinh], [cosh] and [cosh_near] first transcribe their test for a tiny
-    [|x|], and then the other tests of the body of the entry. The
-    functions make that test before they call their entry where
+    [sinh] and [cosh], and for [exp_near], [exp2_near] and [cosh_near],
+    first transcribe their test for a tiny [|x|], and then the other tests
+    of the body of the entry, such as [exp_near_entry] for [exp_near].
+    The functions make that test before they call their entry where
     [TINY_IN_CALLER], which is [!cfg!(inari_kernel_dispatch)], is true,
     and the body makes it as its first test where it is false, so that
     the order of the tests is the same in both builds. [cosh] and
@@ -2832,7 +2833,13 @@ Definition tanh_dir := tanh_dir_with Dyadic.ziv.
 Section DriverNear.
 Variable ziv_near : (nat -> option Dyadic.encl) -> nat -> option f64.
 
-(** [pub(crate) fn exp_near(x: f64) -> f64] *)
+(** [pub(crate) fn exp_near(x: f64) -> f64], which returns [1.0] if
+    [TINY_IN_CALLER && x.abs() < TINY_EXP], and otherwise calls
+    [exp_near_entry(x)]. The body of [fn exp_near_entry(x: f64) -> f64]
+    first returns [1.0] if [!TINY_IN_CALLER && x.abs() < TINY_EXP], and
+    then makes the other tests. So in both builds (see the section
+    [Driver]) this is the test [x.abs() < TINY_EXP] followed by the other
+    tests of that body. *)
 Definition exp_near_with (x : f64) : option f64 :=
   if lt (fabs x) tiny_exp then Some one
   else if lt x (from_bits 0x4086300000000000) (* 710.0 *)
@@ -2843,8 +2850,9 @@ Definition exp_near_with (x : f64) : option f64 :=
   else if ge x (from_bits 0x4086300000000000) (* 710.0 *) then Some infinity
   else Some zero.
 
-(** [pub(crate) fn exp2_near(x: f64) -> f64], with
-    [(-1075.0..1024.0).contains(&x)] as in [exp2_dir_with]. *)
+(** [pub(crate) fn exp2_near(x: f64) -> f64], as [exp_near] with
+    [exp2_near_entry], with [(-1075.0..1024.0).contains(&x)] as in
+    [exp2_dir_with]. *)
 Definition exp2_near_with (x : f64) : option f64 :=
   if lt (fabs x) tiny_exp then Some one
   else if le (from_bits 0xc090cc0000000000) (* -1075.0 *) x

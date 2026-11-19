@@ -138,12 +138,12 @@ pub(super) const TINY_HYP: f64 = 1.0 / 67_108_864.0;
 const TINY_EXP: f64 = f64::EPSILON / 4.0;
 const TINY_EXP10: f64 = f64::EPSILON / 16.0;
 
-// Whether `exp`, `exp2`, `exp10`, `sinh`, `cosh` and `cosh_near` test for a tiny |x|
-// themselves, before they call their entry, and not its body. In a build with the dispatch
-// (`level_entry!`), the body makes the test, as its first one: the caller is compiled without the
-// target features of the body's copies, and there the test would cost every other argument a
-// separate load of its mask and a second jump, and `near_one(x, true)` and `away(x, true)` would
-// branch on the sign of x.
+// Whether `exp`, `exp2`, `exp10`, `sinh` and `cosh`, and `exp_near`, `exp2_near` and
+// `cosh_near`, test for a tiny |x| themselves, before they call their entry, and not its body.
+// In a build with the dispatch (`level_entry!`), the body makes the test, as its first one:
+// the caller is compiled without the target features of the body's copies, and there the test
+// would cost every other argument a separate load of its mask and a second jump, and
+// `near_one(x, true)` and `away(x, true)` would branch on the sign of x.
 const TINY_IN_CALLER: bool = !cfg!(inari_kernel_dispatch);
 
 // 2^-27: the arguments of smaller magnitude have results within half an ulp of x, or of 1,
@@ -907,19 +907,34 @@ fn exp_dir_with<const FMA: bool, const UP: bool>(x: f64) -> f64 {
     }
 }
 
-level_entry! {
-    /// e^x rounded to nearest, ties to even.
-    pub(crate) fn exp_near(x: f64) -> f64 = exp_near_with;
+/// e^x rounded to nearest, ties to even.
+#[inline(always)]
+pub(crate) fn exp_near(x: f64) -> f64 {
+    // The rule for a tiny |x| comes first, in the caller, as in `exp`, before the tests for the
+    // special values. NaN and ±∞ fail its test and go on to them. Without the dispatch, a
+    // conditional jump to `exp_near_entry` follows the test: with the test in the entry,
+    // `cr::exp_rn` was a tail jump to it, which every call ran (objdump, in a crate that links
+    // `cr`, built for Haswell).
+    if TINY_IN_CALLER && x.abs() < TINY_EXP {
+        // 1 - 2^-54 < 1 + x <= e^x <= 1 / (1 - x) < 1 + 2^-53.
+        1.0
+    } else {
+        exp_near_entry(x)
+    }
 }
 
-// The body of `exp_near`, with `FMA` for the products (`level_entry!`). One test sends NaN, ±∞
-// and the x out of (-746, 710) to their rules, after the fast path, as in `exp_dir`.
+level_entry! {
+    // `exp_near` for an x that `exp_near` has not returned for: NaN, ±∞, or |x| >= `TINY_EXP`,
+    // or any x without `TINY_IN_CALLER`.
+    fn exp_near_entry(x: f64) -> f64 = exp_near_with;
+}
+
+// The body of `exp_near_entry`, with `FMA` for the products (`level_entry!`). One test sends
+// NaN, ±∞ and the x out of (-746, 710) to their rules, after the fast path, as in `exp_dir`.
 #[inline(always)]
 fn exp_near_with<const FMA: bool>(x: f64) -> f64 {
-    // The rule for a tiny |x| comes first, before the tests for the special values, as in
-    // `exp`. NaN and ±∞ fail its test and go on to them.
-    if x.abs() < TINY_EXP {
-        // 1 - 2^-54 < 1 + x <= e^x <= 1 / (1 - x) < 1 + 2^-53.
+    if !TINY_IN_CALLER && x.abs() < TINY_EXP {
+        // As in `exp_near`.
         1.0
     } else if x < 710.0 && x > -746.0 {
         if let Some(r) = fast_exp_near::<FMA>(x) {
@@ -987,18 +1002,30 @@ fn exp2_dir_with<const FMA: bool, const UP: bool>(x: f64) -> f64 {
     }
 }
 
-level_entry! {
-    /// 2^x rounded to nearest, ties to even.
-    pub(crate) fn exp2_near(x: f64) -> f64 = exp2_near_with;
+/// 2^x rounded to nearest, ties to even.
+#[inline(always)]
+pub(crate) fn exp2_near(x: f64) -> f64 {
+    // The rule for a tiny |x| first, in the caller, as in `exp_near`.
+    if TINY_IN_CALLER && x.abs() < TINY_EXP {
+        // 2^x = e^(x ln 2), and |x ln 2| < |x|.
+        1.0
+    } else {
+        exp2_near_entry(x)
+    }
 }
 
-// The body of `exp2_near`, with `FMA` for the products (`level_entry!`). One test sends NaN, ±∞
-// and the x out of [-1075, 1024) to their rules, after the fast path, as in `exp_dir`.
+level_entry! {
+    // `exp2_near` for an x that `exp2_near` has not returned for: NaN, ±∞, or |x| >=
+    // `TINY_EXP`, or any x without `TINY_IN_CALLER`.
+    fn exp2_near_entry(x: f64) -> f64 = exp2_near_with;
+}
+
+// The body of `exp2_near_entry`, with `FMA` for the products (`level_entry!`). One test sends
+// NaN, ±∞ and the x out of [-1075, 1024) to their rules, after the fast path, as in `exp_dir`.
 #[inline(always)]
 fn exp2_near_with<const FMA: bool>(x: f64) -> f64 {
-    // The rule for a tiny |x| first, as in `exp_near`.
-    if x.abs() < TINY_EXP {
-        // 2^x = e^(x ln 2), and |x ln 2| < |x|.
+    if !TINY_IN_CALLER && x.abs() < TINY_EXP {
+        // As in `exp2_near`.
         1.0
     } else if (-1075.0..1024.0).contains(&x) {
         // At -1075 itself, where 2^x is the midpoint of 0 and 2^-1074, the fast path fails and
@@ -1080,7 +1107,10 @@ level_entry! {
 // and the x out of (-324, 309) to their rules, after the fast path, as in `exp_dir`.
 #[inline(always)]
 fn exp10_near_with<const FMA: bool>(x: f64) -> f64 {
-    // The rule for a tiny |x| first, as in `exp_near`.
+    // The rule for a tiny |x| first, as in `exp_near`, but here in every build: made in the
+    // caller, it saved 4 to 11 instructions per call, but added about one conditional branch per
+    // call on four of the six sets of random arguments (cachegrind, in a crate that links `cr`,
+    // built for Haswell).
     if x.abs() < TINY_EXP10 {
         // 10^x = e^(x ln 10), and |x ln 10| < 4 |x| < 2^-54.
         1.0
