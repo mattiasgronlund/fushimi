@@ -609,6 +609,7 @@ Print Assumptions DyHyp.sinh_dir_strict.
 Print Assumptions DyHyp.cosh_dir_correct.
 Print Assumptions DyHyp.cosh_dir_side.
 Print Assumptions DyHyp.cosh_dir_strict.
+Print Assumptions DyHyp.cosh_tiny_near_one.
 Print Assumptions DyHyp.tanh_dir_correct.
 Print Assumptions DyHyp.tanh_dir_side.
 Print Assumptions DyHyp.tanh_dir_strict.

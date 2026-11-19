@@ -384,6 +384,38 @@ Proof.
 intros x up v. unfold DyadicExp.sinh_dir, DyadicExp.sinh_dir_with. dir_strict.
 Qed.
 
+(** The rule of [cosh] for a tiny [t = x.abs()] where [TINY_IN_CALLER] is
+    true ([DyadicExp.cosh_tiny]) gives the same result as
+    [near_one t up], which [DyadicExp.cosh_dir_with] has in its place:
+    [t < TINY_HYP] is false for NaN and +inf, and for a [t >= 0] the test
+    [t >= 2^-1074] is [t > 0]. *)
+Theorem cosh_tiny_near_one :
+  forall x up,
+  lt (fabs x) DyadicExp.tiny_hyp = true ->
+  DyadicExp.cosh_tiny (fabs x) up = DyadicExp.near_one (fabs x) up.
+Proof.
+intros x up G. unfold DyadicExp.cosh_tiny, DyadicExp.near_one.
+destruct x as [s|s| |s m e B].
+- (* |x| = +0, which is not >= 2^-1074: both are [one]. *)
+  destruct up; vm_compute; reflexivity.
+- (* |x| = +inf is not below [TINY_HYP]. *)
+  vm_compute in G. discriminate G.
+- (* Nor is NaN. *)
+  vm_compute in G. discriminate G.
+- (* |x| is finite and positive, so it is at least 2^-1074, the least
+     positive [f64] ([bounded_ge_emin]). *)
+  assert (Gm : ge (fabs (B754_finite s m e B)) DyadicExp.min_pos = true).
+  { assert (Em : B2R DyadicExp.min_pos = bpow radix2 (-1074)).
+    { rewrite <- (SF2R_B2SF _ _ DyadicExp.min_pos).
+      let f := eval vm_compute in (B2SF DyadicExp.min_pos) in
+      replace (B2SF DyadicExp.min_pos) with f by (vm_compute; reflexivity).
+      cbn [SF2R cond_Zopp]. unfold F2R. cbn [Fnum Fexp]. lra. }
+    unfold ge. rewrite Bleb_correct by reflexivity. apply Rle_bool_true.
+    rewrite Em. cbn [fabs Babs B2R cond_Zopp].
+    change (-1074) with (3 - 1024 - 53). apply bounded_ge_emin. exact B. }
+  rewrite Gm. destruct up; reflexivity.
+Qed.
+
 Lemma cosh_dir_post :
   forall z post, rounds_post post -> driver_post z post ->
   forall x up v,
@@ -406,6 +438,7 @@ destruct (lt (fabs x) (from_bits 0x4086380000000000)) eqn:G4; cbv iota in H.
   destruct (Rle_or_lt 0 (B2R x)) as [P|P].
   - rewrite Rabs_pos_eq in Ha' by exact P. exact Ha'.
   - rewrite Rabs_left in Ha' by exact P. rewrite cosh_even in Ha'. exact Ha'. }
+unfold DyadicExp.cosh_big in H.
 rewrite (fin_not_nan _ Ft), (fin_neq_inf _ Ft) in H. cbn [orb] in H.
 (* [|x| < 711] is false, so [|x| >= 711]. *)
 assert (G1 : ge (fabs x) (from_bits 0x4086380000000000) = true)

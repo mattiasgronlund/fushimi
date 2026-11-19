@@ -781,8 +781,9 @@ fn fast_path_agrees_with_kernel() {
     }
 }
 
-// `exp`, `exp2`, `exp10` or `sinh` at `x`, toward -∞ and toward +∞, with `down` and `up` for the
-// bodies of its entries `exp_dir::<false>` and `exp_dir::<true>` or the others:
+// `exp`, `exp2`, `exp10` or `sinh` at `x`, or `cosh` at t = |x| passed as `x`, toward -∞ and
+// toward +∞, with `down` and `up` for the bodies of its entries `exp_dir::<false>` and
+// `exp_dir::<true>` or the others (`cosh_dir::<false>` and `cosh_dir::<true>`, given t):
 // `rule(x, false)` and `rule(x, true)` where |x| < `tiny`, which the function returns before
 // it calls its entries (or, without `TINY_IN_CALLER`, the body returns by its first test), and
 // `down(x)` and `up(x)` at the other x, the only ones at which the function runs the other
@@ -802,8 +803,9 @@ fn tiny_first(
 }
 
 // The function `i` of `FUNCTIONS` at `x`, toward -∞, toward +∞ and to nearest, by the bodies of
-// its entries with `FMA` for the products (`level_entry!`), and for `exp`, `exp2`, `exp10` and
-// `sinh` toward -∞ and toward +∞ by their rule for a tiny |x| where it applies (`tiny_first`).
+// its entries with `FMA` for the products (`level_entry!`), and by their rule for a tiny |x|
+// where it applies: for `exp`, `exp2`, `exp10`, `sinh` and `cosh` toward -∞ and toward +∞
+// (`tiny_first`), and for `cosh` to nearest (1 below `TINY_NEAR`).
 fn bodies<const FMA: bool>(i: usize, x: f64) -> [f64; 3] {
     match i {
         EXP => {
@@ -846,11 +848,24 @@ fn bodies<const FMA: bool>(i: usize, x: f64) -> [f64; 3] {
             );
             [down, up, sinh_near_with::<FMA>(x)]
         }
-        COSH => [
-            cosh_with::<FMA>(x, false),
-            cosh_with::<FMA>(x, true),
-            cosh_near_with::<FMA>(x),
-        ],
+        COSH => {
+            // The bodies take t = |x| (without `TINY_IN_CALLER`, x, of which they take |x|); the
+            // rules for a tiny t are in `cosh` and `cosh_near` (without it, in the bodies).
+            let t = x.abs();
+            let [down, up] = tiny_first(
+                t,
+                TINY_HYP,
+                near_one,
+                cosh_dir_with::<FMA, false>,
+                cosh_dir_with::<FMA, true>,
+            );
+            let near = if t < TINY_NEAR {
+                1.0
+            } else {
+                cosh_near_with::<FMA>(t)
+            };
+            [down, up, near]
+        }
         TANH => [
             tanh_dir_with::<FMA, false>(x),
             tanh_dir_with::<FMA, true>(x),
@@ -863,7 +878,8 @@ fn bodies<const FMA: bool>(i: usize, x: f64) -> [f64; 3] {
 // The function `i` at `x`, as `bodies` gives it, by the copy of each entry without an FMA in its
 // products, by the copy with one (`level_entry!`), and by the functions of `FUNCTIONS` and
 // `NEAR`, which call the entries (e^x, 2^x, 10^x, sinh and tanh through `exp_dir` and the other
-// `_dir` entries).
+// `_dir` entries, and cosh through `cosh_dir` and `cosh_near_abs` with t = |x|, or x without
+// `TINY_IN_CALLER`).
 fn copies(i: usize, x: f64) -> [[f64; 3]; 3] {
     [
         bodies::<false>(i, x),
@@ -892,11 +908,12 @@ fn assert_copies_agree(what: &str, copies: [[f64; 3]; 3]) {
 // entries, give the same `f64`s, bit for bit, in both directions and to nearest, on the random
 // arguments of `fast_path_agrees_with_kernel` and of `fast_hyp_range_random` (`HYP_BRANCHES`),
 // on those of `rules_at_their_thresholds` and `rules_at_shared_thresholds` (the rules for a tiny
-// |x| to nearest of sinh, cosh and tanh too) and on `regressions()`. `rocq/theories/FastExp.v`
-// and `rocq/theories/FastHyp.v` prove it of the fast paths (`fast_exp_dir_fma`,
-// `fast_sinh_dir_fma` and the others) at the arguments that the entries give them; this test
-// checks the code as compiled, where the entries call the copy built with the target feature
-// `fma` in a build with the dispatch, on a CPU that has it.
+// |x| to nearest of sinh, cosh and tanh too), at and below the thresholds of the rules of `cosh`
+// and `cosh_near` for a tiny |x|, and on `regressions()`. `rocq/theories/FastExp.v` and
+// `rocq/theories/FastHyp.v` prove it of the fast paths (`fast_exp_dir_fma`, `fast_sinh_dir_fma`
+// and the others) at the arguments that the entries give them; this test checks the code as
+// compiled, where the entries call the copy built with the target feature `fma` in a build with
+// the dispatch, on a CPU that has it.
 #[test]
 fn copies_agree() {
     let mut rng = Rng(876);
@@ -916,6 +933,23 @@ fn copies_agree() {
     for (i, (name, _)) in FUNCTIONS.iter().enumerate() {
         for x in [at_rule_thresholds(i), at_shared_thresholds()].concat() {
             assert_copies_agree(&format!("{name}({x:e})"), copies(i, x));
+        }
+    }
+    // The rules of `cosh` and `cosh_near` for a tiny t = |x| (in the functions with
+    // `TINY_IN_CALLER`, in the bodies without it) at 0, the least subnormal and the least normal
+    // t, and at `TINY_NEAR` and `TINY_HYP` and the `f64` below each, with both signs. The
+    // arguments above have these too; this loop keeps them if those lists change.
+    for t in [
+        0.0,
+        f64::from_bits(1),
+        f64::MIN_POSITIVE,
+        f64::next_down(TINY_NEAR),
+        TINY_NEAR,
+        f64::next_down(TINY_HYP),
+        TINY_HYP,
+    ] {
+        for x in [t, -t] {
+            assert_copies_agree(&format!("cosh({x:e})"), copies(COSH, x));
         }
     }
     for (name, x) in regressions() {

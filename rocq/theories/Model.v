@@ -2672,16 +2672,21 @@ Definition fast_tanh_near (fma : bool) (x : f64) : option f64 :=
     [exp], [exp2], [exp10], [sinh], [cosh] and [tanh] try the fast path
     before [ziv], and their forms rounded to nearest before [ziv_near].
     The fast path takes [FMA] as the argument [fma]. Each entry of the
-    file, such as [exp_dir], [cosh] and [exp_near], is defined by the
+    file, such as [exp_dir], [cosh_dir] and [exp_near], is defined by the
     macro [level_entry!] of [src/dyadic/level.rs] from its body, a
     function such as [exp_dir_with] that takes [FMA]. The definitions
-    below transcribe the bodies; those for [exp], [exp2], [exp10] and
-    [sinh] first transcribe their test for a tiny [|x|], and then the
-    other tests of the body of the entry. The functions make that test
-    before they call their entry where [TINY_IN_CALLER], which is
-    [!cfg!(inari_kernel_dispatch)], is true, and the body makes it as its
-    first test where it is false, so that the order of the tests is the
-    same in both builds.
+    below transcribe the bodies; those for [exp], [exp2], [exp10],
+    [sinh], [cosh] and [cosh_near] first transcribe their test for a tiny
+    [|x|], and then the other tests of the body of the entry. The
+    functions make that test before they call their entry where
+    [TINY_IN_CALLER], which is [!cfg!(inari_kernel_dispatch)], is true,
+    and the body makes it as its first test where it is false, so that
+    the order of the tests is the same in both builds. [cosh] and
+    [cosh_near] make it on [t = x.abs()], and pass their entries,
+    [cosh_dir] and [cosh_near_abs], [abs_or_x(t, x)], which is [t] where
+    [TINY_IN_CALLER] is true and [x] where it is false: the body takes
+    its argument as [t] in the first case and its [abs()] in the second,
+    so it has [t = x.abs()] in both builds.
     The entry runs its body with [FMA] equal to [HAS_FMA], which depends
     on the target, or, in a build with [cfg(inari_kernel_dispatch)] (see
     [build.rs]), with [true] in a copy compiled with the target feature
@@ -2760,14 +2765,39 @@ Definition sinh_dir_with (x : f64) (up : bool) : option f64 :=
   else if ge x (from_bits 0x4086380000000000) (* 711.0 *) then Some (overflow up)
   else Some (opp (overflow (negb up))).
 
-(** [pub(crate) fn cosh(x: f64, up: bool) -> f64] *)
+(** [fn cosh_big(t: f64, up: bool) -> f64] *)
+Definition cosh_big (t : f64) (up : bool) : f64 :=
+  if is_nan t || eq t infinity then t else overflow up.
+
+(** The result of the rule for a tiny [t = x.abs()] in
+    [pub(crate) fn cosh(x: f64, up: bool) -> f64] where [TINY_IN_CALLER]
+    is true:
+    [if up && t >= f64::from_bits(1) { 1.0 + f64::EPSILON } else { 1.0 }].
+    [cosh_dir_with] has [near_one t up] in its place, the result of that
+    rule in the body of [cosh_dir] where [TINY_IN_CALLER] is false;
+    [DyHyp.cosh_tiny_near_one] shows that the two are equal wherever
+    [t < TINY_HYP]. *)
+Definition cosh_tiny (t : f64) (up : bool) : f64 :=
+  if up && ge t min_pos then one_plus_ulp else one.
+
+(** [pub(crate) fn cosh(x: f64, up: bool) -> f64], which returns
+    [cosh_tiny t up] if [TINY_IN_CALLER && t < TINY_HYP] for
+    [t = x.abs()], and otherwise calls [cosh_dir::<true>(abs_or_x(t, x))]
+    if [up] and [cosh_dir::<false>(abs_or_x(t, x))] otherwise. The body
+    of [fn cosh_dir<const UP: bool>(t: f64) -> f64], whose argument is
+    named [a], takes [t] to be [a] if [TINY_IN_CALLER] and [a.abs()]
+    otherwise, first returns [near_one(t, UP)] if
+    [!TINY_IN_CALLER && t < TINY_HYP], and then makes the other tests.
+    So in both builds (see above) this is the test
+    [t < TINY_HYP] followed by the other tests of that body, with [up]
+    for [UP], and with [near_one t up] for the [cosh_tiny t up] of
+    [cosh], which [DyHyp.cosh_tiny_near_one] shows is the same. *)
 Definition cosh_dir_with (x : f64) (up : bool) : option f64 :=
   let t := fabs x in
   if lt t tiny_hyp then Some (near_one t up)
   else if lt t (from_bits 0x4086380000000000) (* 711.0 *) then
     match fast_cosh_dir false t up with Some r => Some r | None => ziv (ev_cosh t) up 1 end
-  else if is_nan t || eq t infinity then Some t
-  else Some (overflow up).
+  else Some (cosh_big t up).
 
 (** [pub(crate) fn tanh(x: f64, up: bool) -> f64], which calls
     [tanh_dir::<true>(x)] if [up] and [tanh_dir::<false>(x)] otherwise:
@@ -2852,14 +2882,19 @@ Definition sinh_near_with (x : f64) : option f64 :=
   else if ge x (from_bits 0x4086380000000000) (* 711.0 *) then Some infinity
   else Some neg_infinity.
 
-(** [pub(crate) fn cosh_near(x: f64) -> f64] *)
+(** [pub(crate) fn cosh_near(x: f64) -> f64], which returns [1.0] if
+    [TINY_IN_CALLER && t < TINY_NEAR] for [t = x.abs()], and otherwise
+    calls [cosh_near_abs(abs_or_x(t, x))]. The body of
+    [fn cosh_near_abs(t: f64) -> f64] takes [t] as that of [cosh_dir]
+    does, first returns [1.0] if [!TINY_IN_CALLER && t < TINY_NEAR], and
+    then makes the other tests. So in both builds (see above) this is the
+    test [t < TINY_NEAR] followed by the other tests of that body. *)
 Definition cosh_near_with (x : f64) : option f64 :=
   let t := fabs x in
   if lt t tiny_near then Some one
   else if lt t (from_bits 0x4086380000000000) (* 711.0 *) then
     match fast_cosh_near false t with Some r => Some r | None => ziv_near (ev_cosh t) 1 end
-  else if is_nan t || eq t infinity then Some t
-  else Some infinity.
+  else Some (cosh_big t true).
 
 (** [pub(crate) fn tanh_near(x: f64) -> f64] *)
 Definition tanh_near_with (x : f64) : option f64 :=

@@ -635,6 +635,7 @@ destruct (lt (fabs x) (from_bits 0x4086380000000000)) eqn:G4; cbv iota in H.
   { intros n a Hn Ha. destruct (ev_cosh_correct _ n a Hn Ha) as (Oa & Ha').
     split; [exact Oa|]. rewrite hyp_fabs in Ha'. rewrite cosh_Rabs. exact Ha'. }
   exact (ziv_near_strict_correct _ _ _ _ Hev H). }
+unfold DyadicExp.cosh_big in H.
 rewrite (fin_not_nan _ Ft), (fin_neq_inf _ Ft) in H. cbn [orb] in H.
 (* [|x| < 711] is false, so [|x| >= 711]. *)
 assert (G1 : ge (fabs x) (from_bits 0x4086380000000000) = true)

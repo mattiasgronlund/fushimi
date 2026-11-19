@@ -138,11 +138,12 @@ pub(super) const TINY_HYP: f64 = 1.0 / 67_108_864.0;
 const TINY_EXP: f64 = f64::EPSILON / 4.0;
 const TINY_EXP10: f64 = f64::EPSILON / 16.0;
 
-// Whether `exp`, `exp2`, `exp10` and `sinh` test for a tiny |x| themselves, before they call
-// their entry, and not its body. In a build with the dispatch (`level_entry!`), the body makes
-// the test, as its first one: the caller is compiled without the target features of the body's
-// copies, and there the test would cost every other argument a separate load of its mask and a
-// second jump, and `near_one(x, true)` and `away(x, true)` would branch on the sign of x.
+// Whether `exp`, `exp2`, `exp10`, `sinh`, `cosh` and `cosh_near` test for a tiny |x|
+// themselves, before they call their entry, and not its body. In a build with the dispatch
+// (`level_entry!`), the body makes the test, as its first one: the caller is compiled without the
+// target features of the body's copies, and there the test would cost every other argument a
+// separate load of its mask and a second jump, and `near_one(x, true)` and `away(x, true)` would
+// branch on the sign of x.
 const TINY_IN_CALLER: bool = !cfg!(inari_kernel_dispatch);
 
 // 2^-27: the arguments of smaller magnitude have results within half an ulp of x, or of 1,
@@ -1075,33 +1076,37 @@ level_entry! {
     pub(crate) fn exp10_near(x: f64) -> f64 = exp10_near_with;
 }
 
-// The body of `exp10_near`, with `FMA` for the products (`level_entry!`).
+// The body of `exp10_near`, with `FMA` for the products (`level_entry!`). One test sends NaN, ±∞
+// and the x out of (-324, 309) to their rules, after the fast path, as in `exp_dir`.
 #[inline(always)]
 fn exp10_near_with<const FMA: bool>(x: f64) -> f64 {
     // The rule for a tiny |x| first, as in `exp_near`.
     if x.abs() < TINY_EXP10 {
         // 10^x = e^(x ln 10), and |x ln 10| < 4 |x| < 2^-54.
         1.0
+    } else if x < 309.0 && x > -324.0 {
+        if (1.0..=22.0).contains(&x) && x == x.floor() {
+            POW10[x as usize]
+        } else if x == 23.0 {
+            // 10^23 = 5^23 2^23, with 5^23 odd and in [2^53, 2^54), is the midpoint of two
+            // adjacent `f64`s, which an enclosure settles only if it is one of its bounds.
+            // `1e23` is its rounding, ties to even.
+            1e23
+        } else if let Some(r) = fast_exp10_near::<FMA>(x) {
+            r
+        } else {
+            ziv_near(&Exp10(x), 1)
+        }
     } else if x.is_nan() || x == f64::INFINITY {
+        // NaN fails the test -324 < x < 309, as do ±∞ and the other x out of that range.
         x
     } else if x == f64::NEG_INFINITY {
         0.0
     } else if x >= 309.0 {
         f64::INFINITY
-    } else if x <= -324.0 {
-        // 10^x < 2^-1075, half of the least subnormal number.
-        0.0
-    } else if (1.0..=22.0).contains(&x) && x == x.floor() {
-        POW10[x as usize]
-    } else if x == 23.0 {
-        // 10^23 = 5^23 2^23, with 5^23 odd and in [2^53, 2^54), is the midpoint of two
-        // adjacent `f64`s, which an enclosure settles only if it is one of its bounds. `1e23`
-        // is its rounding, ties to even.
-        1e23
-    } else if let Some(r) = fast_exp10_near::<FMA>(x) {
-        r
     } else {
-        ziv_near(&Exp10(x), 1)
+        // x <= -324: 10^x < 2^-1075, half of the least subnormal number.
+        0.0
     }
 }
 
@@ -1186,29 +1191,92 @@ fn sinh_near_with<const FMA: bool>(x: f64) -> f64 {
     }
 }
 
-level_entry! {
-    /// cosh x rounded toward +∞ if `up` and toward -∞ otherwise.
-    #[cfg_attr(inari_kernel_dispatch, inline(always))]
-    pub(crate) fn cosh(x: f64, up: bool) -> f64 = cosh_with;
+/// cosh x rounded toward +∞ if `up` and toward -∞ otherwise.
+#[inline(always)]
+pub(crate) fn cosh(x: f64, up: bool) -> f64 {
+    let t = x.abs();
+    // The rule for a tiny t first, in the caller, as in `exp`. Without the dispatch, `cosh_dir`
+    // is out of line, so that its frame stays out of this exit: inlined, with the rule in the
+    // body and the tail call of `cosh_big`, its frame was set up before the test (objdump, in a
+    // crate that links `cr`, built for Haswell).
+    if TINY_IN_CALLER && t < TINY_HYP {
+        // cosh 0 = 1, and 1 < cosh t <= 1 + t^2 < 1 + 2^-52 for 0 < t < 2^-26, so this is
+        // `near_one(t, up)`: as t >= 0, t >= 2^-1074, the least positive `f64`, is t > 0. It
+        // tests that rather than t > 0, as LLVM turns a test of |x| against 0 into a test of x,
+        // which kept x beside t and cost a move of t before the tail call of `cosh_dir::<true>`
+        // (objdump, as above).
+        if up && t >= f64::from_bits(1) {
+            1.0 + f64::EPSILON
+        } else {
+            1.0
+        }
+    } else if up {
+        // A copy per direction, where `up` is a constant.
+        cosh_dir::<true>(abs_or_x(t, x))
+    } else {
+        cosh_dir::<false>(abs_or_x(t, x))
+    }
 }
 
-// The body of `cosh`, with `FMA` for the products (`level_entry!`). One test sends NaN, +∞ and
-// t >= 711 to their rules, after the fast path, as in `sinh_near`.
+// The argument of the entries of `cosh` and `cosh_near`: t = |x| with `TINY_IN_CALLER`, and x
+// without it, where the body takes |x| itself, as the body of `cosh` did before its rule for a
+// tiny t moved to the caller. Given t as their argument, the copies of the dispatch kept the sign
+// tests of `near_one(t, false)` and a t + 0 of the fast path, which are needless for t = |x|,
+// whose sign bit is clear, but the body does not see that in its argument (objdump), and made
+// one more conditional branch per call that the rule for a tiny t does not take (cachegrind;
+// both in a crate that links `cr`, built for x86-64).
 #[inline(always)]
-fn cosh_with<const FMA: bool>(x: f64, up: bool) -> f64 {
-    let t = x.abs();
-    // The rule for a tiny t first, as in `exp_near`.
-    if t < TINY_HYP {
-        // 1 <= cosh t <= 1 + t^2 for t in [0, 1].
-        near_one(t, up)
+fn abs_or_x(t: f64, x: f64) -> f64 {
+    if TINY_IN_CALLER {
+        t
+    } else {
+        x
+    }
+}
+
+level_entry! {
+    // `cosh` of t = |x| (of x without `TINY_IN_CALLER`, `abs_or_x`) toward +∞ if `UP` and toward
+    // -∞ otherwise, for a t that `cosh` has not returned for: NaN, +∞, or t >= `TINY_HYP`, or any
+    // x without `TINY_IN_CALLER`. With the dispatch, it is inlined in `cosh`, as the entry `cosh`
+    // with a run-time `up` was, so that `cosh` tests `LEVEL` itself; without it, out of line.
+    #[cfg_attr(inari_kernel_dispatch, inline(always))]
+    #[cfg_attr(not(inari_kernel_dispatch), inline(never))]
+    fn cosh_dir<const UP: bool>(t: f64) -> f64 = cosh_dir_with;
+}
+
+// The body of `cosh_dir`, with `FMA` for the products (`level_entry!`). One test sends NaN, +∞
+// and t >= 711 to their rules, after the fast path, as in `sinh_near`.
+#[inline(always)]
+fn cosh_dir_with<const FMA: bool, const UP: bool>(a: f64) -> f64 {
+    // a is t, or x without `TINY_IN_CALLER` (`abs_or_x`).
+    let t = if TINY_IN_CALLER { a } else { a.abs() };
+    if !TINY_IN_CALLER && t < TINY_HYP {
+        // As in `cosh`.
+        near_one(t, UP)
     } else if t < 711.0 {
-        if let Some(r) = fast_cosh_dir::<FMA>(t, up) {
+        if let Some(r) = fast_cosh_dir::<FMA>(t, UP) {
             r
         } else {
-            ziv(&Cosh(t), up, 1)
+            ziv(&Cosh(t), UP, 1)
         }
-    } else if t.is_nan() || t == f64::INFINITY {
+    } else {
         // NaN fails the test t < 711, as do +∞ and the other t >= 711.
+        cosh_big(t, UP)
+    }
+}
+
+// cosh t rounded toward +∞ if `up` and toward -∞ otherwise, for a t = |x| that is NaN, +∞ or
+// at least 711: the rules of `cosh_dir`, and of `cosh_near_abs` with `up` true, after their fast
+// path. Out of line: inlined in a body that takes x and makes t = |x|, as the bodies do with the
+// dispatch (`abs_or_x`) and the body of `cosh` did in every build before its rule for a tiny t
+// moved to the caller, its class test of t became a test of x, which kept x in xmm0, so that t
+// and the result that its exit shares with the other exits went to another register, at the
+// cost of moves before the call of the fast path, on the fast path's exit and around `ziv`
+// (objdump and cachegrind, in a crate that links `cr`, built for Haswell).
+#[cold]
+#[inline(never)]
+fn cosh_big(t: f64, up: bool) -> f64 {
+    if t.is_nan() || t == f64::INFINITY {
         t
     } else {
         // t >= 711: cosh t > sinh t > 2^1024.
@@ -1216,18 +1284,35 @@ fn cosh_with<const FMA: bool>(x: f64, up: bool) -> f64 {
     }
 }
 
-level_entry! {
-    /// cosh x rounded to nearest, ties to even.
-    pub(crate) fn cosh_near(x: f64) -> f64 = cosh_near_with;
+/// cosh x rounded to nearest, ties to even.
+#[inline(always)]
+pub(crate) fn cosh_near(x: f64) -> f64 {
+    let t = x.abs();
+    // The rule for a tiny t first, in the caller, as in `cosh`.
+    if TINY_IN_CALLER && t < TINY_NEAR {
+        // 1 <= cosh t <= 1 + t^2 for t in [0, 1].
+        1.0
+    } else {
+        cosh_near_abs(abs_or_x(t, x))
+    }
 }
 
-// The body of `cosh_near`, with `FMA` for the products (`level_entry!`). One test sends NaN, +∞
-// and t >= 711 to their rules, after the fast path, as in `cosh`.
+level_entry! {
+    // `cosh_near` of t = |x| (of x without `TINY_IN_CALLER`, `abs_or_x`), for a t that
+    // `cosh_near` has not returned for: NaN, +∞, or t >= `TINY_NEAR`, or any x without
+    // `TINY_IN_CALLER`. Out of line without the dispatch, as `cosh_dir`.
+    #[cfg_attr(not(inari_kernel_dispatch), inline(never))]
+    fn cosh_near_abs(t: f64) -> f64 = cosh_near_with;
+}
+
+// The body of `cosh_near_abs`, with `FMA` for the products (`level_entry!`). One test sends NaN,
+// +∞ and t >= 711 to their rules, after the fast path, as in `cosh_dir`.
 #[inline(always)]
-fn cosh_near_with<const FMA: bool>(x: f64) -> f64 {
-    let t = x.abs();
+fn cosh_near_with<const FMA: bool>(a: f64) -> f64 {
+    // a is t, or x without `TINY_IN_CALLER` (`abs_or_x`).
+    let t = if TINY_IN_CALLER { a } else { a.abs() };
     // The rule for a tiny t first, as in `exp_near`.
-    if t < TINY_NEAR {
+    if !TINY_IN_CALLER && t < TINY_NEAR {
         // 1 <= cosh t <= 1 + t^2 for t in [0, 1].
         1.0
     } else if t < 711.0 {
@@ -1236,12 +1321,10 @@ fn cosh_near_with<const FMA: bool>(x: f64) -> f64 {
         } else {
             ziv_near(&Cosh(t), 1)
         }
-    } else if t.is_nan() || t == f64::INFINITY {
-        // NaN fails the test t < 711, as do +∞ and the other t >= 711.
-        t
     } else {
-        // t >= 711, as in `cosh`.
-        f64::INFINITY
+        // NaN fails the test t < 711, as do +∞ and the other t >= 711. For t >= 711, cosh t >
+        // 2^1024 rounds to +∞ to nearest as it does upward.
+        cosh_big(t, true)
     }
 }
 
