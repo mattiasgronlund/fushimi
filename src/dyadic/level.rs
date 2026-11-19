@@ -73,10 +73,14 @@ cfg_if::cfg_if! {
 //
 // In a build with the dispatch, the entry tests `LEVEL` and tail-calls `fma_copy`, the body with
 // `FMA = true` compiled with the target feature `fma`. The first call, and every call on a CPU
-// without `fma`, goes to `slow`, which detects the feature and calls the entry again where the
-// CPU has it, and `dekker_copy` (`FMA = false`) where it does not. For an entry with a run-time
-// `up`, `fma_copy` takes `UP` as a constant, so that a caller with a constant direction, inlining
-// the entry (`#[cfg_attr(inari_kernel_dispatch, inline(always))]` on it), calls its own copy.
+// without `fma`, goes to `slow`, which detects the feature and calls `fma_copy` where the CPU
+// has it, and `dekker_copy` (`FMA = false`) where it does not. `slow` calls `fma_copy` itself,
+// not the entry again: the compiler can inline the entry into `slow`, which turns the entry's own
+// call of `slow` into a loop around the call of `detect`, and then set up the frame of that call
+// at the start of `slow`, which a CPU without `fma` runs on every call. For an entry with a
+// run-time `up`, `fma_copy` takes `UP` as a constant, so that a caller with a constant direction,
+// inlining the entry (`#[cfg_attr(inari_kernel_dispatch, inline(always))]` on it), calls its own
+// copy.
 macro_rules! level_entry {
     // The direction is a constant `UP`.
     (
@@ -105,7 +109,8 @@ macro_rules! level_entry {
             #[inline(never)]
             fn slow<const UP: bool>($($arg: $ty),*) -> $ret {
                 if $crate::dyadic::level::fma_detected() {
-                    $name::<UP>($($arg),*)
+                    // SAFETY: `fma_detected` is true only once `detect` has found `fma`.
+                    unsafe { fma_copy::<UP>($($arg),*) }
                 } else {
                     dekker_copy::<UP>($($arg),*)
                 }
@@ -163,7 +168,14 @@ macro_rules! level_entry {
             #[inline(never)]
             fn slow($($arg: $ty,)* up: bool) -> $ret {
                 if $crate::dyadic::level::fma_detected() {
-                    $name($($arg,)* up)
+                    // SAFETY: `fma_detected` is true only once `detect` has found `fma`.
+                    unsafe {
+                        if up {
+                            fma_copy::<true>($($arg),*)
+                        } else {
+                            fma_copy::<false>($($arg),*)
+                        }
+                    }
                 } else {
                     dekker_copy($($arg,)* up)
                 }
@@ -210,7 +222,8 @@ macro_rules! level_entry {
             #[inline(never)]
             fn slow($($arg: $ty),*) -> $ret {
                 if $crate::dyadic::level::fma_detected() {
-                    $name($($arg),*)
+                    // SAFETY: `fma_detected` is true only once `detect` has found `fma`.
+                    unsafe { fma_copy($($arg),*) }
                 } else {
                     dekker_copy($($arg),*)
                 }
