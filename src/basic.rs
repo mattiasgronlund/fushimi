@@ -813,12 +813,14 @@ impl Interval {
 // `$rhs` and `$addend` is NaI, and `$set_dec` for the function that decorates it. `mul_add_with`
 // expands it with `self.x().mul_add_with(s, rhs.x(), addend.x())` and with
 // `Self::set_dec_impl`, which is `#[inline]`. `DecInterval::mul_add` expands it with
-// `self.x().mul_add(rhs.x(), addend.x())` and with `Self::set_dec`, which is not, rather than
-// calling `mul_add_with` with `Baseline`, which would inline the body of
-// `Interval::mul_add_with` into it. In a plain x86-64 build of the library that took 7 to 56
-// more instructions per call, as `DecInterval::mul_add` then called `generic::mul_add_ru_impl`
-// and `generic::max` out of line (seen with rustc 1.98, when `Interval::mul_add` called
-// `mul_add_with` with `Baseline` too, not with `CrateBaseline`).
+// `Self::set_dec`, which is not, and on the portable backend (`inari_generic_backend`) with
+// `self.x().mul_add(rhs.x(), addend.x())`, a call of `Interval::mul_add`, rather than with
+// `self.x().mul_add_with(CrateBaseline, rhs.x(), addend.x())`, which inlines the body of
+// `Interval::mul_add_with` into it. There the inlined form took 3 to 47 more instructions per
+// call in a plain x86-64 build of the library and with `force-generic` (cachegrind, rustc
+// 1.98), as `DecInterval::mul_add` then called `generic::mul_add_ru` and `generic::max` out of
+// line. With the other backends it expands it with the inlined form, which took 17 to 29 fewer
+// instructions per call with `-Ctarget-cpu=haswell` and 17 fewer with `x86-64-v2`.
 macro_rules! dec_mul_add_with_body {
     ($lhs:ident, $rhs:ident, $addend:ident, $x:expr, $set_dec:path) => {{
         if $lhs.is_nai() || $rhs.is_nai() || $addend.is_nai() {
@@ -958,14 +960,27 @@ impl DecInterval {
         // `dec_mul_add_with_body!`, with `self.x().mul_add(rhs.x(), addend.x())`, which is
         // `self.x().mul_add_with(CrateBaseline, rhs.x(), addend.x())`, for the interval, and
         // with `Self::set_dec`, which calls `Self::set_dec_impl` (see the comment on the macro).
-        // `rocq/theories/Model.v` transcribes this, so it has to be updated along with it.
-        dec_mul_add_with_body!(
-            self,
-            rhs,
-            addend,
-            self.x().mul_add(rhs.x(), addend.x()),
-            Self::set_dec
-        )
+        // `rocq/theories/Model.v` transcribes the arm of the portable backend, so it has to be
+        // updated along with it. The other arm inlines that call of `Interval::mul_add`.
+        cfg_if::cfg_if! {
+            if #[cfg(inari_generic_backend)] {
+                dec_mul_add_with_body!(
+                    self,
+                    rhs,
+                    addend,
+                    self.x().mul_add(rhs.x(), addend.x()),
+                    Self::set_dec
+                )
+            } else {
+                dec_mul_add_with_body!(
+                    self,
+                    rhs,
+                    addend,
+                    self.x().mul_add_with(CrateBaseline, rhs.x(), addend.x()),
+                    Self::set_dec
+                )
+            }
+        }
     }
 
     /// The decorated version of [`Interval::mul_add_with`].

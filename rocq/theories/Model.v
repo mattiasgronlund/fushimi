@@ -9063,10 +9063,15 @@ Definition mul (has_fma : bool) (self rhs : DecInterval) : option DecInterval :=
     [has_fma] of [Interval.mul_add] as an argument here too, and
     [self.d().min(rhs.d().min(addend.d()))] is
     [dec_min (dec self) (dec_min (dec rhs) (dec addend))];
-    [pub fn mul_add(self, rhs: Self, addend: Self) -> Self] expands the
-    same macro with [self.x().mul_add(rhs.x(), addend.x())], which is
-    [self.x().mul_add_with(CrateBaseline, rhs.x(), addend.x())], and with
-    [Self::set_dec], which calls [Self::set_dec_impl]. *)
+    [pub fn mul_add(self, rhs: Self, addend: Self) -> Self] is a
+    [cfg_if!] on [cfg(inari_generic_backend)], which build.rs sets with
+    the [force-generic] feature and for a target other than [aarch64],
+    [x86_64] with [sse4.2] and [wasm32] with [simd128]. Where it is set,
+    [mul_add] expands the same macro with
+    [self.x().mul_add(rhs.x(), addend.x())], which is
+    [self.x().mul_add_with(CrateBaseline, rhs.x(), addend.x())]; elsewhere
+    it expands it with that [mul_add_with] call written out. Both arms
+    pass [Self::set_dec], which calls [Self::set_dec_impl]. *)
 Definition mul_add (has_fma : bool) (self rhs addend : DecInterval) :
     option DecInterval :=
   if is_nai self || is_nai rhs || is_nai addend then Some NAI
