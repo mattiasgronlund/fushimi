@@ -160,6 +160,7 @@ use crate::limbs;
 use crate::simd::two_prod_err;
 use sc_table::SC;
 use std::cmp::Ordering;
+use std::mem::MaybeUninit;
 use tables::INV2PI;
 
 mod sc_table;
@@ -196,14 +197,22 @@ fn reduce<const N: usize>(t: f64) -> (u64, bool, Encl<N>) {
     let s = 64 * l as i64 - 2;
     let nx = l + 1 + b / 64;
     let p = &PI[66 - l..];
-    // X, the quotient, R, P - R, and the scratch of `div_rem`, of nx + L + 2 limbs: on the
-    // stack where they fit, as they do at every level up to 4 limbs, where the most is 185
-    // limbs, at N = 4 and b = 1024, and on the heap otherwise.
+    // X, the quotient, R, P - R, and the scratch of `div_rem`, of nx + L + 2 limbs, `need` in
+    // all: on the stack where they fit, as they do at every level up to 4 limbs, where the most
+    // is 185 limbs, at N = 4 and b = 1024, and on the heap otherwise. Only the first `need`
+    // limbs of the array are zeroed, not all 192, so it is an array of `MaybeUninit<u64>`
+    // whose other limbs stay uninitialized.
     let need = 3 * nx + 3 * l + 2;
-    let mut stack = [0; 192];
+    let mut stack = [MaybeUninit::<u64>::uninit(); 192];
     let mut heap = Vec::new();
     let buf: &mut [u64] = if need <= stack.len() {
-        &mut stack
+        let buf = &mut stack[..need];
+        buf.fill(MaybeUninit::new(0));
+        // SAFETY: `fill` has just initialized each of the `need` limbs of `buf`, and
+        // `MaybeUninit<u64>` has the size, alignment and ABI of `u64`, so that they are a valid
+        // `[u64]` of the same length. The limbs of `stack` past `need` stay uninitialized and
+        // are never read: every slice below is a part of this one.
+        unsafe { &mut *(buf as *mut [MaybeUninit<u64>] as *mut [u64]) }
     } else {
         heap.resize(need, 0);
         &mut heap
