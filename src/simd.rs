@@ -6,12 +6,13 @@
 //! [`DecInterval`](crate::DecInterval), such as [`Interval::add_with`](crate::Interval::add_with)
 //! and [`DecInterval::add_with`](crate::DecInterval::add_with), take a token of a level, a value
 //! of a type that implements [`Simd`], and run the backend that the token gives: [`Baseline`], on
-//! every target, gives the build's, and on x86-64, `V2` and `V3`, whose `try_new` checks that the
-//! CPU has their target features, give the `sse42` and the `fma` backend in the builds that the
-//! last paragraph names. Every token gives the same intervals, since these operations return the
-//! tightest results (see [Conformance to the standard](crate::_docs::conformance)), and the same
-//! decorations, since those of `DecInterval` compute them from the arguments and these intervals
-//! alone; only the speed differs.
+//! every target, gives the build's, and on x86-64, `V2`, `V3` and `V4`, whose `try_new` checks
+//! that the CPU has their target features, give the `sse42`, the `fma` and the `avx512f` backend
+//! in the builds that the last paragraph names. Every token gives the same intervals, since these
+//! operations return the tightest results (see
+//! [Conformance to the standard](crate::_docs::conformance)), and the same decorations, since
+//! those of `DecInterval` compute them from the arguments and these intervals alone; only the
+//! speed differs.
 //!
 //! To run a loop at the highest level of a token that the CPU has, implement [`WithLevel`] for
 //! a type whose [`with_level`](WithLevel::with_level) runs the loop, and call [`dispatch`] once,
@@ -32,11 +33,12 @@
 //!
 //! On x86-64, unless the feature `force-generic` is on, `V2` gives the `sse42` backend in a build
 //! without the target feature `sse4.2`, such as one for `x86-64`, the default of
-//! `x86_64-unknown-linux-gnu`, and `V3` gives the `fma` backend in a build that has neither the
-//! target feature `avx512f` nor both `avx` and `fma`, such as one for `x86-64` or `x86-64-v2`.
-//! In other builds, each gives the build's backend, that of [`Baseline`], as both do in a build
-//! for `x86-64-v3` or `haswell`.
-//! inari has no token of `x86-64-v4`.
+//! `x86_64-unknown-linux-gnu`, `V3` gives the `fma` backend in a build that has neither the
+//! target feature `avx512f` nor both `avx` and `fma`, such as one for `x86-64` or `x86-64-v2`,
+//! and `V4` gives the `avx512f` backend in a build without the target feature `avx512f`, such as
+//! one for `x86-64`, `x86-64-v2`, `x86-64-v3` or `haswell`. In other builds, each gives the
+//! build's backend, that of [`Baseline`], as `V2` and `V3` do in a build for `x86-64-v3` or
+//! `haswell`, and all three in one for `x86-64-v4`.
 
 // A SIMD vector [x0; x1] stored in a register is usually depicted as:
 //
@@ -51,7 +53,7 @@ mod token;
 pub(crate) use token::CrateBaseline;
 pub use token::{dispatch, Baseline, Simd, WithLevel};
 #[cfg(target_arch = "x86_64")]
-pub use token::{V2, V3};
+pub use token::{V2, V3, V4};
 
 cfg_if::cfg_if! {
     if #[cfg(docsrs)] {
@@ -134,8 +136,9 @@ cfg_if::cfg_if! {
         #[cfg(test)]
         mod differential_tests;
     } else if #[cfg(target_arch = "x86_64")] {
-        // Plain `x86-64`, without `sse4.2`, takes the portable backend. The `sse42` and `fma`
-        // backends are compiled only as those of the tokens `V2` and `V3` (`src/simd/token.rs`).
+        // Plain `x86-64`, without `sse4.2`, takes the portable backend. The `sse42`, `fma` and
+        // `avx512f` backends are compiled only as those of the tokens `V2`, `V3` and `V4`
+        // (`src/simd/token.rs`).
         // The `classify_bits` of `Baseline` calls that of `x86_64` in place of that of
         // `src/classify.rs`: its intrinsics are of SSE and SSE2, which every x86-64 CPU has.
         mod generic;

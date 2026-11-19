@@ -9,7 +9,8 @@
 // `Interval::classify_with` and `classify2_with`, by which the operations choose their case, at
 // each level that the CPU has, called directly and inside the level's `vectorize`, with
 // `classify` and `classify2`, which take no token. The backend functions that each level's copies
-// compile are compared with the portable backend's in `src/simd/differential_tests.rs`.
+// compile are compared with the portable backend's, and the square roots with those that switch
+// the rounding mode in MXCSR, in `src/simd/differential_tests.rs`.
 
 use super::*;
 use crate::{
@@ -356,6 +357,15 @@ fn check_v3<C: TestCase>() {
     }
 }
 
+// Checks every case at `V4`, if the CPU has its target features.
+#[cfg(target_arch = "x86_64")]
+fn check_v4<C: TestCase>() {
+    match V4::try_new() {
+        Some(s) => check_token::<C, _>(s),
+        None => eprintln!("skipped: the CPU does not have the target features of `V4`"),
+    }
+}
+
 #[test]
 fn intervals_have_every_class() {
     use IntervalClass::*;
@@ -428,6 +438,15 @@ fn classes_v3() {
     match V3::try_new() {
         Some(s) => check_classes(s),
         None => eprintln!("skipped: the CPU does not have the target features of `V3`"),
+    }
+}
+
+#[cfg(target_arch = "x86_64")]
+#[test]
+fn classes_v4() {
+    match V4::try_new() {
+        Some(s) => check_classes(s),
+        None => eprintln!("skipped: the CPU does not have the target features of `V4`"),
     }
 }
 
@@ -510,6 +529,18 @@ fn dec_v3() {
     check_v3::<DecCase>();
 }
 
+#[cfg(target_arch = "x86_64")]
+#[test]
+fn v4() {
+    check_v4::<Case>();
+}
+
+#[cfg(target_arch = "x86_64")]
+#[test]
+fn dec_v4() {
+    check_v4::<DecCase>();
+}
+
 // `sqrt` where its empty results and its two computed cases meet, against the results that
 // IEEE 1788 asks for rather than against `sqrt`, at each level that the CPU has, called directly
 // and inside the level's `vectorize`. The bounds of `Interval::EMPTY` are NaN, so a test of the
@@ -577,6 +608,9 @@ fn sqrt_bounds() {
         if let Some(s) = V3::try_new() {
             check_sqrt_bounds(s);
         }
+        if let Some(s) = V4::try_new() {
+            check_sqrt_bounds(s);
+        }
     }
 }
 
@@ -608,7 +642,9 @@ fn dispatch_picks_the_highest_level() {
     #[allow(unused_mut)] // Only x86-64 has levels above `Baseline`.
     let mut expected = type_name::<Baseline>();
     #[cfg(target_arch = "x86_64")]
-    if V3::try_new().is_some() {
+    if V4::try_new().is_some() {
+        expected = type_name::<V4>();
+    } else if V3::try_new().is_some() {
         expected = type_name::<V3>();
     } else if V2::try_new().is_some() {
         expected = type_name::<V2>();

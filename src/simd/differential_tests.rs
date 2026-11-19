@@ -3,8 +3,9 @@
 // (`avx512f`), which rounds with embedded rounding; otherwise (`fma`, `sse42`,
 // and the `aarch64` and `wasm32` backends), the backend that vectorizes the fast
 // paths of the generic one, and is compared with it.
-// In a build that compiles the copies of the backend functions of the tokens `V2`
-// and `V3` (`src/simd/token.rs`), `mod tokens` compares those in the same way.
+// In a build that compiles the copies of the backend functions of the tokens
+// `V2`, `V3` and `V4` (`src/simd/token.rs`), `mod tokens` compares those in the
+// same way.
 // `classify_bits_baseline` compares the `classify_bits` of `Baseline`, on x86-64
 // that of `src/simd/x86_64.rs`, with its formula in the functions of the generic
 // backend, in every build that compiles these tests.
@@ -804,7 +805,8 @@ fn regressions() -> Vec<(&'static str, Vec<f64>)> {
 }
 
 // The operation of `name`: the part before any `/`. The part after it names a
-// variant of the generic backend, or, as `fpcr`, the FPCR reference on aarch64.
+// variant of the generic backend, or a reference that switches the rounding
+// mode: as `fpcr`, in FPCR on aarch64, and as `mxcsr`, in MXCSR on x86-64.
 fn operation(name: &str) -> &str {
     name.split('/').next().unwrap()
 }
@@ -1434,8 +1436,8 @@ fn check_classify_bits<S: super::Simd>(r: &mut Report, s: S, x: [f64; 2]) {
 // `classify2_with` of each level with `classify` and `classify2`, which call the `classify_bits`
 // of `Baseline`, so it needs a test of its own. In an x86-64 build, whose backend is one of
 // `src/simd/x86_64/` or, for plain `x86-64`, the portable one, it runs the `classify_bits` of
-// `src/simd/x86_64.rs`, the body that `V2` and `V3` run too (in their copies, or by calling that
-// of `Baseline`), so there those tests compare that body with itself. In an aarch64 or wasm32
+// `src/simd/x86_64.rs`, the body that `V2`, `V3` and `V4` run too (in their copies, or by calling
+// that of `Baseline`), so there those tests compare that body with itself. In an aarch64 or wasm32
 // build, it runs the `classify_bits` of `src/classify.rs` with the functions of the build's
 // backend.
 #[test]
@@ -1474,28 +1476,28 @@ fn classify_bits_baseline() {
 
 // The tokens whose backend functions are copies compiled with their target
 // features (`src/simd/token.rs`), compared as `differential` compares the build's
-// backend: `V3` in the x86-64 builds that have neither both `avx` and `fma` nor
-// `avx512f`, and `V2` in those that also lack `sse4.2`, a plain `x86-64` build. In
-// the other x86-64 builds with a SIMD backend, a token's backend is the build's,
-// which `differential` compares. A test whose token the CPU lacks is skipped, with
-// a note on stderr.
-#[cfg(all(
-    target_arch = "x86_64",
-    not(all(target_feature = "avx", target_feature = "fma")),
-    not(target_feature = "avx512f")
-))]
+// backend: without `force-generic`, `V4` in every x86-64 build without `avx512f`,
+// `V3` in those that also do not have both `avx` and `fma`, and `V2` in those that
+// also lack `sse4.2`, a plain `x86-64` build. Otherwise, in an x86-64 build with a
+// SIMD backend, a token's backend is the build's, which `differential` compares,
+// and with `force-generic` the portable one. A test whose token the CPU lacks is
+// skipped, with a note on stderr.
+#[cfg(all(target_arch = "x86_64", not(target_feature = "avx512f")))]
 mod tokens {
     use super::*;
     #[cfg(not(target_feature = "sse4.2"))]
     use crate::simd::V2;
-    use crate::simd::{constant, extract, Simd, F64X2, V3};
+    #[cfg(not(all(target_feature = "avx", target_feature = "fma")))]
+    use crate::simd::V3;
+    use crate::simd::{constant, extract, Simd, F64X2, V4};
 
     // A token made without an argument, as the functions of `Ops` are pointers,
     // which cannot capture one. A test calls them only after `try_new` has
     // returned `Some`, and std caches what it detects.
     trait Token: Simd {
         // The name of the token's `sqrt1_ru` in `ops`, with the variant of the
-        // generic backend that it runs, or whose fast path it vectorizes.
+        // generic backend that it runs, or whose fast path it vectorizes, or, as
+        // `mxcsr`, the reference that it is compared with.
         const SQRT1_RU: &'static str;
 
         fn token() -> Self;
@@ -1516,15 +1518,32 @@ mod tokens {
     // `fma::sqrt_rd_ru`, which computes the remainder with the FMA as the generic
     // `sqrt1_ru` with the FMA does, rounding up in both lanes of a splat. Unless
     // 2^-966 <= |x| < 2^1024, it falls back to the generic `sqrt1_ru`, which in the
-    // builds of these tests is the one without the FMA: they lack `fma`, as `fma`
-    // enables `avx`. A negative x in that range takes the fast path, which returns
-    // NaN, as `fma::sqrt_rd_ru` does. `adversarial(true)` has both sides of both
-    // bounds, 2^-966 and its predecessor, and MAX and +∞, and their negations.
+    // builds that compile this impl is the one without the FMA: they lack `fma`, as
+    // `fma` enables `avx`. A negative x in that range takes the fast path, which
+    // returns NaN, as `fma::sqrt_rd_ru` does. `adversarial(true)` has both sides of
+    // both bounds, 2^-966 and its predecessor, and MAX and +∞, and their negations.
+    // In a build with both `avx` and `fma`, the backend of `V3` is the build's.
+    #[cfg(not(all(target_feature = "avx", target_feature = "fma")))]
     impl Token for V3 {
         const SQRT1_RU: &'static str = "sqrt1_ru/fma";
 
         fn token() -> Self {
             V3::try_new().unwrap()
+        }
+    }
+
+    // `V4` has an inlined copy of `avx512f::sqrt1_ru` (`src/simd/token.rs`), one
+    // `vsqrtsd` with `{ru-sae}`. It is compared with `hw_sqrt1_ru`, which in these
+    // builds, without `avx512f`, is `sqrt1_ru_mxcsr`, the square root with the
+    // rounding mode switched in MXCSR: the reference that `mxcsr` names, as `fpcr`
+    // names that of aarch64. The other copies of `V4` are compared in `ops` as
+    // those of `V3` are: with the generic backend, and `sqrt_rd_ru` with
+    // `sqrt_rd_ru_reference`, which in these builds also switches MXCSR.
+    impl Token for V4 {
+        const SQRT1_RU: &'static str = "sqrt1_ru/mxcsr";
+
+        fn token() -> Self {
+            V4::try_new().unwrap()
         }
     }
 
@@ -1598,15 +1617,16 @@ mod tokens {
 
     // The thin layers of the backend of `s` against those of the generic backend,
     // on the vectors of `adversarial(true)` values that `compare` gives the binary
-    // operations, bit for bit, as they only move and flip bits. Under `V2` and
-    // `V3`, `max` is `_mm_max_pd`, which returns its second argument where either
-    // is NaN or both are zeros. Generic `max` returns the first where only the
-    // second is NaN, and +0 for zeros of opposite signs. So `max` is checked only
-    // on lanes without a NaN, with zeros of either sign equal. `classify_bits` is
-    // checked against `classify_bits_reference` on every ordered pair of the
-    // values, among which are all the vectors above, as `classify_bits_baseline`
-    // checks that of `Baseline`, with which the tests `classes_*` of
-    // `src/simd/token/tests.rs` compare it.
+    // operations, bit for bit, as they only move and flip bits. Under `V2`, `V3`
+    // and `V4`, which all take the thin layers of `src/simd/x86_64.rs`, `max` is
+    // `_mm_max_pd`, which returns its second argument where either is NaN or both
+    // are zeros. Generic `max` returns the first where only the second is NaN, and
+    // +0 for zeros of opposite signs. So `max` is checked only on lanes without a
+    // NaN, with zeros of either sign equal. `classify_bits` is checked against
+    // `classify_bits_reference` on every ordered pair of the values, among which
+    // are all the vectors above, as `classify_bits_baseline` checks that of
+    // `Baseline`, with which the tests `classes_*` of `src/simd/token/tests.rs`
+    // compare it.
     fn check_thin_layers<S: Simd>(s: S) {
         let mut r = Report::default();
         let v = adversarial(true);
@@ -1658,6 +1678,7 @@ mod tokens {
         }
     }
 
+    #[cfg(not(all(target_feature = "avx", target_feature = "fma")))]
     #[test]
     fn differential_v3() {
         match V3::try_new() {
@@ -1666,6 +1687,17 @@ mod tokens {
                 check_thin_layers(s);
             }
             None => eprintln!("differential_v3: skipped, as the CPU lacks a feature of `V3`"),
+        }
+    }
+
+    #[test]
+    fn differential_v4() {
+        match V4::try_new() {
+            Some(s) => {
+                compare(ops::<V4>(), &ABSENT);
+                check_thin_layers(s);
+            }
+            None => eprintln!("differential_v4: skipped, as the CPU lacks a feature of `V4`"),
         }
     }
 }

@@ -9,20 +9,24 @@
 //
 // The backend of a token is that of the build, unless the token's level is above the build's:
 //
-//   build                                     Baseline       V2              V3
-//   docsrs, force-generic, avx512f,           the build's    the build's     the build's
-//     avx + fma, other architectures
-//   sse4.2 (x86-64-v2)                        sse42          sse42           fma (copies)
-//   plain x86-64                              generic        sse42 (copies)  fma (copies)
+//   build                        Baseline     V2              V3            V4
+//   docsrs, force-generic,       the build's  the build's     the build's   the build's
+//     avx512f, other
+//     architectures
+//   avx + fma (x86-64-v3)        fma          fma             fma           avx512f (copies)
+//   sse4.2 (x86-64-v2)           sse42        sse42           fma (copies)  avx512f (copies)
+//   plain x86-64                 generic      sse42 (copies)  fma (copies)  avx512f (copies)
 //
 // In the row of plain `x86-64`, every method of `Baseline` but `classify_bits` calls the portable
-// backend; `classify_bits`, as at `V2` and `V3`, is that of `src/simd/x86_64.rs`, which uses only
-// SSE and SSE2 (see `Baseline` below).
+// backend; `classify_bits`, as at `V2`, `V3` and `V4`, is that of `src/simd/x86_64.rs`, which uses
+// only SSE and SSE2 (see `Baseline` below).
 //
 // A copy is a function with the level's target features that calls the backend function, which
 // is `#[inline(always)]` in such a build, so that the copy compiles it with those features. The
-// thin layers of `src/simd/x86_64.rs` and its submodules are `#[inline(always)]` in every build,
-// so that they take the target features of their caller.
+// functions of `avx512f`, the backend of `V4`, are `#[inline]` instead, with the target feature
+// `avx512f` (see `src/simd/x86_64/avx512f.rs`), and LLVM inlined them into the copies (objdump,
+// row 138). The thin layers of `src/simd/x86_64.rs` and its submodules are `#[inline(always)]` in
+// every build, so that they take the target features of their caller.
 
 use super::F64X2;
 use std::fmt::Debug;
@@ -70,12 +74,12 @@ mod sealed {
 /// [`Interval::add_with`](crate::Interval::add_with), and the target features of its
 /// [`vectorize`](Simd::vectorize).
 ///
-/// The tokens are [`Baseline`], on every target, and on x86-64 `V2` and `V3`, whose `try_new`
-/// returns one only on a CPU that has their target features. Only inari implements `Simd`.
-/// Every token gives the same intervals, since these operations return the tightest results
-/// (see [Conformance to the standard](crate::_docs::conformance)), and the same decorations,
-/// since those of `DecInterval` compute them from the arguments and these intervals alone; only
-/// the speed differs.
+/// The tokens are [`Baseline`], on every target, and on x86-64 `V2`, `V3` and `V4`, whose
+/// `try_new` returns one only on a CPU that has their target features. Only inari implements
+/// `Simd`. Every token gives the same intervals, since these operations return the tightest
+/// results (see [Conformance to the standard](crate::_docs::conformance)), and the same
+/// decorations, since those of `DecInterval` compute them from the arguments and these intervals
+/// alone; only the speed differs.
 ///
 /// A function generic over `S: Simd` runs the operations at the level of the token that it is
 /// given:
@@ -235,8 +239,8 @@ pub trait WithLevel {
     fn with_level<S: Simd>(self, s: S) -> Self::Output;
 }
 
-/// Runs `w` at the highest level of `V3`, `V2` and [`Baseline`] that the CPU has, inside that
-/// level's [`vectorize`](Simd::vectorize), and returns what `w` returns.
+/// Runs `w` at the highest level of `V4`, `V3`, `V2` and [`Baseline`] that the CPU has, inside
+/// that level's [`vectorize`](Simd::vectorize), and returns what `w` returns.
 ///
 /// On targets other than x86-64, the level is `Baseline`. On x86-64, each call checks the
 /// target features of the CPU (std caches what it detects) and enters a region, so call
@@ -270,6 +274,12 @@ pub fn dispatch<W: WithLevel>(w: W) -> W::Output {
         // Without `#[inline(always)]` on the closures, LLVM left a large `with_level` out of
         // the regions in a plain `x86-64` build: the region jumped to the closure, which ran
         // without the target features of the level.
+        if let Some(s) = V4::try_new() {
+            return s.vectorize(
+                #[inline(always)]
+                || w.with_level(s),
+            );
+        }
         if let Some(s) = V3::try_new() {
             return s.vectorize(
                 #[inline(always)]
@@ -390,8 +400,8 @@ pub fn dispatch<W: WithLevel>(w: W) -> W::Output {
 // The other functions that a `*_with` method of `Interval` or `DecInterval` reaches, and that
 // rustc would not by itself inline into a user's crate on some target, are marked for it, apart
 // from the backend functions that round upward or downward (`sqrt1_ru` as well as those above,
-// and the copies of `V2` and `V3` below, of which those that a build for their level inlines are
-// `#[inline]`) and the functions that they call: `add_rn`, `all`, `and`, `bitmask`, `eq`, `ge`,
+// and the copies of `V2`, `V3` and `V4` below, of which those that a build for their level inlines
+// are `#[inline]`) and the functions that they call: `add_rn`, `all`, `and`, `bitmask`, `eq`, `ge`,
 // `gt`, `le`, `lt`, `max`, `or` and `sub_rn` on aarch64, with the helpers of `aarch64/lanewise.rs`
 // and `aarch64/fma.rs` that `mul_add_ru` and `sqrt_rd_ru` call on their fast paths, and the thin
 // layers of `wasm32.rs` that a `*_with` method reaches are `#[inline(always)]`, as is
@@ -422,10 +432,10 @@ impl sealed::Backend for Baseline {
     }
 
     // Where the build's backend is one of `src/simd/x86_64.rs` (`sse42`, `fma` or `avx512f`), the
-    // `classify_bits` of that file, which the copies of `V2` and `V3` below call too. These are
-    // the x86-64 builds without `inari_generic_backend` and `docsrs`: `build.rs` does not look at
-    // `docsrs`, with which `src/simd.rs` takes `unimplemented.rs`. Where `fma` or `avx512f` is the
-    // backend, the classification then puts no `vzeroupper` into the operations that classify
+    // `classify_bits` of that file, which the copies of `V2`, `V3` and `V4` below call too. These
+    // are the x86-64 builds without `inari_generic_backend` and `docsrs`: `build.rs` does not look
+    // at `docsrs`, with which `src/simd.rs` takes `unimplemented.rs`. Where `fma` or `avx512f` is
+    // the backend, the classification then puts no `vzeroupper` into the operations that classify
     // (see that function).
     #[cfg(all(target_arch = "x86_64", not(inari_generic_backend), not(docsrs)))]
     #[inline(always)]
@@ -435,13 +445,13 @@ impl sealed::Backend for Baseline {
 
     // In the other x86-64 builds without `force-generic` and `docsrs`, those without `sse4.2`
     // (such as one for plain `x86-64`), whose backend is the portable one, the `classify_bits` of
-    // `src/simd/x86_64.rs` too, which the copies of `V2` and `V3` below call there as well. It
-    // uses only SSE and SSE2 intrinsics, which every x86-64 CPU has, and `to_m128d` passes it the
-    // `F64X2` of these builds, `[f64; 2]`, as an `__m128d`. In a crate that links inari, built for
-    // `x86-64` in Cargo's default release profile, a call of `Interval::recip` or `Interval::sqr`
-    // took 8 fewer instructions with it than with that of `src/classify.rs`, and one of
-    // `Interval::mul`, `Interval::div`, `Interval::mul_add` or `Interval::mul_rev_to_pair` 11 to 16
-    // fewer, in the classes counted (cachegrind, row 152).
+    // `src/simd/x86_64.rs` too, which the copies of `V2`, `V3` and `V4` below call there as well.
+    // It uses only SSE and SSE2 intrinsics, which every x86-64 CPU has, and `to_m128d` passes it
+    // the `F64X2` of these builds, `[f64; 2]`, as an `__m128d`. In a crate that links inari,
+    // built for `x86-64` in Cargo's default release profile, a call of `Interval::recip` or
+    // `Interval::sqr` took 8 fewer instructions with it than with that of `src/classify.rs`, and
+    // one of `Interval::mul`, `Interval::div`, `Interval::mul_add` or
+    // `Interval::mul_rev_to_pair` 11 to 16 fewer, in the classes counted (cachegrind, row 152).
     //
     // `build.rs` sets `inari_generic_backend` on x86-64 exactly where `sse4.2` is missing or
     // `force-generic` is on, so the `cfg`s of this arm and the one above, which are disjoint,
@@ -717,7 +727,7 @@ impl sealed::Backend for CrateBaseline {
 
 // A token whose backend is the build's, that of `Baseline`.
 #[cfg(target_arch = "x86_64")]
-#[allow(unused_macros)] // Unused in a plain `x86-64` build, where `V2` and `V3` have copies.
+#[allow(unused_macros)] // Unused in a plain `x86-64` build, where `V2`, `V3` and `V4` have copies.
 macro_rules! baseline_backend {
     ($t:ty) => {
         impl sealed::Backend for $t {
@@ -798,14 +808,15 @@ macro_rules! baseline_backend {
 // functions of `$backend` (`src/simd/x86_64/`) in the builds `$copies`, and otherwise the
 // build's. The list of target features is written once, so that the features that `try_new`
 // detects are those that `vectorize` and the copies enable. Only string literals are passed as
-// `$f`, but `is_x86_feature_detected!` matches them as tokens, which a `literal` is not. `$ma`
-// are the attributes of the copy of `mul_add_ru`, and `$abi` its ABI.
+// `$f`, but `is_x86_feature_detected!` matches them as tokens, which a `literal` is not. `$ad`
+// are the attributes of the copies of `add_ru`, `div_ru` and `mul_ru`, and `$adabi` their ABI;
+// `$ma` are the attributes of the copy of `mul_add_ru`, and `$abi` its ABI.
 #[cfg(target_arch = "x86_64")]
 macro_rules! level {
     // `sqrt1_ru copy`: the level has a copy of its backend's `sqrt1_ru`, which is out of line.
-    // Inlined into the region of `sqrt_with`, it ran 4 to 6 fewer instructions per call on an
-    // interval containing zero, but 1 to 5 more on a positive one, whose path does not call it
-    // (cachegrind, row 136).
+    // Inlined into the region of `sqrt_with`, the copy that `V3` has ran 4 to 6 fewer
+    // instructions per call on an interval containing zero, but 1 to 5 more on a positive one,
+    // whose path does not call it (cachegrind, row 136).
     (@sqrt1_ru_copy copy, $backend:ident, [$($f:tt),*]) => {
         $(#[target_feature(enable = $f)])*
         pub(super) fn sqrt1_ru(x: f64) -> f64 {
@@ -819,6 +830,17 @@ macro_rules! level {
             unsafe { $m::sqrt1_ru(x) }
         }
     };
+    // `sqrt1_ru inline`: as `copy`, but the copy is inlined.
+    (@sqrt1_ru_copy inline, $backend:ident, [$($f:tt),*]) => {
+        #[inline]
+        $(#[target_feature(enable = $f)])*
+        pub(super) fn sqrt1_ru(x: f64) -> f64 {
+            $backend::sqrt1_ru(x)
+        }
+    };
+    (@sqrt1_ru inline, $m:ident) => {
+        level!(@sqrt1_ru copy, $m);
+    };
     // `sqrt1_ru baseline`: the level takes the `sqrt1_ru` of `Baseline`.
     (@sqrt1_ru_copy baseline, $backend:ident, [$($f:tt),*]) => {};
     (@sqrt1_ru baseline, $m:ident) => {
@@ -830,6 +852,7 @@ macro_rules! level {
     (
         $(#[$attr:meta])*
         $t:ident, copies $m:ident in $copies:meta, backend $backend:ident, features [$($f:tt),*],
+        add_ru div_ru mul_ru [$($ad:meta),*] extern $adabi:literal,
         mul_add_ru [$($ma:meta),*] extern $abi:literal, sqrt1_ru $sq:ident
     ) => {
         $(#[$attr])*
@@ -883,32 +906,39 @@ macro_rules! level {
         }
 
         // Each copy is out of line or inlined as the function it copies is in a build for the
-        // level, whose backend is the level's (see `Baseline`): `add_ru`, `div_ru` and `mul_ru`
-        // are out of line, `sqrt_rd_ru` is inlined, and `mul_add_ru` is inlined at `V3` and out
-        // of line at `V2`. A function with `#[target_feature]` cannot be `#[inline(always)]`,
-        // so the copies that are inlined are `#[inline]`. The copy of `sqrt1_ru` that `V3` has
-        // is out of line (see `@sqrt1_ru_copy`).
+        // level, whose backend is the level's (see `Baseline`). At `V2` and `V3`, `add_ru`,
+        // `div_ru` and `mul_ru` are out of line, `sqrt_rd_ru` is inlined, and `mul_add_ru` is
+        // inlined at `V3` and out of line at `V2`. The copy of `sqrt1_ru` that `V3` has is out
+        // of line (see `@sqrt1_ru_copy`). At `V4`, every copy is inlined, as the functions of
+        // `avx512f`, all of which but `sqrt_rd_ru` are one instruction, are in a build for
+        // `x86-64-v4`: LLVM inlined each into its callers in the lib of that build, which has
+        // none of them out of line (objdump, row 138). A function with `#[target_feature]`
+        // cannot be `#[inline(always)]`, so the copies that are inlined are `#[inline]`.
         //
         // The copies of vector functions that are out of line take the ABI `sysv64`, which
         // passes their vectors in registers (see `Baseline`, which also explains `-unwind` and
-        // the lint `improper_ctypes_definitions`). The copy of `mul_add_ru` takes `$abi`:
-        // `sysv64` at `V2`, and Rust's ABI at `V3`, which inlines it. With `sysv64` at `V3`, a
-        // region that evaluated a polynomial of degree 8 by Horner's rule with `mul_add_with` ran
-        // up to 19 more instructions per polynomial (cachegrind, row 136).
+        // the lint `improper_ctypes_definitions`), and those that are inlined Rust's ABI. So
+        // the copies of `add_ru`, `div_ru` and `mul_ru` take `$adabi`, `sysv64` at `V2` and
+        // `V3`, and Rust's ABI at `V4`, and the copy of `mul_add_ru` takes `$abi`, `sysv64` at
+        // `V2`, and Rust's ABI at `V3` and `V4`. With `sysv64` at `V3`, a region that evaluated
+        // a polynomial of degree 8 by Horner's rule with `mul_add_with` ran up to 19 more
+        // instructions per polynomial (cachegrind, row 136).
         #[cfg($copies)]
         mod $m {
             use crate::simd::x86_64::$backend;
             use std::arch::x86_64::__m128d;
 
             #[allow(improper_ctypes_definitions)] // `__m128d` (see `Baseline`).
+            $(#[$ad])*
             $(#[target_feature(enable = $f)])*
-            pub(super) extern "sysv64-unwind" fn add_ru(x: __m128d, y: __m128d) -> __m128d {
+            pub(super) extern $adabi fn add_ru(x: __m128d, y: __m128d) -> __m128d {
                 $backend::add_ru(x, y)
             }
 
             #[allow(improper_ctypes_definitions)] // `__m128d` (see `Baseline`).
+            $(#[$ad])*
             $(#[target_feature(enable = $f)])*
-            pub(super) extern "sysv64-unwind" fn div_ru(x: __m128d, y: __m128d) -> __m128d {
+            pub(super) extern $adabi fn div_ru(x: __m128d, y: __m128d) -> __m128d {
                 $backend::div_ru(x, y)
             }
 
@@ -924,8 +954,9 @@ macro_rules! level {
             }
 
             #[allow(improper_ctypes_definitions)] // `__m128d` (see `Baseline`).
+            $(#[$ad])*
             $(#[target_feature(enable = $f)])*
-            pub(super) extern "sysv64-unwind" fn mul_ru(x: __m128d, y: __m128d) -> __m128d {
+            pub(super) extern $adabi fn mul_ru(x: __m128d, y: __m128d) -> __m128d {
                 $backend::mul_ru(x, y)
             }
 
@@ -1020,7 +1051,8 @@ macro_rules! level {
             // LLVM called that function out of line, in an instance compiled without `fma`
             // that calls the C library's `fma`. Marking `sqrt1_ru_impl` `#[inline(always)]`
             // inlined it into `Interval::sqrt` too, which `DecInterval::sqrt` then called out
-            // of line, at up to 15 more instructions per call (cachegrind, row 123).
+            // of line, at up to 15 more instructions per call (cachegrind, row 123). `V4` has an
+            // inlined copy of the `sqrt1_ru` of `avx512f`, one square root with embedded rounding.
             level!(@sqrt1_ru $sq, $m);
 
             #[inline(always)]
@@ -1034,11 +1066,11 @@ macro_rules! level {
     };
 }
 
+// The builds of the copies of `V4`, which include those of `V2` and `V3`.
 #[cfg(all(
     target_arch = "x86_64",
     not(docsrs),
     not(feature = "force-generic"),
-    not(all(target_feature = "avx", target_feature = "fma")),
     not(target_feature = "avx512f"),
 ))]
 use super::x86_64::{self, from_m128d, to_m128d};
@@ -1071,6 +1103,7 @@ level! {
     copies v2 in all(not(docsrs), not(feature = "force-generic"), not(target_feature = "sse4.2")),
     backend sse42,
     features ["popcnt", "sse3", "sse4.1", "sse4.2", "ssse3"],
+    add_ru div_ru mul_ru [] extern "sysv64-unwind",
     mul_add_ru [] extern "sysv64-unwind",
     sqrt1_ru baseline
 }
@@ -1093,8 +1126,6 @@ level! {
     /// backend do. In other builds, such as one for `x86-64-v3` or `haswell`, and with
     /// `force-generic`, the operations run the build's backend, that of [`Baseline`].
     ///
-    /// inari has no token of `x86-64-v4`.
-    ///
     /// ```
     /// use inari::{simd::{Simd, V3}, *};
     ///
@@ -1115,8 +1146,52 @@ level! {
         "avx", "avx2", "bmi1", "bmi2", "f16c", "fma", "lzcnt", "movbe", "popcnt", "sse3",
         "sse4.1", "sse4.2", "ssse3"
     ],
+    add_ru div_ru mul_ru [] extern "sysv64-unwind",
     mul_add_ru [inline] extern "Rust",
     sqrt1_ru copy
+}
+
+#[cfg(target_arch = "x86_64")]
+level! {
+    /// The token of the target features of [`V3`] and `avx512bw`, `avx512cd`, `avx512dq`,
+    /// `avx512f` and `avx512vl`, which the level `x86-64-v4` of the x86-64 psABI has.
+    ///
+    /// [`V4::try_new`] returns one only if the CPU has each of these features, and the
+    /// [`vectorize`](Simd::vectorize) of `V4` enables these features and no others. The level
+    /// also has `cmpxchg16b` and LAHF-SAHF, which `V4` neither checks nor enables, and OSXSAVE,
+    /// which std checks as part of `avx`.
+    ///
+    /// Unless the feature `force-generic` is on, the `*_with` operations of
+    /// [`Interval`](crate::Interval) and [`DecInterval`](crate::DecInterval) at `V4` run the
+    /// `avx512f` backend, which rounds with the embedded rounding of AVX-512, in a build without
+    /// the target feature `avx512f`, such as one for `x86-64`, `x86-64-v2`, `x86-64-v3` or
+    /// `haswell`. In other builds, such as one for `x86-64-v4`, and with `force-generic`, they run
+    /// the build's backend, that of [`Baseline`].
+    ///
+    /// ```
+    /// use inari::{simd::{Simd, V4}, *};
+    ///
+    /// let x = const_interval!(1.0, 2.0);
+    /// let y = const_interval!(3.0, 4.0);
+    /// let z = const_interval!(-1.0, 1.0);
+    /// if let Some(s) = V4::try_new() {
+    ///     assert_eq!(s.vectorize(|| x.mul_add_with(s, y, z)), const_interval!(2.0, 9.0));
+    /// }
+    /// ```
+    V4,
+    copies v4 in all(
+        not(docsrs),
+        not(feature = "force-generic"),
+        not(target_feature = "avx512f")
+    ),
+    backend avx512f,
+    features [
+        "avx", "avx2", "avx512bw", "avx512cd", "avx512dq", "avx512f", "avx512vl", "bmi1", "bmi2",
+        "f16c", "fma", "lzcnt", "movbe", "popcnt", "sse3", "sse4.1", "sse4.2", "ssse3"
+    ],
+    add_ru div_ru mul_ru [inline] extern "Rust",
+    mul_add_ru [inline] extern "Rust",
+    sqrt1_ru inline
 }
 
 #[cfg(test)]

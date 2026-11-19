@@ -8,7 +8,7 @@ use std::mem::transmute;
 //
 // It is the `classify_bits` of `Baseline` (`src/simd/token.rs`), except in the x86-64 builds with
 // neither `docsrs` nor `force-generic`, where this function is not compiled: there `Baseline`,
-// like the copies of `V2` and `V3` in every build that has them, calls the `classify_bits` of
+// like the copies of `V2`, `V3` and `V4` in every build that has them, calls the `classify_bits` of
 // `src/simd/x86_64.rs`, which computes the same class code with one `movmskps`. These are the
 // builds whose backend is one of that file (`sse42`, `fma` or `avx512f`), and those without
 // `sse4.2`, such as a build for plain `x86-64`, whose backend is the portable one. The body is

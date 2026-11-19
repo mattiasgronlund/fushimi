@@ -229,15 +229,34 @@ cfg_if::cfg_if! {
         mod lanewise;
         mod fma;
         pub(crate) use fma::*;
+
+        // The backend of the token `V4` (`src/simd/token.rs`), whose copies of the functions
+        // below compile it with the target features of `x86-64-v4`.
+        #[allow(dead_code, unused_imports)] // Only what those copies call is used.
+        pub(super) mod avx512f;
+
+        // The vectors of this build are those of the backends: the copies take them as they are.
+        #[inline(always)]
+        pub(super) fn to_m128d(x: F64X2) -> __m128d {
+            x
+        }
+
+        #[inline(always)]
+        pub(super) fn from_m128d(x: __m128d) -> F64X2 {
+            x
+        }
     } else if #[cfg(target_feature = "sse4.2")] {
         mod lanewise;
         mod sse42;
         pub(crate) use sse42::*;
 
-        // The backend of the token `V3` (`src/simd/token.rs`), whose copies of the functions
-        // below compile it with the target features of `x86-64-v3`.
+        // The backends of the tokens `V3` and `V4` (`src/simd/token.rs`), whose copies of the
+        // functions below compile them with the target features of `x86-64-v3` and
+        // `x86-64-v4`.
         #[allow(dead_code, unused_imports)] // Only what those copies call is used.
         pub(super) mod fma;
+        #[allow(dead_code, unused_imports)] // Only what those copies call is used.
+        pub(super) mod avx512f;
 
         // The vectors of this build are those of the backends: the copies take them as they are.
         #[inline(always)]
@@ -251,14 +270,15 @@ cfg_if::cfg_if! {
         }
     } else {
         // Plain `x86-64`, without `sse4.2`: `src/simd.rs` takes the portable backend, and
-        // compiles this module as the backends of the tokens `V2` and `V3`
+        // compiles this module as the backends of the tokens `V2`, `V3` and `V4`
         // (`src/simd/token.rs`), whose copies of the functions below compile them with the
-        // target features of `x86-64-v2` and `x86-64-v3`, and for the `classify_bits` above,
-        // which the `classify_bits` of `Baseline` calls in place of that of `src/classify.rs`:
-        // its intrinsics are of SSE and SSE2, which every x86-64 CPU has.
+        // target features of `x86-64-v2`, `x86-64-v3` and `x86-64-v4`, and for the
+        // `classify_bits` above, which the `classify_bits` of `Baseline` calls in place of that
+        // of `src/classify.rs`: its intrinsics are of SSE and SSE2, which every x86-64 CPU has.
         mod lanewise;
         pub(super) mod sse42;
         pub(super) mod fma;
+        pub(super) mod avx512f;
 
         // The vectors of this build, `[f64; 2]`, to and from those of the backends.
         #[inline(always)]
