@@ -510,6 +510,76 @@ fn dec_v3() {
     check_v3::<DecCase>();
 }
 
+// `sqrt` where its empty results and its two computed cases meet, against the results that
+// IEEE 1788 asks for rather than against `sqrt`, at each level that the CPU has, called directly
+// and inside the level's `vectorize`. The bounds of `Interval::EMPTY` are NaN, so a test of the
+// upper bound alone tells it apart from the intervals whose square root is not empty.
+fn check_sqrt_bounds<S: Simd>(s: S) {
+    let name = type_name::<S>();
+    let inf = f64::INFINITY;
+    let i = |a: f64, b: f64| Interval::try_from((a, b)).unwrap();
+    let cases = [
+        (Interval::EMPTY, Interval::EMPTY),
+        (i(-inf, -1.0), Interval::EMPTY),
+        (i(-2.0, -1.0), Interval::EMPTY),
+        (i(-inf, -0.0), i(0.0, 0.0)),
+        (i(-1.0, -0.0), i(0.0, 0.0)),
+        (i(0.0, 0.0), i(0.0, 0.0)),
+        (i(-1.0, 4.0), i(0.0, 2.0)),
+        (i(4.0, 9.0), i(2.0, 3.0)),
+        (Interval::ENTIRE, i(0.0, inf)),
+    ];
+    for (x, expected) in cases {
+        assert_eq!(x.sqrt(), expected, "{x:?}");
+        assert_eq!(x.sqrt_with(s), expected, "{name}, direct, {x:?}");
+        let got = s.vectorize(
+            #[inline(always)]
+            || x.sqrt_with(s),
+        );
+        assert_eq!(got, expected, "{name}, vectorize, {x:?}");
+    }
+    // The decorated input, the interval of the result (`None` for NaI) and its decoration.
+    let d = DecInterval::new;
+    let dec_cases = [
+        (DecInterval::NAI, None, Decoration::Ill),
+        (DecInterval::EMPTY, Some(Interval::EMPTY), Decoration::Trv),
+        (d(i(-2.0, -1.0)), Some(Interval::EMPTY), Decoration::Trv),
+        (d(i(-inf, -0.0)), Some(i(0.0, 0.0)), Decoration::Trv),
+        (d(i(-1.0, -0.0)), Some(i(0.0, 0.0)), Decoration::Trv),
+        (d(i(0.0, 0.0)), Some(i(0.0, 0.0)), Decoration::Com),
+        (d(i(4.0, 9.0)), Some(i(2.0, 3.0)), Decoration::Com),
+        (DecInterval::ENTIRE, Some(i(0.0, inf)), Decoration::Trv),
+    ];
+    for (x, interval, decoration) in dec_cases {
+        let vectorized = s.vectorize(
+            #[inline(always)]
+            || x.sqrt_with(s),
+        );
+        for (how, got) in [
+            ("sqrt", x.sqrt()),
+            ("direct", x.sqrt_with(s)),
+            ("vectorize", vectorized),
+        ] {
+            assert_eq!(got.interval(), interval, "{name}, {how}, {x:?}");
+            assert_eq!(got.decoration(), decoration, "{name}, {how}, {x:?}");
+        }
+    }
+}
+
+#[test]
+fn sqrt_bounds() {
+    check_sqrt_bounds(Baseline);
+    #[cfg(target_arch = "x86_64")]
+    {
+        if let Some(s) = V2::try_new() {
+            check_sqrt_bounds(s);
+        }
+        if let Some(s) = V3::try_new() {
+            check_sqrt_bounds(s);
+        }
+    }
+}
+
 // The cases, run by `dispatch` at its level.
 struct Run<'a, C>(&'a [C]);
 

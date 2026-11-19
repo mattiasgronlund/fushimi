@@ -26,6 +26,13 @@
     The first lane is [-0] or [-(sqrt a rounded down)], the least float at
     or above [-sqrt(max(a, 0))].
 
+    In a build for [wasm32], [sqrt_with] tests for an empty [x] and for
+    [b < 0] apart, which [Interval.sqrt_wasm32] and
+    [DecInterval.sqrt_wasm32] in [Model.v] transcribe, and
+    [sqrt_wasm32_eq] and [dec_sqrt_wasm32_eq] show them equal to
+    [Interval.sqrt] and [DecInterval.sqrt] on a valid argument, so
+    [sqrt_correct] and [dec_sqrt_correct] hold for them too.
+
     [sqrt] is continuous at each point of its domain, relative to the
     domain, 0 included. The strongest decoration of [sqrt] on [x], with the
     result [z], is:
@@ -131,9 +138,9 @@ Qed.
 
 (** ** Signs of the bounds
 
-    [lt] and [le] compare the values of finite floats ([Bltb_correct] and
-    [Bleb_correct]), and -inf is below 0 and +inf above. A zero of either
-    sign is not below 0, and is at most 0. *)
+    [lt], [le] and [ge] compare the values of finite floats ([Bltb_correct]
+    and [Bleb_correct]), and -inf is below 0 and +inf above. A zero of
+    either sign is not below 0, and is at most 0 and at least 0. *)
 
 Lemma upper_lt_zero :
   forall b, upper_ok b ->
@@ -144,6 +151,17 @@ intros b [Fb| ->]; [|exact I].
 unfold lt. rewrite (Bltb_correct _ _ b zero Fb eq_refl), (bound_finite _ Fb).
 change (B2R zero) with 0%R.
 case Rlt_bool_spec; intros H; cbn [below]; lra.
+Qed.
+
+Lemma upper_ge_zero :
+  forall b, upper_ok b -> ge b zero = negb (lt b zero).
+Proof.
+intros b [Fb| ->]; [|reflexivity].
+unfold ge, lt.
+rewrite (Bleb_correct _ _ zero b eq_refl Fb), (Bltb_correct _ _ b zero Fb eq_refl).
+change (B2R zero) with 0%R.
+case Rle_bool_spec; intros H1; case Rlt_bool_spec; intros H2;
+  reflexivity || lra.
 Qed.
 
 Lemma lower_le_zero :
@@ -323,28 +341,27 @@ Qed.
 
 Lemma sqrt_empty_or_neg :
   forall has_fma x,
-  is_nan (fst (rep x)) = true \/ lt (snd (rep x)) zero = true ->
+  ge (snd (rep x)) zero = false ->
   Interval.sqrt has_fma x = Some Interval.EMPTY.
 Proof.
 intros has_fma x H.
-unfold Interval.sqrt, Interval.is_empty, Interval.inf_raw, Interval.sup_raw.
-cbv zeta. destruct H as [H|H]; rewrite H; [reflexivity|].
-destruct (is_nan (fst (rep x))); reflexivity.
+unfold Interval.sqrt, Interval.inf_raw, Interval.sup_raw.
+cbv zeta. rewrite H. reflexivity.
 Qed.
 
 (** [with_infsup_raw zero s] stores [[-0; s]], and [neg0] of
     [[RD(sqrt a); RU(sqrt b)]] stores [[-RD(sqrt a); RU(sqrt b)]]. *)
 Lemma sqrt_some :
   forall has_fma x,
-  is_nan (fst (rep x)) = false -> lt (snd (rep x)) zero = false ->
+  ge (snd (rep x)) zero = true ->
   Interval.sqrt has_fma x =
     Some {| rep := (if le (opp (fst (rep x))) zero then opp zero
                     else opp (Bsqrt mode_DN (opp (fst (rep x)))),
                     Bsqrt mode_UP (snd (rep x))) |}.
 Proof.
-intros has_fma x Hn Hb.
-unfold Interval.sqrt, Interval.is_empty, Interval.inf_raw, Interval.sup_raw.
-cbv zeta. rewrite Hn, Hb.
+intros has_fma x Hb.
+unfold Interval.sqrt, Interval.inf_raw, Interval.sup_raw.
+cbv zeta. rewrite Hb.
 destruct (le (opp (fst (rep x))) zero).
 - rewrite sqrt1_ru_correct. reflexivity.
 - rewrite sqrt_rd_ru_correct. reflexivity.
@@ -361,20 +378,25 @@ Theorem sqrt_correct :
 Proof.
 intros has_fma x Hx.
 destruct (is_nan (fst (rep x))) eqn:Hn.
-- (* An empty [x] has an empty image. *)
-  rewrite (sqrt_empty_or_neg has_fma x (or_introl Hn)).
+- (* An empty [x] has an empty image. Its upper bound is NaN, which
+     [ge] finds not at least 0. *)
+  pose proof (empty_nan x Hx Hn) as E.
+  rewrite (sqrt_empty_or_neg has_fma x) by (rewrite E; reflexivity).
   eexists. split; [reflexivity|]. apply tightest_empty.
-  intros u (r & Hr & _). exact (mem_nan x r (empty_nan x Hx Hn) Hr).
+  intros u (r & Hr & _). exact (mem_nan x r E Hr).
 - destruct (valid_nonempty x Hx Hn) as (Ha & Hb & _).
   pose proof (upper_lt_zero _ Hb) as HB.
   destruct (lt (snd (rep x)) zero) eqn:Hlt.
   + (* Every real of [x] is below 0, so outside the domain. *)
-    rewrite (sqrt_empty_or_neg has_fma x (or_intror Hlt)).
+    rewrite (sqrt_empty_or_neg has_fma x)
+      by (rewrite (upper_ge_zero _ Hb), Hlt; reflexivity).
     eexists. split; [reflexivity|]. apply tightest_empty.
     intros u (r & Hr & Hd & _). apply (mem_bounds x r Ha Hb) in Hr.
     destruct Hr as [_ Hr]. unfold sqrt_dom in Hd.
     destruct (bound (snd (rep x))); [lra | contradiction].
-  + rewrite (sqrt_some has_fma x Hn Hlt). eexists. split; [reflexivity|].
+  + rewrite (sqrt_some has_fma x)
+      by (rewrite (upper_ge_zero _ Hb), Hlt; reflexivity).
+    eexists. split; [reflexivity|].
     apply sqrt_tightest; assumption.
 Qed.
 
@@ -441,4 +463,38 @@ destruct (lt (opp (fst (rep (itv x)))) zero) eqn:HltA.
   pose proof (elem_set_dec_trv_com sqrt_dom sqrt x z Com Hx Hdx Hz Hc
     (or_intror (conj eq_refl (conj HD Hb)))) as H.
   cbv zeta in H. rewrite dec_min_Com_r in H. exact H.
+Qed.
+
+(** ** The [wasm32] arm *)
+
+(** On a valid [x], the [wasm32] arm of [sqrt_with] returns what the other
+    arm does. An empty [x] is stored as [[NaN; NaN]] ([empty_nan]), which
+    [ge] finds not at least 0, and the upper bound of a nonempty [x] is a
+    float or +inf, for which [ge b zero] is [negb (lt b zero)]
+    ([upper_ge_zero]). *)
+Theorem sqrt_wasm32_eq :
+  forall has_fma x, valid x ->
+  Interval.sqrt_wasm32 has_fma x = Interval.sqrt has_fma x.
+Proof.
+intros has_fma x Hx.
+destruct (is_nan (fst (rep x))) eqn:Hn.
+- unfold Interval.sqrt_wasm32, Interval.is_empty. rewrite Hn.
+  rewrite (sqrt_empty_or_neg has_fma x)
+    by (rewrite (empty_nan x Hx Hn); reflexivity).
+  reflexivity.
+- destruct (valid_nonempty x Hx Hn) as (_ & Hb & _).
+  unfold Interval.sqrt_wasm32, Interval.sqrt, Interval.is_empty,
+    Interval.inf_raw, Interval.sup_raw.
+  rewrite Hn. cbv zeta. rewrite (upper_ge_zero _ Hb).
+  destruct (lt (snd (rep x)) zero); reflexivity.
+Qed.
+
+(** The same of the decorated versions, whose Rust text is the same. *)
+Theorem dec_sqrt_wasm32_eq :
+  forall has_fma x, valid (itv x) ->
+  DecInterval.sqrt_wasm32 has_fma x = DecInterval.sqrt has_fma x.
+Proof.
+intros has_fma x Hx. unfold DecInterval.sqrt_wasm32, DecInterval.sqrt.
+destruct (DecInterval.is_nai x); [reflexivity|].
+rewrite (sqrt_wasm32_eq has_fma (itv x) Hx). reflexivity.
 Qed.

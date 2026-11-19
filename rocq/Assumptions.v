@@ -131,6 +131,8 @@ Print Assumptions mul_add_correct.
 Print Assumptions dec_mul_add_correct.
 Print Assumptions sqrt_correct.
 Print Assumptions dec_sqrt_correct.
+Print Assumptions sqrt_wasm32_eq.
+Print Assumptions dec_sqrt_wasm32_eq.
 Print Assumptions sqr_correct.
 Print Assumptions dec_sqr_correct.
 Print Assumptions recip_correct.

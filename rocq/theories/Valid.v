@@ -30,7 +30,9 @@
     Those of [dmade] are the constants, [def_com!], [const_dec_interval!],
     [new], [set_dec], [TryFrom<(f64, f64)>], [try_from_be_bytes] and its
     siblings, [From<DecNInterval>], which [FromStr] calls, and the
-    decorated versions of the same operations.
+    decorated versions of the same operations. [sqrt] has two of each:
+    [made_sqrt_wasm32] and [dmade_sqrt_wasm32] are the arm of [sqrt_with]
+    in a build for [wasm32] ([sqrt_wasm32] in [Model.v]).
 
     The functions of [src/elementary.rs] have two constructors each. Those
     named [made_kernel_exp], [dmade_kernel_exp] and so on are the library's
@@ -52,6 +54,7 @@
 
 From Inari Require Import Model Mpfr ValidMake ValidSetOp ValidOps ValidDecOps
   ValidElem PointValid DyPoint.
+From Inari Require Sqrt.
 
 Inductive made : Interval -> Prop :=
   | made_EMPTY : made Interval.EMPTY
@@ -82,6 +85,9 @@ Inductive made : Interval -> Prop :=
       forall has_fma x y, made x -> Interval.sqr has_fma x = Some y -> made y
   | made_sqrt :
       forall has_fma x y, made x -> Interval.sqrt has_fma x = Some y -> made y
+  | made_sqrt_wasm32 :
+      forall has_fma x y, made x -> Interval.sqrt_wasm32 has_fma x = Some y ->
+      made y
   | made_trunc : forall x, made x -> made (Interval.trunc x)
   | made_neg : forall x, made x -> made (Interval.neg x)
   | made_add :
@@ -259,6 +265,9 @@ with dmade : DecInterval -> Prop :=
   | dmade_sqrt :
       forall has_fma x z, dmade x -> DecInterval.sqrt has_fma x = Some z ->
       dmade z
+  | dmade_sqrt_wasm32 :
+      forall has_fma x z, dmade x ->
+      DecInterval.sqrt_wasm32 has_fma x = Some z -> dmade z
   | dmade_trunc : forall x, dmade x -> dmade (DecInterval.trunc x)
   | dmade_neg : forall x, dmade x -> dmade (DecInterval.neg x)
   | dmade_add :
@@ -434,6 +443,8 @@ apply (made_dmade_ind (fun x => valid x) (fun d => valid (itv d))).
 - intros x _ Hx. exact (sign_valid x Hx).
 - intros f x y _ Hx. exact (sqr_valid f x y Hx).
 - intros f x y _ Hx. exact (sqrt_valid f x y Hx).
+- intros f x y _ Hx. rewrite (Sqrt.sqrt_wasm32_eq f x Hx).
+  exact (sqrt_valid f x y Hx).
 - intros x _ Hx. exact (trunc_valid x Hx).
 - intros x _ Hx. exact (neg_valid x Hx).
 - intros x y z _ Hx _ Hy. exact (add_valid x y z Hx Hy).
@@ -544,6 +555,8 @@ apply (made_dmade_ind (fun x => valid x) (fun d => valid (itv d))).
 - intros x _ Hx. exact (dec_sign_valid x Hx).
 - intros f x z _ Hx. exact (dec_sqr_valid f x z Hx).
 - intros f x z _ Hx. exact (dec_sqrt_valid f x z Hx).
+- intros f x z _ Hx. rewrite (Sqrt.dec_sqrt_wasm32_eq f x Hx).
+  exact (dec_sqrt_valid f x z Hx).
 - intros x _ Hx. exact (dec_trunc_valid x Hx).
 - intros x _ Hx. exact (dec_neg_valid x Hx).
 - intros x y z _ Hx _ Hy. exact (dec_add_valid x y z Hx Hy).

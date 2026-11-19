@@ -7783,12 +7783,35 @@ Definition sign (self : Interval) : Interval :=
     {| rep := r |}.
 
 (** [pub fn sqrt_with<S: Simd>(self, s: S) -> Self], for an [s] whose
-    backend is the portable one; [pub fn sqrt(self) -> Self] is
+    backend is the portable one, in a build for a [target_arch] other than
+    ["wasm32"]: the [else] arm of its [cfg_if!] ([sqrt_wasm32] below
+    transcribes the other one); [pub fn sqrt(self) -> Self] is
     [self.sqrt_with(Baseline)]. Its [s.sqrt1_ru] and [s.sqrt_rd_ru] call
     [sqrt1_ru_impl::<HAS_FMA>] and [sqrt1_rd_impl::<HAS_FMA>], so
-    [has_fma] is an argument, as for [mul]. Each [return] is the value of
-    an [if] whose [else] holds the rest of the body, and [0.0] is +0. *)
+    [has_fma] is an argument, as for [mul]. [b >= 0.0] is [ge b zero], and
+    [0.0] is +0. *)
 Definition sqrt (has_fma : bool) (self : Interval) : option Interval :=
+  let a := inf_raw self in
+  let b := sup_raw self in
+  if ge b zero then
+    if le a zero then
+      let* s := Generic.sqrt1_ru has_fma b in
+      Some (with_infsup_raw zero s)
+    else
+      let* r := Generic.sqrt_rd_ru has_fma (Generic.neg0 (rep self)) in
+      Some {| rep := Generic.neg0 r |}
+  else Some EMPTY.
+
+(** [pub fn sqrt_with<S: Simd>(self, s: S) -> Self], for an [s] whose
+    backend is the portable one, in a build for [target_arch = "wasm32"]
+    (whose [Baseline] has that backend without [target_feature =
+    "simd128"], or with the [force-generic] feature): the arm of its
+    [cfg_if!] for that target, which tests
+    for the empty results twice; [pub fn sqrt(self) -> Self] is
+    [self.sqrt_with(Baseline)]. [has_fma] is an argument, as in [sqrt]
+    above. Each [return] is the value of an [if] whose [else] holds the
+    rest of the body, and [0.0] is +0. *)
+Definition sqrt_wasm32 (has_fma : bool) (self : Interval) : option Interval :=
   if is_empty self then Some EMPTY
   else
     let a := inf_raw self in
@@ -8939,6 +8962,18 @@ Definition sqrt (has_fma : bool) (self : DecInterval) : option DecInterval :=
   else
     let d := if lt (Interval.inf_raw (itv self)) zero then Trv else dec self in
     let* x := Interval.sqrt has_fma (itv self) in
+    Some (set_dec x d).
+
+(** [pub fn sqrt_with<S: Simd>(self, s: S) -> Self] of [impl DecInterval]
+    and [pub fn sqrt(self) -> Self], as in [sqrt] above, in a build for
+    [target_arch = "wasm32"]: the Rust text is the same, but there
+    [self.x().sqrt_with(s)] is [Interval.sqrt_wasm32 has_fma (itv self)]. *)
+Definition sqrt_wasm32 (has_fma : bool) (self : DecInterval) :
+    option DecInterval :=
+  if is_nai self then Some self
+  else
+    let d := if lt (Interval.inf_raw (itv self)) zero then Trv else dec self in
+    let* x := Interval.sqrt_wasm32 has_fma (itv self) in
     Some (set_dec x d).
 
 (** [impl_dec!(trunc, x, y, (x.inf_raw() != 0.0 && x.inf_raw() == y.inf_raw())

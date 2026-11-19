@@ -66,6 +66,7 @@ com-unchecked src/simd/x86_64.rs: unsafe { transmute::<F64X2, [f64; 2]>(x)[0] }
 com-unchecked src/simd/x86_64.rs: unsafe { transmute::<F64X2, [f64; 2]>(x)[1] }
 com-unchecked src/simd/x86_64.rs: use std::{arch::x86_64::*, mem::transmute};
 valid-raw src/basic.rs: Self::with_infsup_raw(0.0, s.sqrt1_ru(b))
+valid-raw src/basic.rs: Self::with_infsup_raw(0.0, s.sqrt1_ru(b))
 valid-raw src/bytes.rs: Some(Self::new_unchecked(Interval::with_infsup_raw(a, b), dec))
 valid-raw src/bytes.rs: Some(Self::with_infsup_raw(a, b))
 valid-raw src/classify.rs: // `classify2_pair` in `rocq/theories/Classify2.v` shows that `transmute` gets the
@@ -172,6 +173,7 @@ valid-rep src/basic.rs: rep: s.mul_add_ru(x, y, addend.rep), // *
 valid-rep src/basic.rs: rep: s.mul_add_ru(x, y, addend.rep), // *
 valid-rep src/basic.rs: rep: s.mul_ru(x, y),
 valid-rep src/basic.rs: rep: s.mul_ru(x, y),
+valid-rep src/basic.rs: rep: s.neg0(s.sqrt_rd_ru(s.neg0(self.rep))),
 valid-rep src/basic.rs: rep: s.neg0(s.sqrt_rd_ru(s.neg0(self.rep))),
 valid-rep src/basic.rs: rep: s.shuffle02(s.div_ru(x, y), s.splat(f64::INFINITY)),
 valid-rep src/basic.rs: rep: s.shuffle02(s.div_ru(x, y), s.splat(f64::INFINITY)),

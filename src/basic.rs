@@ -754,26 +754,55 @@ impl Interval {
     #[must_use]
     pub fn sqrt_with<S: Simd>(self, s: S) -> Self {
         // Proved correct in `rocq/theories/Sqrt.v` for an `s` whose backend is the portable
-        // one. `rocq/theories/Model.v` transcribes this function for such an `s`, so it has to
-        // be updated along with it.
-        if self.is_empty() {
-            return Self::EMPTY;
-        }
+        // one. `rocq/theories/Model.v` transcribes this function for such an `s`, each arm of
+        // the `cfg_if!`, so it has to be updated along with it.
+        cfg_if::cfg_if! {
+            if #[cfg(target_arch = "wasm32")] {
+                // The two tests of the empty results, as the one test of the other arm ran
+                // more wasm operators per call on some arguments (counted with wasmtime's
+                // fuel, rustc 1.96): up to 4 more on an empty `self` (none in `Interval::sqrt`),
+                // with and without `simd128`, and 1 more on [-2, -1] and [-1, 4] in
+                // `DecInterval::sqrt_with` without it, where the branch to `EMPTY` on
+                // `b >= 0.0` false took an `i32.eqz`, though 2 to 8 fewer on most of the others.
+                if self.is_empty() {
+                    return Self::EMPTY;
+                }
 
-        let a = self.inf_raw();
-        let b = self.sup_raw();
+                let a = self.inf_raw();
+                let b = self.sup_raw();
 
-        if b < 0.0 {
-            Self::EMPTY
-        } else if a <= 0.0 {
-            // Only one square root is needed, so `sqrt_rd_ru` would be wasted: a
-            // lower lane of zero fails its fast-path check (see BENCHMARKS.md).
-            Self::with_infsup_raw(0.0, s.sqrt1_ru(b))
-        } else {
-            // Both endpoints in one vector square root. `neg0` turns the
-            // representation [-a; b] into [a; b], and back afterward.
-            Self {
-                rep: s.neg0(s.sqrt_rd_ru(s.neg0(self.rep))),
+                if b < 0.0 {
+                    Self::EMPTY
+                } else if a <= 0.0 {
+                    // As in the other arm.
+                    Self::with_infsup_raw(0.0, s.sqrt1_ru(b))
+                } else {
+                    Self {
+                        rep: s.neg0(s.sqrt_rd_ru(s.neg0(self.rep))),
+                    }
+                }
+            } else {
+                let a = self.inf_raw();
+                let b = self.sup_raw();
+
+                // `b >= 0.0` is false where `b < 0.0`, and where `self` is empty, which is
+                // stored as [NaN; NaN] (see `Interval`), so this one test sends both to
+                // `EMPTY`.
+                if b >= 0.0 {
+                    if a <= 0.0 {
+                        // Only one square root is needed, so `sqrt_rd_ru` would be wasted: a
+                        // lower lane of zero fails its fast-path check (see BENCHMARKS.md).
+                        Self::with_infsup_raw(0.0, s.sqrt1_ru(b))
+                    } else {
+                        // Both endpoints in one vector square root. `neg0` turns the
+                        // representation [-a; b] into [a; b], and back afterward.
+                        Self {
+                            rep: s.neg0(s.sqrt_rd_ru(s.neg0(self.rep))),
+                        }
+                    }
+                } else {
+                    Self::EMPTY
+                }
             }
         }
     }
