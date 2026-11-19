@@ -31,7 +31,11 @@ use super::{add_rn, all, and, eq, extract, gt, lt, or, splat, sub_rn, F64X2};
 use crate::simd::generic;
 use std::arch::aarch64::*;
 
-pub(crate) use super::lanewise::{add_ru, sqrt1_ru, sub1_ru, sub_ru};
+pub(crate) use super::lanewise::{add_ru_c_abi, sqrt1_ru, sub1_ru, sub_ru};
+// Outside `lanewise.rs`, the crate calls `add_ru_c_abi` in place of `add_ru` (see `Baseline` in
+// `src/simd/token.rs`), so only the tests and `src/__bench.rs` use this re-export.
+#[cfg(any(test, feature = "__bench"))]
+pub(crate) use super::lanewise::add_ru;
 #[cfg(test)]
 pub(crate) use super::lanewise::{
     add_ru_fpcr, div_ru_fpcr, mul_add_ru_fpcr, mul_ru_fpcr, sqrt1_rd_fpcr, sqrt1_ru_fpcr,
@@ -39,8 +43,25 @@ pub(crate) use super::lanewise::{
 };
 
 /// `div_ru([x0, x1], [y0, y1]) = [x0 / y0, x1 / y1]` rounded toward +∞.
-// Not `#[inline(never)]`, unlike `mul_ru` (see `Baseline` in `src/simd/token.rs`).
+// Not `#[inline(never)]`, unlike `mul_ru`, and neither is `div_ru_c_abi` (see `Baseline` in
+// `src/simd/token.rs`). `CrateBaseline` calls this copy.
 pub(crate) fn div_ru(x: F64X2, y: F64X2) -> F64X2 {
+    div_ru_body(x, y)
+}
+
+/// `div_ru([x0, x1], [y0, y1]) = [x0 / y0, x1 / y1]` rounded toward +∞.
+// The copy of `div_ru` with the ABI `C`, which passes and returns each vector in a register, and
+// which `Baseline::div_ru` calls: that method is `#[inline(always)]`, so a user's crate calls this
+// copy, which the crate exports, whereas `CrateBaseline` calls `div_ru` (see `CrateBaseline` in
+// `src/simd/token.rs`).
+#[allow(improper_ctypes_definitions)] // `float64x2_t`, but only Rust code calls it.
+pub(crate) extern "C-unwind" fn div_ru_c_abi(x: F64X2, y: F64X2) -> F64X2 {
+    div_ru_body(x, y)
+}
+
+// The body of `div_ru` and `div_ru_c_abi`.
+#[inline(always)]
+fn div_ru_body(x: F64X2, y: F64X2) -> F64X2 {
     // See `generic::div1_ru_fast`, the FMA variant.
     let q = div_rn(x, y);
     let special = is_special(x, y);
@@ -174,9 +195,27 @@ pub(crate) fn mul_add_ru(a: F64X2, b: F64X2, c: F64X2) -> F64X2 {
 }
 
 /// `mul_ru([x0, x1], [y0, y1]) = [x0 * y0, x1 * y1]` rounded toward +∞.
-// As the build's backend, it is out of line (see `Baseline` in `src/simd/token.rs`).
+// As the build's backend, it is out of line, as is `mul_ru_c_abi` (see `Baseline` in
+// `src/simd/token.rs`). `CrateBaseline` calls this copy.
 #[inline(never)]
 pub(crate) fn mul_ru(x: F64X2, y: F64X2) -> F64X2 {
+    mul_ru_body(x, y)
+}
+
+/// `mul_ru([x0, x1], [y0, y1]) = [x0 * y0, x1 * y1]` rounded toward +∞.
+// The copy of `mul_ru` with the ABI `C`, which passes and returns each vector in a register, and
+// which `Baseline::mul_ru` calls: that method is `#[inline(always)]`, so a user's crate calls this
+// copy, which the crate exports, whereas `CrateBaseline` calls `mul_ru` (see `CrateBaseline` in
+// `src/simd/token.rs`).
+#[allow(improper_ctypes_definitions)] // `float64x2_t`, but only Rust code calls it.
+#[inline(never)]
+pub(crate) extern "C-unwind" fn mul_ru_c_abi(x: F64X2, y: F64X2) -> F64X2 {
+    mul_ru_body(x, y)
+}
+
+// The body of `mul_ru` and `mul_ru_c_abi`.
+#[inline(always)]
+fn mul_ru_body(x: F64X2, y: F64X2) -> F64X2 {
     // See `generic::mul1_ru_fast`.
     let p = mul_rn(x, y);
     let special = is_special(x, y);

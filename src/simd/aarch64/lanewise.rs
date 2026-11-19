@@ -17,8 +17,25 @@ use crate::simd::generic;
 use std::{arch::aarch64::*, mem::transmute};
 
 /// `add_ru([x0, x1], [y0, y1]) = [x0 + y0, x1 + y1]` rounded toward +∞.
-// Not `#[inline(never)]`, unlike `mul_ru` (see `Baseline` in `src/simd/token.rs`).
+// Not `#[inline(never)]`, unlike `mul_ru`, and neither is `add_ru_c_abi` (see `Baseline` in
+// `src/simd/token.rs`). `sub_ru` calls this copy.
 pub(crate) fn add_ru(x: F64X2, y: F64X2) -> F64X2 {
+    add_ru_body(x, y)
+}
+
+/// `add_ru([x0, x1], [y0, y1]) = [x0 + y0, x1 + y1]` rounded toward +∞.
+// The copy of `add_ru` with the ABI `C`, which passes and returns each vector in a register, and
+// which `Baseline::add_ru` calls: that method is `#[inline(always)]`, so a user's crate calls this
+// copy, which the crate exports, and so do `x + y` and `x - y` of intervals, which call
+// `add_with` and `sub_with` with `Baseline` (see `Baseline` in `src/simd/token.rs`).
+#[allow(improper_ctypes_definitions)] // `float64x2_t`, but only Rust code calls it.
+pub(crate) extern "C-unwind" fn add_ru_c_abi(x: F64X2, y: F64X2) -> F64X2 {
+    add_ru_body(x, y)
+}
+
+// The body of `add_ru` and `add_ru_c_abi`.
+#[inline(always)]
+fn add_ru_body(x: F64X2, y: F64X2) -> F64X2 {
     // See `generic::add1_ru_fast`.
     let s = add_rn(x, y);
     let e = two_sum_err(x, y, s);

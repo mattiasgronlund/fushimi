@@ -299,35 +299,37 @@ pub fn dispatch<W: WithLevel>(w: W) -> W::Output {
 // and none of them on wasm32 with `simd128`), are called here from methods without `#[inline]`,
 // which the crate exports in their place (where the portable backend is the build's on x86-64,
 // `#[inline(always)]` methods call the copies of `div_ru` and `mul_ru` with Rust's ABI instead, see
-// `div_ru` below, and the crate's operations call `div_ru` and `mul_ru` through `CrateBaseline`
-// below). LLVM inlines these small methods into the crate's operations, which then call the backend
-// functions as before, except that with one codegen unit, where the portable backend is the build's
-// on aarch64, it inlined `mul_ru` into its method instead. Where the portable, `sse42` or `fma`
-// backend is the build's, the backend functions are `#[inline(never)]` (except the portable ones on
-// aarch64, see below), as otherwise LLVM would inline each into the method that calls it. Making
-// the methods `#[inline(always)]` there (with that of `mul_add_ru` where `sse42` is the backend,
-// see below), so that a user's crate calls the backend functions without them, made the crate
-// export the backend functions, and its own operations then called them through the global offset
-// table. Where `fma` or `sse42` is the backend, that cost 2 to 4 more instructions per
-// `Interval::mul`, and per `Interval::mul_add` where `sse42` is, and none per `Interval::add` or
-// `Interval::div`, whereas a user's loop of `*_with` calls that run the build's backend ran 14 to
-// 16 fewer instructions per `add_with`, `mul_with` or `div_with` (29 to 31 for a `mul_with` of two
+// `div_ru` below, and where the `aarch64` backend is the build's, the copies of `add_ru`, `div_ru`
+// and `mul_ru` with the ABI `C`, see below; in both, the crate's operations call `div_ru` and
+// `mul_ru` themselves, directly or through `CrateBaseline` below). LLVM inlines these small
+// methods into the crate's operations, which then call the backend functions as before, except
+// that with one codegen unit, where the portable backend is the build's on aarch64, it inlined
+// `mul_ru` into its method instead. Where the portable, `sse42` or `fma` backend is the build's,
+// the backend functions are `#[inline(never)]` (except the portable ones on aarch64, see below),
+// as otherwise LLVM would inline each into the method that calls it. Making the methods
+// `#[inline(always)]` there (with that of `mul_add_ru` where `sse42` is the backend, see below),
+// so that a user's crate calls the backend functions without them, made the crate export the
+// backend functions, and its own operations then called them through the global offset table.
+// Where `fma` or `sse42` is the backend, that cost 2 to 4 more instructions per `Interval::mul`,
+// and per `Interval::mul_add` where `sse42` is, and none per `Interval::add` or `Interval::div`,
+// whereas a user's loop of `*_with` calls that run the build's backend ran 14 to 16 fewer
+// instructions per `add_with`, `mul_with` or `div_with` (29 to 31 for a `mul_with` of two
 // intervals that have 0 in their interiors), but 3 to 5 more per `div_with` by an interval that
 // has 0 in its interior (cachegrind, in Cargo's default release profile, row 143). Where the
 // portable backend is, it cost up to 6 more instructions per call in a build for `x86-64` (21
 // with one codegen unit; cachegrind, row 136).
 //
-// Where the `aarch64` backend is the build's, only `mul_ru` is `#[inline(never)]`: there LLVM
-// inlines `add_ru` and `div_ru` into the methods and into the crate's operations, which then take
-// fewer instructions (counted under QEMU), whereas inlining `mul_ru` gives `Interval::mul` a stack
-// frame and more instructions. Where the portable backend is the build's on aarch64 (with
-// `force-generic`), none of the three is: there the attribute kept LLVM, in a build with fat LTO,
-// from inlining them into a user's loops, and a harness built as the benchmarks are (fat LTO, one
-// codegen unit) ran 14 to 22 more instructions per `add_ru`, `div_ru` or `mul_ru` of
-// `src/__bench.rs`, and 93 more per 3x3 determinant of intervals, with it than without it (counted
-// under QEMU, row 146). Nor does being out of line keep an ABI that passes their vectors in
-// registers there, as the ABI `sysv64` does for the portable `div_ru` and `mul_ru` on x86-64: they
-// take Rust's ABI, which passed them by pointer in Cargo's default release profile.
+// Where the `aarch64` backend is the build's, only `mul_ru` and its copy `mul_ru_c_abi` are
+// `#[inline(never)]`: there LLVM inlines `add_ru` and `div_ru`, or their copies, into the crate's
+// operations, which then take fewer instructions (counted under QEMU), whereas inlining `mul_ru`
+// gives `Interval::mul` a stack frame and more instructions. Where the portable backend is the
+// build's on aarch64 (with `force-generic`), none of the three is: there the attribute kept LLVM,
+// in a build with fat LTO, from inlining them into a user's loops, and a harness built as the
+// benchmarks are (fat LTO, one codegen unit) ran 14 to 22 more instructions per `add_ru`, `div_ru`
+// or `mul_ru` of `src/__bench.rs`, and 93 more per 3x3 determinant of intervals, with it than
+// without it (counted under QEMU, row 146). Nor does being out of line keep an ABI that passes
+// their vectors in registers there, as the ABI `sysv64` does for the portable `div_ru` and `mul_ru`
+// on x86-64: they take Rust's ABI, which passed them by pointer in Cargo's default release profile.
 // `sqrt_rd_ru` has one caller in the crate's operations, which inlines it, and is
 // `#[inline(always)]` where the portable, `sse42`, `fma` or `aarch64` backend is the build's, as
 // is `mul_add_ru` where `fma` or `aarch64` is. Where `sse42` is the backend, the crate calls
@@ -337,6 +339,26 @@ pub fn dispatch<W: WithLevel>(w: W) -> W::Output {
 // `x86-64` in Cargo's default release profile, and none with one codegen unit (cachegrind, row
 // 136). (`src/__bench.rs`, compiled only with the feature `__bench`, for the benchmarks, also
 // calls `mul_add_ru`.)
+//
+// Where the `aarch64` backend is the build's, the methods `add_ru`, `div_ru` and `mul_ru` of
+// `Baseline` are `#[inline(always)]` and call the copies of these functions with the ABI `C`,
+// `add_ru_c_abi`, `div_ru_c_abi` and `mul_ru_c_abi`, which the crate exports, so that a user's
+// crate calls them without the methods in between, with each vector and the result in a register
+// (see below), whereas `CrateBaseline` calls `div_ru` and `mul_ru`. `x + y` and `x - y` of
+// intervals call `add_ru_c_abi` through `Baseline`, and LLVM inlined it into them in Cargo's
+// default release profile. In a crate that links inari, built for `aarch64-unknown-linux-gnu` in
+// that profile and counted under QEMU, a loop of `*_with` calls at `Baseline` then ran 7 fewer
+// instructions per `add_with` or `sub_with`, 8 fewer per `div_with` by a positive or a negative
+// interval and per `recip_with` of one, 20 to 22 fewer per `mul_with` (39 for a `mul_with` of two
+// intervals that have 0 in their interiors) and 19 fewer per `sqr_with` than with methods without
+// `#[inline]` that called `add_ru`, `div_ru` and `mul_ru`, and each operation without a token
+// that was counted ran as many or fewer: 12 to 14 fewer per `Interval::mul` (8 for two intervals
+// that have 0 in their interiors), 5 to 13 fewer per `Interval::sqr`, 8 to 12 fewer per
+// `DecInterval::mul` and 4 to 6 fewer per `DecInterval::sqr` (row 155). Making `mul_ru` itself
+// take the ABI `C`, with these methods `#[inline(always)]` or not, cost `Interval::mul` 9 or 10
+// more instructions per call for eight of the nine combinations of signs counted, built as the
+// benchmarks are (fat LTO, one codegen unit, the feature `__bench`), where the copies cost none
+// (row 155).
 //
 // The out-of-line `add_ru`, `div_ru` and `mul_ru` of the `fma` and `sse42` backends (and
 // `mul_add_ru` of `sse42`) take the ABI `sysv64`, as do the out-of-line copies of vector
@@ -353,9 +375,13 @@ pub fn dispatch<W: WithLevel>(w: W) -> W::Output {
 // release profile, and in registers with one codegen unit, as LLVM may change the ABI of a function
 // that only code in its codegen unit can call, and it returned its result through memory in both.
 // (The portable `mul_add_ru`, which a user's crate can call, took them by pointer in both.) Where
-// the `aarch64` backend is the build's, its `mul_ru` takes Rust's ABI too, and in Cargo's default
-// release profile it took its vectors in registers (by pointer with the feature `__bench`) and
-// returned its result through memory.
+// the `aarch64` backend is the build's, its `add_ru`, `div_ru` and `mul_ru` take Rust's ABI too,
+// and in Cargo's default release profile `mul_ru` took its vectors in registers (by pointer with
+// the feature `__bench`) and returned its result through memory, and the methods of `Baseline`
+// that called them, without `#[inline]`, took their vectors by pointer and returned their results
+// through memory. Their copies `add_ru_c_abi`, `div_ru_c_abi` and `mul_ru_c_abi` take the ABI `C`,
+// which passes and returns each `float64x2_t` in a register, and the lint flags `float64x2_t` too
+// ("this struct has unspecified layout").
 //
 // The other functions that a `*_with` method of `Interval` or `DecInterval` reaches, and that
 // rustc would not by itself inline into a user's crate on some target, are marked for it, apart
@@ -372,8 +398,17 @@ pub fn dispatch<W: WithLevel>(w: W) -> W::Output {
 // So a `*_with` method instantiated in a user's crate calls out of line only functions that round
 // upward or downward, and functions that they call.
 impl sealed::Backend for Baseline {
+    #[cfg(not(all(target_arch = "aarch64", not(inari_generic_backend), not(docsrs))))]
     fn add_ru(self, x: F64X2, y: F64X2) -> F64X2 {
         crate::simd::add_ru(x, y)
+    }
+
+    // Where the `aarch64` backend is the build's, `#[inline(always)]`, so that a user's crate calls
+    // the copy of `add_ru` with the ABI `C` without this method in between (see above).
+    #[cfg(all(target_arch = "aarch64", not(inari_generic_backend), not(docsrs)))]
+    #[inline(always)]
+    fn add_ru(self, x: F64X2, y: F64X2) -> F64X2 {
+        crate::simd::add_ru_c_abi(x, y)
     }
 
     #[cfg(not(all(target_arch = "x86_64", not(feature = "force-generic"), not(docsrs))))]
@@ -419,9 +454,19 @@ impl sealed::Backend for Baseline {
         x86_64::classify_bits(to_m128d(*x))
     }
 
-    #[cfg(not(all(inari_generic_backend, target_arch = "x86_64")))]
+    #[cfg(not(any(
+        all(inari_generic_backend, target_arch = "x86_64"),
+        all(target_arch = "aarch64", not(inari_generic_backend), not(docsrs))
+    )))]
     fn div_ru(self, x: F64X2, y: F64X2) -> F64X2 {
         crate::simd::div_ru(x, y)
+    }
+
+    // As `add_ru` above.
+    #[cfg(all(target_arch = "aarch64", not(inari_generic_backend), not(docsrs)))]
+    #[inline(always)]
+    fn div_ru(self, x: F64X2, y: F64X2) -> F64X2 {
+        crate::simd::div_ru_c_abi(x, y)
     }
 
     // `#[inline(always)]`, as is `mul_ru`: a user's crate then calls `div_ru_rust_abi` without
@@ -446,9 +491,19 @@ impl sealed::Backend for Baseline {
         crate::simd::mul_add_ru(x, y, z)
     }
 
-    #[cfg(not(all(inari_generic_backend, target_arch = "x86_64")))]
+    #[cfg(not(any(
+        all(inari_generic_backend, target_arch = "x86_64"),
+        all(target_arch = "aarch64", not(inari_generic_backend), not(docsrs))
+    )))]
     fn mul_ru(self, x: F64X2, y: F64X2) -> F64X2 {
         crate::simd::mul_ru(x, y)
+    }
+
+    // As `add_ru` above.
+    #[cfg(all(target_arch = "aarch64", not(inari_generic_backend), not(docsrs)))]
+    #[inline(always)]
+    fn mul_ru(self, x: F64X2, y: F64X2) -> F64X2 {
+        crate::simd::mul_ru_c_abi(x, y)
     }
 
     // `#[inline(always)]`: see `div_ru`.
@@ -505,15 +560,27 @@ impl sealed::Backend for Baseline {
 // `div_ru` and `mul_ru` of `src/simd/generic.rs`, which take the vectors in registers, where the
 // methods of `Baseline` call their copies with Rust's ABI. Only functions that a user's crate
 // cannot inline or instantiate may use it, as otherwise the crate would export the `sysv64`
-// functions, and its own operations would call them through the global offset table.
-#[cfg(all(inari_generic_backend, target_arch = "x86_64"))]
+// functions, and its own operations would call them through the global offset table. Where the
+// `aarch64` backend is the build's, it calls the `div_ru` and `mul_ru` of that backend, which take
+// Rust's ABI, where the methods of `Baseline` call their copies with the ABI `C`, which the crate
+// exports (see above).
+#[cfg(any(
+    all(inari_generic_backend, target_arch = "x86_64"),
+    all(target_arch = "aarch64", not(inari_generic_backend), not(docsrs))
+))]
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct CrateBaseline;
 
-#[cfg(not(all(inari_generic_backend, target_arch = "x86_64")))]
+#[cfg(not(any(
+    all(inari_generic_backend, target_arch = "x86_64"),
+    all(target_arch = "aarch64", not(inari_generic_backend), not(docsrs))
+)))]
 pub(crate) use Baseline as CrateBaseline;
 
-#[cfg(all(inari_generic_backend, target_arch = "x86_64"))]
+#[cfg(any(
+    all(inari_generic_backend, target_arch = "x86_64"),
+    all(target_arch = "aarch64", not(inari_generic_backend), not(docsrs))
+))]
 impl Simd for CrateBaseline {
     #[inline(always)]
     fn vectorize<F: FnOnce() -> R, R>(self, f: F) -> R {
@@ -521,7 +588,10 @@ impl Simd for CrateBaseline {
     }
 }
 
-#[cfg(all(inari_generic_backend, target_arch = "x86_64"))]
+#[cfg(any(
+    all(inari_generic_backend, target_arch = "x86_64"),
+    all(target_arch = "aarch64", not(inari_generic_backend), not(docsrs))
+))]
 impl sealed::Backend for CrateBaseline {
     #[inline(always)]
     fn add_ru(self, x: F64X2, y: F64X2) -> F64X2 {
@@ -537,8 +607,16 @@ impl sealed::Backend for CrateBaseline {
     // so the body of an `#[inline]` one would make the crate export the `sysv64` `div_ru`, and its
     // own operations would call it through the global offset table. Without the attribute, LLVM
     // still inlines this method into the crate's operations.
+    #[cfg(target_arch = "x86_64")]
     fn div_ru(self, x: F64X2, y: F64X2) -> F64X2 {
         crate::simd::generic::div_ru(x, y)
+    }
+
+    // No inline attribute here either: the body of an `#[inline]` method would make the crate
+    // export `div_ru`.
+    #[cfg(target_arch = "aarch64")]
+    fn div_ru(self, x: F64X2, y: F64X2) -> F64X2 {
+        crate::simd::div_ru(x, y)
     }
 
     #[inline(always)]
@@ -552,8 +630,15 @@ impl sealed::Backend for CrateBaseline {
     }
 
     // No inline attribute, as for `div_ru`.
+    #[cfg(target_arch = "x86_64")]
     fn mul_ru(self, x: F64X2, y: F64X2) -> F64X2 {
         crate::simd::generic::mul_ru(x, y)
+    }
+
+    // No inline attribute, as for `div_ru`.
+    #[cfg(target_arch = "aarch64")]
+    fn mul_ru(self, x: F64X2, y: F64X2) -> F64X2 {
+        crate::simd::mul_ru(x, y)
     }
 
     #[inline(always)]

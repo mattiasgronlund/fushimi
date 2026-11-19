@@ -241,7 +241,8 @@ struct Ops {
 fn binary_ops() -> Vec<(&'static str, HwBinary, Binary)> {
     // Where the build's backend is `fma` or `sse42`, its `add_ru`, `div_ru` and `mul_ru` (and
     // `mul_add_ru` of `sse42`) take the ABI `sysv64` (see `Baseline` in `src/simd/token.rs`), and
-    // the closures turn them into `fn` pointers of Rust's ABI.
+    // the closures turn them into `fn` pointers of Rust's ABI, as they do for the copies with the
+    // ABI `C` in `binary_c_abi_ops`.
     let mut ops: Vec<(&'static str, HwBinary, Binary)> = vec![
         ("add_ru", |x, y| super::add_ru(x, y), generic::add_ru),
         ("sub_ru", super::sub_ru, generic::sub_ru),
@@ -268,7 +269,53 @@ fn binary_ops() -> Vec<(&'static str, HwBinary, Binary)> {
         ),
     ];
     ops.extend(binary_fpcr_ops());
+    ops.extend(binary_c_abi_ops());
     ops
+}
+
+// The copies of `add_ru`, `div_ru` and `mul_ru` that take the ABI `C`, which the
+// methods of `Baseline` call where the `aarch64` backend is the build's (see
+// `Baseline` in `src/simd/token.rs`). The closures turn them into `fn` pointers of
+// Rust's ABI. Their names begin with `add_ru/`, `mul_ru/` and `div_ru/`, so that
+// `operation` gives them the cases of `regressions()` of those operations too.
+#[cfg(target_arch = "aarch64")]
+fn binary_c_abi_ops() -> Vec<(&'static str, HwBinary, Binary)> {
+    vec![
+        (
+            "add_ru/c_abi",
+            |x, y| super::add_ru_c_abi(x, y),
+            generic::add_ru,
+        ),
+        (
+            "mul_ru/c_abi/fma",
+            |x, y| super::mul_ru_c_abi(x, y),
+            generic::mul_ru_impl::<true>,
+        ),
+        (
+            "mul_ru/c_abi/dekker",
+            |x, y| super::mul_ru_c_abi(x, y),
+            generic::mul_ru_impl::<false>,
+        ),
+        (
+            "div_ru/c_abi/fma",
+            |x, y| super::div_ru_c_abi(x, y),
+            generic::div_ru_impl::<true>,
+        ),
+        (
+            "div_ru/c_abi/dekker",
+            |x, y| super::div_ru_c_abi(x, y),
+            generic::div_ru_impl::<false>,
+        ),
+    ]
+}
+
+// Only aarch64 has `*_c_abi` copies.
+#[cfg(all(
+    not(target_arch = "aarch64"),
+    any(target_arch = "wasm32", target_feature = "sse4.2")
+))]
+fn binary_c_abi_ops() -> Vec<(&'static str, HwBinary, Binary)> {
+    vec![]
 }
 
 // The FPCR references, against the generic backend as aarch64 builds it, with
