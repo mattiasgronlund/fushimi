@@ -109,28 +109,61 @@ jobs:
   # first; the steps named "without FMA" run the second, and the last of them
   # does so in a build for a Nehalem, whose kernel picks its copy in the same way.
   baseline:
-    # Not `ubuntu-latest`, now GitHub's Ubuntu 26.04 image, which installs the
-    # `amd64v3` builds of its packages (for `x86-64-v3`): QEMU's Nehalem cannot
-    # run their dynamic loader.
-    runs-on: ubuntu-24.04
+    # GitHub's Ubuntu 26.04 image installs the `amd64v3` builds of its packages
+    # (for `x86-64-v3`): QEMU's Nehalem cannot run their dynamic loader, and
+    # their `gcc` compiles for `x86-64-v3` by default. So this job runs in a
+    # container of Docker Hub's `ubuntu` image, which installs the `amd64`
+    # builds (for `x86-64`). Docker pulls the image by its digest and ignores
+    # the tag. To update it, write the new tag and the Digest that
+    # `docker buildx imagetools inspect ubuntu:<tag>` prints, and the new tag in
+    # the cache key below.
+    runs-on: ubuntu-latest
+    container: ubuntu:26.04@sha256:d66b366dac61b575bee2aef07e9c26e8070096fbe84a3d4d3eb0da069b5d76db
 
     env:
       RUSTDOCFLAGS: -Ctarget-cpu=x86-64 -Dwarnings
       RUSTFLAGS: -Ctarget-cpu=x86-64 -Dwarnings
 
     steps:
+      # The image has no gcc, make, git, curl or QEMU, and no `sudo`: the steps
+      # run as root. m4 is for GMP's configure script, and curl for the script
+      # at sh.rustup.rs, with which actions-rs installs rustup. This step comes
+      # first, so that checkout finds git and actions/cache finds zstd.
+      # `--no-install-recommends` also leaves out `qemu-user-binfmt`, which
+      # registers QEMU with the kernel: the steps below run `qemu-x86_64` by
+      # name.
+      - name: Install gcc, git, curl and QEMU
+        run: |
+          apt-get update
+          apt-get install --yes --no-install-recommends ca-certificates curl git build-essential m4 zstd qemu-user
+        env:
+          DEBIAN_FRONTEND: noninteractive
+
+      # The QEMU steps below run this container's dynamic loader and C library
+      # (the step above can upgrade the image's), and the C code of GMP and
+      # MPFR, which gcc compiles for its default `-march`. This step fails
+      # before them if QEMU's Nehalem cannot run this container's `/bin/true`,
+      # or if gcc's default `-march` is not `x86-64`.
+      - name: Check that QEMU's Nehalem runs this userland
+        run: |
+          qemu-x86_64 --version
+          qemu-x86_64 -cpu Nehalem /bin/true
+          gcc -Q --help=target | grep -E -- '^[[:space:]]+-march=[[:space:]]+x86-64$'
+
       - uses: actions/checkout@v4
 
-      # The cache of the other jobs under another key: they run on that Ubuntu
-      # 26.04 image, whose `gcc` is the `amd64v3` build and targets `x86-64-v3`,
-      # and GMP and MPFR built there stop the QEMU steps below with SIGILL.
+      # GMP and MPFR as gcc builds them in this container, under a key of their
+      # own that names the image's tag, so that a new tag builds them again.
+      # This workflow's other Linux jobs run on `ubuntu-latest`, now GitHub's
+      # Ubuntu 26.04 image, whose `gcc` compiles for `x86-64-v3` by default, and
+      # GMP and MPFR built there stop the QEMU steps below with SIGILL.
       - uses: actions/cache@v4
         with:
           path: |
             ~/.cache/gmp-mpfr-sys
-          key: ${{ runner.os }}-baseline-${{ secrets.CACHE_VERSION }}-${{ hashFiles('Cargo.toml') }}
+          key: ${{ runner.os }}-baseline-ubuntu-26.04-${{ secrets.CACHE_VERSION }}-${{ hashFiles('Cargo.toml') }}
           restore-keys: |
-            ${{ runner.os }}-baseline-${{ secrets.CACHE_VERSION }}-
+            ${{ runner.os }}-baseline-ubuntu-26.04-${{ secrets.CACHE_VERSION }}-
 
       - uses: actions-rs/toolchain@v1
         with:
@@ -144,12 +177,12 @@ jobs:
           toolchain: 1.89.0
           profile: minimal
 
-      - uses: Swatinem/rust-cache@v2
+      # For `cargo +stable` below: GitHub's runner images come with a stable
+      # Rust, and this container does not.
+      - name: Install stable Rust
+        run: rustup toolchain install stable --profile minimal
 
-      - name: Install QEMU
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes qemu-user
+      - uses: Swatinem/rust-cache@v2
 
       - name: Test
         run: cargo test --release
