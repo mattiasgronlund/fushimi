@@ -141,7 +141,7 @@ jobs:
 
       - uses: actions-rs/toolchain@v1
         with:
-          toolchain: 1.86.0
+          toolchain: 1.89.0
           profile: minimal
 
       - uses: Swatinem/rust-cache@v2
@@ -198,7 +198,7 @@ jobs:
         run: cargo +stable --config 'resolver.incompatible-rust-versions="fallback"' generate-lockfile
 
       - name: Check (MSRV)
-        run: cargo +1.86.0 check --all-targets
+        run: cargo +1.89.0 check --all-targets
 
   coverage:
     runs-on: ubuntu-latest
@@ -244,7 +244,7 @@ jobs:
 
       - uses: actions-rs/toolchain@v1
         with:
-          toolchain: 1.86.0
+          toolchain: 1.89.0
           override: true
           profile: minimal
 
@@ -255,12 +255,10 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      # No step in this job sets `-Ctarget-feature=+avx512f`. On Rust 1.86.0 that
-      # flag sets no `cfg(target_feature = "avx512f")`, so `src/simd/x86_64.rs`
-      # would select the `fma` backend, which this step already checks. Stable Rust
-      # selects the `avx512f` backend only from 1.89 on. The `avx512f` job checks
-      # and lints it on 1.89 in every run; its tests run only in the `build` job,
-      # on nightly, when the runner has AVX-512F.
+      # No step in this job sets `-Ctarget-feature=+avx512f`, with which
+      # `src/simd/x86_64.rs` selects the `avx512f` backend: the `avx512f` job
+      # checks and lints that backend on 1.89, the MSRV, in every run; its tests
+      # run only in the `build` job, on nightly, when the runner has AVX-512F.
       - name: Check
         run: cargo check --all-targets
 
@@ -273,9 +271,8 @@ jobs:
       - name: Check (--no-default-features)
         run: cargo check --no-default-features --all-targets
 
-  # Stable Rust selects the `avx512f` backend from 1.89 on, so this job checks and
-  # lints it on 1.89. It runs nothing built with `+avx512f`, so the runner needs
-  # no AVX-512F.
+  # This job checks and lints the `avx512f` backend on 1.89, the MSRV. It runs
+  # nothing built with `+avx512f`, so the runner needs no AVX-512F.
   avx512f:
     runs-on: ubuntu-latest
 

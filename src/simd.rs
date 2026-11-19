@@ -35,8 +35,8 @@
 //! `x86_64-unknown-linux-gnu`, and `V3` gives the `fma` backend in a build that has neither the
 //! target feature `avx512f` nor both `avx` and `fma`, such as one for `x86-64` or `x86-64-v2`.
 //! In other builds, each gives the build's backend, that of [`Baseline`], as both do in a build
-//! for `x86-64-v3` or `haswell`. inari has no token of `x86-64-v4`: enabling the AVX-512 target
-//! features in a function needs Rust 1.89, and inari also builds with Rust 1.86.
+//! for `x86-64-v3` or `haswell`.
+//! inari has no token of `x86-64-v4`.
 
 // A SIMD vector [x0; x1] stored in a register is usually depicted as:
 //

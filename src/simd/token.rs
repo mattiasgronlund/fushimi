@@ -1091,9 +1091,9 @@ level! {
     /// such as one for `x86-64` or `x86-64-v2`. There, the parts that the `fma` backend takes from
     /// the portable backend, its slow paths, compute without the FMA, as those of the build's
     /// backend do. In other builds, such as one for `x86-64-v3` or `haswell`, and with
-    /// `force-generic`, the operations run the build's backend, that of [`Baseline`]. inari has no
-    /// token of `x86-64-v4`: enabling the AVX-512 target features in a function needs Rust 1.89,
-    /// and inari also builds with Rust 1.86.
+    /// `force-generic`, the operations run the build's backend, that of [`Baseline`].
+    ///
+    /// inari has no token of `x86-64-v4`.
     ///
     /// ```
     /// use inari::{simd::{Simd, V3}, *};

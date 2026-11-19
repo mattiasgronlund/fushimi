@@ -219,7 +219,14 @@ fn check_root(what: &str, k: u32, power: &Num, lo: f64, hi: f64, near: f64) -> b
         Ordering::Less => (hi, false),
         Ordering::Greater => (lo, false),
         // The bits of a positive `f64` end in its significand's, and +∞ has an even one.
-        Ordering::Equal => (if lo.to_bits() % 2 == 0 { lo } else { hi }, true),
+        Ordering::Equal => (
+            if lo.to_bits().is_multiple_of(2) {
+                lo
+            } else {
+                hi
+            },
+            true,
+        ),
     };
     assert_eq!(
         near.to_bits(),
@@ -506,7 +513,7 @@ fn cbrt_cubes() {
 
 // Whether the integer `v` < 2^54 is an `f64`.
 fn is_f64(v: u64) -> bool {
-    v < 1 << 53 || v % 2 == 0
+    v < 1 << 53 || v.is_multiple_of(2)
 }
 
 // Scaled Pythagorean triples: legs t (m^2 - n^2) and 2 t m n and hypotenuse c = t (m^2 + n^2)

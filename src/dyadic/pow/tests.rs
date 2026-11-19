@@ -621,7 +621,7 @@ fn wide_n(rng: &mut Rng) -> i32 {
 // for an even i, x = 2^e and y = j / 2^k, where x^y = 2^(j e / 2^k), and for an odd i,
 // x = r^(2^k) 2^(2^k f) and y = m / 2^k for an odd r, where x^y = r^m 2^(m f).
 fn exact_pair(rng: &mut Rng, i: usize) -> (f64, f64) {
-    if i % 2 == 0 {
+    if i.is_multiple_of(2) {
         // k <= min(tz(e), 10), q = e / 2^k, j q in [-1074, 1023], and j odd if k > 0.
         let e = loop {
             let e = -1074 + rng.below(2098) as i64;

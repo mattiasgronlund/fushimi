@@ -295,7 +295,9 @@ fn series<const N: usize>(r: &Encl<N>, odd: bool) -> Encl<N> {
 
 // sin(k π/2 + σ ρ) for every ρ of `r`, whose numbers have to be in [-1, 1], k mod 4 = `quad`
 // mod 4 and σ = -1 if `neg` and 1 otherwise: σ sin ρ, cos ρ, -σ sin ρ and -cos ρ for
-// k mod 4 = 0, 1, 2 and 3.
+// k mod 4 = 0, 1, 2 and 3. `quad % 2 == 0` stays as `rocq/theories/Model.v` transcribes it
+// (`quad mod 2 =? 0`); the clippy of Rust 1.89, the MSRV, does not know `manual_is_multiple_of`.
+#[allow(unknown_lints, clippy::manual_is_multiple_of)]
 fn sin_k<const N: usize>(quad: u64, neg: bool, r: &Encl<N>) -> Encl<N> {
     let (v, flip) = if quad % 2 == 0 {
         (series(r, true), neg != (quad % 4 == 2))
