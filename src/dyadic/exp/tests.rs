@@ -802,10 +802,10 @@ fn tiny_first(
     }
 }
 
-// `exp_near` or `exp2_near` at `x`, with `near` for the body of its entry `exp_near_entry` or
-// `exp2_near_entry`: `rule(x)` where |x| < `tiny`, which the function returns
-// before it calls its entry (or, without `TINY_IN_CALLER`, the body returns by its first test),
-// and `near(x)` at the other x, as in `tiny_first`.
+// `exp_near`, `exp2_near` or `exp10_near` at `x`, with `near` for the body of its entry
+// (`exp_near_entry`, `exp2_near_entry` or `exp10_near_entry`): `rule(x)` where |x| < `tiny`,
+// which the function returns before it calls its entry (or, without `TINY_IN_CALLER`, the body
+// returns by its first test), and `near(x)` at the other x, as in `tiny_first`.
 fn tiny_first_near(x: f64, tiny: f64, rule: Near, near: Near) -> f64 {
     if x.abs() < tiny {
         rule(x)
@@ -817,7 +817,7 @@ fn tiny_first_near(x: f64, tiny: f64, rule: Near, near: Near) -> f64 {
 // The function `i` of `FUNCTIONS` at `x`, toward -∞, toward +∞ and to nearest, by the bodies of
 // its entries with `FMA` for the products (`level_entry!`), and by their rule for a tiny |x|
 // where it applies: for `exp`, `exp2`, `exp10`, `sinh`, `tanh` and `cosh` toward -∞ and toward
-// +∞ (`tiny_first`), and for `exp` and `exp2` (`tiny_first_near`) and `cosh` (1 below
+// +∞ (`tiny_first`), and for `exp`, `exp2` and `exp10` (`tiny_first_near`) and `cosh` (1 below
 // `TINY_NEAR`) to nearest.
 fn bodies<const FMA: bool>(i: usize, x: f64) -> [f64; 3] {
     match i {
@@ -851,7 +851,8 @@ fn bodies<const FMA: bool>(i: usize, x: f64) -> [f64; 3] {
                 exp10_dir_with::<FMA, false>,
                 exp10_dir_with::<FMA, true>,
             );
-            [down, up, exp10_near_with::<FMA>(x)]
+            let near = tiny_first_near(x, TINY_EXP10, |_| 1.0, exp10_near_with::<FMA>);
+            [down, up, near]
         }
         SINH => {
             let [down, up] = tiny_first(
@@ -898,8 +899,8 @@ fn bodies<const FMA: bool>(i: usize, x: f64) -> [f64; 3] {
 // The function `i` at `x`, as `bodies` gives it, by the copy of each entry without an FMA in its
 // products, by the copy with one (`level_entry!`), and by the functions of `FUNCTIONS` and
 // `NEAR`, which call the entries (e^x, 2^x, 10^x, sinh and tanh through `exp_dir` and the other
-// `_dir` entries, and through `exp_near_entry`, `exp2_near_entry`, `exp10_near`, `sinh_near`
-// and `tanh_near`, and cosh through `cosh_dir` and `cosh_near_abs` with t = |x|, or
+// `_dir` entries, and through `exp_near_entry`, `exp2_near_entry`, `exp10_near_entry`,
+// `sinh_near` and `tanh_near`, and cosh through `cosh_dir` and `cosh_near_abs` with t = |x|, or
 // x without `TINY_IN_CALLER`).
 fn copies(i: usize, x: f64) -> [[f64; 3]; 3] {
     [

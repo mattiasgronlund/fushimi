@@ -138,11 +138,11 @@ pub(super) const TINY_HYP: f64 = 1.0 / 67_108_864.0;
 const TINY_EXP: f64 = f64::EPSILON / 4.0;
 const TINY_EXP10: f64 = f64::EPSILON / 16.0;
 
-// Whether `exp`, `exp2`, `exp10`, `sinh`, `tanh` and `cosh`, and `exp_near`, `exp2_near` and
-// `cosh_near`, test for a tiny |x| themselves, before they call their entry, and not its body.
-// In a build with the dispatch (`level_entry!`), the body makes the test, as its first one:
-// the caller is compiled without the target features of the body's copies, and there the test
-// would cost every other argument a separate load of its mask and a second jump, and
+// Whether `exp`, `exp2`, `exp10`, `sinh`, `tanh` and `cosh`, and `exp_near`, `exp2_near`,
+// `exp10_near` and `cosh_near`, test for a tiny |x| themselves, before they call their entry, and
+// not its body. In a build with the dispatch (`level_entry!`), the body makes the test, as its
+// first one: the caller is compiled without the target features of the body's copies, and there
+// the test would cost every other argument a separate load of its mask and a second jump, and
 // `near_one(x, true)` and `away(x, true)` would branch on the sign of x.
 const TINY_IN_CALLER: bool = !cfg!(inari_kernel_dispatch);
 
@@ -1098,21 +1098,37 @@ fn exp10_dir_with<const FMA: bool, const UP: bool>(x: f64) -> f64 {
     }
 }
 
-level_entry! {
-    /// 10^x rounded to nearest, ties to even.
-    pub(crate) fn exp10_near(x: f64) -> f64 = exp10_near_with;
+/// 10^x rounded to nearest, ties to even.
+#[inline(always)]
+pub(crate) fn exp10_near(x: f64) -> f64 {
+    // The rule for a tiny |x| first, in the caller, as in `exp_near`. Made here rather than as
+    // the first test of the body, it saves 4 to 11 instructions per call, but adds about one
+    // conditional branch per call on four of the six sets of random arguments and half of one on
+    // the hard-to-round cases (cachegrind, in a crate that links `cr`, built for Haswell). Timed
+    // in such a crate, the calls were faster on two of the six sets: on the log-uniform
+    // arguments, and on those next to overflow, one of those four, though there only with the
+    // time of the old build's loop subtracted from both. They were not slower on two others of
+    // the four or on the hard-to-round cases, and the other two sets were not timed.
+    if TINY_IN_CALLER && x.abs() < TINY_EXP10 {
+        // 10^x = e^(x ln 10), and |x ln 10| < 4 |x| < 2^-54.
+        1.0
+    } else {
+        exp10_near_entry(x)
+    }
 }
 
-// The body of `exp10_near`, with `FMA` for the products (`level_entry!`). One test sends NaN, ±∞
-// and the x out of (-324, 309) to their rules, after the fast path, as in `exp_dir`.
+level_entry! {
+    // `exp10_near` for an x that `exp10_near` has not returned for: NaN, ±∞, or |x| >=
+    // `TINY_EXP10`, or any x without `TINY_IN_CALLER`.
+    fn exp10_near_entry(x: f64) -> f64 = exp10_near_with;
+}
+
+// The body of `exp10_near_entry`, with `FMA` for the products (`level_entry!`). One test sends
+// NaN, ±∞ and the x out of (-324, 309) to their rules, after the fast path, as in `exp_dir`.
 #[inline(always)]
 fn exp10_near_with<const FMA: bool>(x: f64) -> f64 {
-    // The rule for a tiny |x| first, as in `exp_near`, but here in every build: made in the
-    // caller, it saved 4 to 11 instructions per call, but added about one conditional branch per
-    // call on four of the six sets of random arguments (cachegrind, in a crate that links `cr`,
-    // built for Haswell).
-    if x.abs() < TINY_EXP10 {
-        // 10^x = e^(x ln 10), and |x ln 10| < 4 |x| < 2^-54.
+    if !TINY_IN_CALLER && x.abs() < TINY_EXP10 {
+        // As in `exp10_near`.
         1.0
     } else if x < 309.0 && x > -324.0 {
         if (1.0..=22.0).contains(&x) && x == x.floor() {

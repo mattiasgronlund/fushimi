@@ -2676,18 +2676,19 @@ Definition fast_tanh_near (fma : bool) (x : f64) : option f64 :=
     by the macro [level_entry!] of [src/dyadic/level.rs] from its body, a
     function such as [exp_dir_with] that takes [FMA]. The definitions
     below transcribe the bodies; those for [exp], [exp2], [exp10],
-    [sinh], [tanh] and [cosh], and for [exp_near], [exp2_near] and
-    [cosh_near], first transcribe their test for a tiny [|x|], and then
-    the other tests of the body of the entry, such as [exp_near_entry] for
-    [exp_near]. The functions make that test before they call their entry
-    where [TINY_IN_CALLER], which is [!cfg!(inari_kernel_dispatch)], is
-    true, and the body makes it as its first test where it is false, so
-    that the order of the tests is the same in both builds. [cosh] and
-    [cosh_near] make it on [t = x.abs()], and pass their entries,
-    [cosh_dir] and [cosh_near_abs], [abs_or_x(t, x)], which is [t] where
-    [TINY_IN_CALLER] is true and [x] where it is false: the body takes
-    its argument as [t] in the first case and its [abs()] in the second,
-    so it has [t = x.abs()] in both builds.
+    [sinh], [tanh] and [cosh], and for [exp_near], [exp2_near],
+    [exp10_near] and [cosh_near], first transcribe their test for a tiny
+    [|x|], and then the other tests of the body of the entry, such as
+    [exp_near_entry] for [exp_near]. The functions make that test before
+    they call their entry where [TINY_IN_CALLER], which is
+    [!cfg!(inari_kernel_dispatch)], is true, and the body makes it as its
+    first test where it is false, so that the order of the tests is the
+    same in both builds. [cosh] and [cosh_near] make it on [t = x.abs()],
+    and pass their entries, [cosh_dir] and [cosh_near_abs],
+    [abs_or_x(t, x)], which is [t] where [TINY_IN_CALLER] is true and [x]
+    where it is false: the body takes its argument as [t] in the first
+    case and its [abs()] in the second, so it has [t = x.abs()] in both
+    builds.
     The entry runs its body with [FMA] equal to [HAS_FMA], which depends
     on the target, or, in a build with [cfg(inari_kernel_dispatch)] (see
     [build.rs]), with [true] in a copy compiled with the target feature
@@ -2869,9 +2870,11 @@ Definition exp2_near_with (x : f64) : option f64 :=
   else if ge x (from_bits 0x4090000000000000) (* 1024.0 *) then Some infinity
   else Some zero.
 
-(** [pub(crate) fn exp10_near(x: f64) -> f64], with
-    [(1.0..=22.0).contains(&x)] and [x as usize] as in [exp10_dir_with],
-    where the literal [1e23] is [from_bits 0x44b52d02c7e14af6]. *)
+(** [pub(crate) fn exp10_near(x: f64) -> f64], as [exp_near] with
+    [TINY_EXP10] as [TINY_EXP] and [exp10_near_entry] as
+    [exp_near_entry], with [(1.0..=22.0).contains(&x)] and [x as usize]
+    as in [exp10_dir_with], where the literal [1e23] is
+    [from_bits 0x44b52d02c7e14af6]. *)
 Definition exp10_near_with (x : f64) : option f64 :=
   if lt (fabs x) tiny_exp10 then Some one
   else if lt x (from_bits 0x4073500000000000) (* 309.0 *)
