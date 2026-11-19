@@ -368,6 +368,27 @@ pub(crate) fn mul_add_ru(x: F64X2, y: F64X2, z: F64X2) -> F64X2 {
     mul_add_ru_impl::<HAS_FMA>(x, y, z)
 }
 
+/// `mul_add_ru([x0, x1], [y0, y1], [z0, z1]) = [x0 * y0 + z0, x1 * y1 + z1]`
+/// rounded toward +∞ (with a single rounding).
+// The copy of `mul_add_ru` with the ABI `sysv64`, which `Baseline::mul_add_ru` calls as the
+// build's backend on x86-64: that method is `#[inline(always)]`, so a user's crate calls this
+// copy, which the crate exports, and passes it the three vectors in six `xmm` registers, where
+// Rust's ABI passed them by pointer in Cargo's default release profile. `CrateBaseline`, which
+// `Interval::mul_add` passes, calls `mul_add_ru` instead, the other way round from `div_ru` and
+// `mul_ru` (see `CrateBaseline` in `src/simd/token.rs`). The crate's operations do not call this
+// copy, only its tests. It has no inline attribute, as `mul_add_ru` (see `Baseline` there). No
+// count has compared it with one as a user's crate calls it: a `sysv64` `mul_add_ru` that was
+// `#[inline(never)]` was counted only as the callee of `Interval::mul_add` (see `mul_add_ru` of
+// `CrateBaseline` there).
+#[cfg(all(inari_generic_backend, target_arch = "x86_64"))]
+#[allow(improper_ctypes_definitions)] // `[f64; 2]`, but only Rust code calls it.
+pub(crate) extern "sysv64-unwind" fn mul_add_ru_sysv64(x: F64X2, y: F64X2, z: F64X2) -> F64X2 {
+    // Proved correct in `rocq/theories/MulAddRu.v`. `rocq/theories/Model.v` transcribes
+    // this function for that proof and those of `(Dec)Interval::mul_add`, so it has to
+    // be updated along with it.
+    mul_add_ru_impl::<HAS_FMA>(x, y, z)
+}
+
 /// `mul_ru([x0, x1], [y0, y1]) = [x0 * y0, x1 * y1]` rounded toward +∞.
 // Out of line as the build's backend, except on aarch64, where that kept LLVM, in a build with
 // fat LTO, from inlining it into some of a user's loops: a loop of calls of `mul_ru` of

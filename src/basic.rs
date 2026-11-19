@@ -424,10 +424,11 @@ impl Interval {
     /// | $\R^3$ | $\R$  |
     #[must_use]
     pub fn mul_add(self, rhs: Self, addend: Self) -> Self {
-        // Proved correct in `rocq/theories/MulAdd.v` for the portable backend, as
-        // `mul_add_with` called with `Baseline`. `rocq/theories/Model.v` transcribes this call,
-        // so it has to be updated along with it.
-        self.mul_add_with(Baseline, rhs, addend)
+        // Proved correct in `rocq/theories/MulAdd.v` for the portable backend, as `mul_add_with`
+        // called with `CrateBaseline`, whose backend is that of `Baseline` (see `CrateBaseline`
+        // in `src/simd/token.rs`). `rocq/theories/Model.v` transcribes this call, so it has to
+        // be updated along with it.
+        self.mul_add_with(CrateBaseline, rhs, addend)
     }
 
     /// Returns `self.mul_add(rhs, addend)`, computed by the backend of `s` (see
@@ -787,7 +788,8 @@ impl Interval {
 // calling `mul_add_with` with `Baseline`, which would inline the body of
 // `Interval::mul_add_with` into it. In a plain x86-64 build of the library that took 7 to 56
 // more instructions per call, as `DecInterval::mul_add` then called `generic::mul_add_ru_impl`
-// and `generic::max` out of line (seen with rustc 1.98).
+// and `generic::max` out of line (seen with rustc 1.98, when `Interval::mul_add` called
+// `mul_add_with` with `Baseline` too, not with `CrateBaseline`).
 macro_rules! dec_mul_add_with_body {
     ($lhs:ident, $rhs:ident, $addend:ident, $x:expr, $set_dec:path) => {{
         if $lhs.is_nai() || $rhs.is_nai() || $addend.is_nai() {
@@ -921,12 +923,12 @@ impl DecInterval {
     #[must_use]
     pub fn mul_add(self, rhs: Self, addend: Self) -> Self {
         // Proved correct in `rocq/theories/MulAdd.v` for the portable backend, as
-        // `mul_add_with` called with `Baseline`, if `self` and `rhs` are `com` only when
+        // `mul_add_with` called with `CrateBaseline`, if `self` and `rhs` are `com` only when
         // `self.x()` and `rhs.x()` are common, which `rocq/theories/ComCommon.v` proves of
         // every `DecInterval` that the library makes: this is the body of `mul_add_with`,
         // `dec_mul_add_with_body!`, with `self.x().mul_add(rhs.x(), addend.x())`, which is
-        // `self.x().mul_add_with(Baseline, rhs.x(), addend.x())`, for the interval, and with
-        // `Self::set_dec`, which calls `Self::set_dec_impl` (see the comment on the macro).
+        // `self.x().mul_add_with(CrateBaseline, rhs.x(), addend.x())`, for the interval, and
+        // with `Self::set_dec`, which calls `Self::set_dec_impl` (see the comment on the macro).
         // `rocq/theories/Model.v` transcribes this, so it has to be updated along with it.
         dec_mul_add_with_body!(
             self,

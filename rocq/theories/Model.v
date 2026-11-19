@@ -760,7 +760,13 @@ Definition mul_add_ru_impl (fma : bool) (x y z : F64X2) : option F64X2 :=
     Some (a, b).
 
 (** [pub(crate) fn mul_add_ru(x: F64X2, y: F64X2, z: F64X2) -> F64X2], which
-    calls [mul_add_ru_impl::<HAS_FMA>]. *)
+    calls [mul_add_ru_impl::<HAS_FMA>]. As the build's backend on x86-64, it
+    also has a copy with the ABI [sysv64],
+    [pub(crate) extern "sysv64-unwind" fn mul_add_ru_sysv64(x: F64X2, y: F64X2, z: F64X2) -> F64X2],
+    with the same body, which this definition transcribes too: as for
+    [mul_ru], the ABI does not change what the function computes. There
+    the method [mul_add_ru] of [Baseline] calls that copy, and that of
+    [CrateBaseline] calls [mul_add_ru]. *)
 Definition mul_add_ru (has_fma : bool) (x y z : F64X2) : option F64X2 :=
   mul_add_ru_impl has_fma x y z.
 
@@ -6814,12 +6820,12 @@ Definition quadrants (pt : point) (a b : f64) : f64 * f64 :=
     [shuffle02], [shuffle03], [shuffle13], [swap], [add_rn], [sub_rn],
     [hadd_rn], [add_ru], [sub_ru], [mul_ru], [div_ru], [mul_add_ru],
     [sqrt1_ru] and [sqrt_rd_ru], which are the ones in [Generic] here.
-    [x + y], [x - y], [Interval::mul_add] and [Interval::sqrt] are
-    [add_with], [sub_with], [mul_add_with] and [sqrt_with] of
-    [impl Interval] called with the token [Baseline], whose backend is the
-    build's (see [src/simd/token.rs]). [x / y], [Interval::recip] and
-    [Interval::sqr] are [div_with], [recip_with] and [sqr_with] called
-    with the token [CrateBaseline], private to the crate, whose backend is
+    [x + y], [x - y] and [Interval::sqrt] are [add_with], [sub_with] and
+    [sqrt_with] of [impl Interval] called with the token [Baseline], whose
+    backend is the build's (see [src/simd/token.rs]). [x / y],
+    [Interval::mul_add], [Interval::recip] and [Interval::sqr] are
+    [div_with], [mul_add_with], [recip_with] and [sqr_with] called with
+    the token [CrateBaseline], private to the crate, whose backend is
     that of [Baseline] (see [src/simd/token.rs]), [x * y] is the body of
     [mul_with] with [CrateBaseline] for its token (see [mul] below), and
     [mul_rev_to_pair] calls the divisions of [div_with] with
@@ -7934,8 +7940,10 @@ Definition mul (has_fma : bool) (self rhs : Interval) : option Interval :=
     of [impl Interval] in [src/basic.rs], for an [s] whose backend is the
     portable one and for which [classify] transcribes [classify_with];
     [pub fn mul_add(self, rhs: Self, addend: Self) -> Self] is
-    [self.mul_add_with(Baseline, rhs, addend)]. Its [s.mul_add_ru] calls
-    [mul_add_ru_impl::<HAS_FMA>], so
+    [self.mul_add_with(CrateBaseline, rhs, addend)]. Its [s.mul_add_ru]
+    calls [mul_add_ru_impl::<HAS_FMA>], through [mul_add_ru] or through its
+    copy [mul_add_ru_sysv64], which has the same body (see
+    [Generic.mul_add_ru]), so
     [has_fma] is an argument, as for [mul], and the variants of
     [IntervalClass2] are as in [mul]. The [return] is the value of an [if]
     whose [else] holds the rest of the body. *)
@@ -8971,7 +8979,7 @@ Definition mul (has_fma : bool) (self rhs : DecInterval) : option DecInterval :=
     [dec_min (dec self) (dec_min (dec rhs) (dec addend))];
     [pub fn mul_add(self, rhs: Self, addend: Self) -> Self] expands the
     same macro with [self.x().mul_add(rhs.x(), addend.x())], which is
-    [self.x().mul_add_with(Baseline, rhs.x(), addend.x())], and with
+    [self.x().mul_add_with(CrateBaseline, rhs.x(), addend.x())], and with
     [Self::set_dec], which calls [Self::set_dec_impl]. *)
 Definition mul_add (has_fma : bool) (self rhs addend : DecInterval) :
     option DecInterval :=

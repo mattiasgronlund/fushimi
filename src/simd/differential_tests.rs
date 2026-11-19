@@ -1118,7 +1118,8 @@ type Slow3 = fn(f64, f64, f64) -> f64;
 // for all arguments: `add1_ru_slow_correct` in `AddRu.v`, `mul1_ru_slow_correct`
 // in `MulRu.v` and `div1_ru_slow_correct` in `DivRu.v`.
 fn binary_slow_paths() -> Vec<(&'static str, Binary, Slow)> {
-    vec![
+    #[allow(unused_mut)] // Pushed to only where the portable backend is the build's on x86-64.
+    let mut ops: Vec<(&'static str, Binary, Slow)> = vec![
         ("add_ru", generic::add_ru, generic::add1_ru_slow),
         ("sub_ru", generic::sub_ru, sub1_ru_slow),
         ("sub1_ru", sub1_ru_as_binary_generic, sub1_ru_slow),
@@ -1142,7 +1143,35 @@ fn binary_slow_paths() -> Vec<(&'static str, Binary, Slow)> {
             generic::div_ru_impl::<false>,
             generic::div1_ru_slow,
         ),
-    ]
+    ];
+    // Where the portable backend is the build's on x86-64, also the copies of `div_ru` and
+    // `mul_ru` with the ABI `sysv64` and their twins with Rust's ABI, named as in `abi_copies`
+    // (and in `ternary_slow_paths` the copy of `mul_add_ru` with the ABI `sysv64`). The closures
+    // call the `sysv64` copies, whose pointers are not of the type `Binary` (`Ternary` there).
+    #[cfg(all(inari_generic_backend, target_arch = "x86_64"))]
+    {
+        ops.push((
+            "div_ru/sysv64",
+            |x, y| generic::div_ru(x, y),
+            generic::div1_ru_slow,
+        ));
+        ops.push((
+            "div_ru/rust_abi",
+            generic::div_ru_rust_abi,
+            generic::div1_ru_slow,
+        ));
+        ops.push((
+            "mul_ru/sysv64",
+            |x, y| generic::mul_ru(x, y),
+            generic::mul1_ru_slow,
+        ));
+        ops.push((
+            "mul_ru/rust_abi",
+            generic::mul_ru_rust_abi,
+            generic::mul1_ru_slow,
+        ));
+    }
+    ops
 }
 
 // The slow path of `generic::sub1_ru` and `generic::sub_ru`, which add -y with
@@ -1155,7 +1184,8 @@ fn sub1_ru_slow(x: f64, y: f64) -> f64 {
 // The same for the ternary operations, named as in `ternary_ops`:
 // `mul_add1_ru_slow_correct` in `MulAddRuSlow.v`.
 fn ternary_slow_paths() -> Vec<(&'static str, Ternary, Slow3)> {
-    vec![
+    #[allow(unused_mut)] // Pushed to only where the portable backend is the build's on x86-64.
+    let mut ops: Vec<(&'static str, Ternary, Slow3)> = vec![
         (
             "mul_add_ru/fma",
             generic::mul_add_ru_impl::<true>,
@@ -1166,7 +1196,16 @@ fn ternary_slow_paths() -> Vec<(&'static str, Ternary, Slow3)> {
             generic::mul_add_ru_impl::<false>,
             generic::mul_add1_ru_slow,
         ),
-    ]
+    ];
+    #[cfg(all(inari_generic_backend, target_arch = "x86_64"))]
+    {
+        ops.push((
+            "mul_add_ru/sysv64",
+            |x, y, z| generic::mul_add_ru_sysv64(x, y, z),
+            generic::mul_add1_ru_slow,
+        ));
+    }
+    ops
 }
 
 // The cases of `regression_cases`, with each sign of each argument and with the
@@ -1254,6 +1293,54 @@ fn regressions_generic() {
 
     println!("{}", summary);
     assert_eq!(total_mismatches, 0, "\n{}", summary);
+}
+
+// Where the portable backend is the build's on x86-64, the copies of `div_ru`, `mul_ru` and
+// `mul_add_ru` with the ABI `sysv64`, called through closures, as their pointers are not of the
+// types of `Ops`, and the twins of the first two with Rust's ABI, against `div_ru_impl::<HAS_FMA>`,
+// `mul_ru_impl::<HAS_FMA>` and `mul_add_ru_impl::<HAS_FMA>`, which each copy calls or, in
+// `div_ru_rust_abi` and `mul_ru_rust_abi`, inlines up to eta. `compare` checks them as it checks a
+// backend: on `adversarial` values, which include those of `SPECIAL`, on the cases of `regressions`
+// and on random ones, with another case in the other lane, so that a mistake in passing the vectors
+// (a lane swapped, or one vector passed for another) would show. `regressions_generic` checks them
+// only on the cases of `regressions`, which have none for `div_ru`.
+#[cfg(all(inari_generic_backend, target_arch = "x86_64"))]
+#[test]
+fn abi_copies() {
+    use generic::{div_ru_impl, mul_add_ru_impl, mul_ru_impl, HAS_FMA};
+    let ops = Ops {
+        binary: vec![
+            (
+                "div_ru/sysv64",
+                |x, y| generic::div_ru(x, y),
+                div_ru_impl::<HAS_FMA>,
+            ),
+            (
+                "div_ru/rust_abi",
+                generic::div_ru_rust_abi,
+                div_ru_impl::<HAS_FMA>,
+            ),
+            (
+                "mul_ru/sysv64",
+                |x, y| generic::mul_ru(x, y),
+                mul_ru_impl::<HAS_FMA>,
+            ),
+            (
+                "mul_ru/rust_abi",
+                generic::mul_ru_rust_abi,
+                mul_ru_impl::<HAS_FMA>,
+            ),
+        ],
+        ternary: vec![(
+            "mul_add_ru/sysv64",
+            |x, y, z| generic::mul_add_ru_sysv64(x, y, z),
+            mul_add_ru_impl::<HAS_FMA>,
+        )],
+        unary: vec![],
+        unary1: vec![],
+    };
+    // The operations of `regressions` that have no copy with the ABI `sysv64`.
+    compare(ops, &["add_ru", "sub_ru", "sub1_ru"]);
 }
 
 #[cfg(any(
