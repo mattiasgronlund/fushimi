@@ -59,7 +59,7 @@ fn num(s: &str) -> f64 {
     }
     // m has at most 53 bits and m 2^e is in range, so that the product is exact.
     assert!(m < 1 << 53 && m != 0, "{}", s);
-    let top = e + 63 - i64::from(m.leading_zeros());
+    let top = e + i64::from(m.ilog2());
     let shift = e.max(-1074).min(1023 - (top - e));
     let v = m as f64 * pow2(shift) * pow2(e - shift);
     assert!(e >= -1074 && top <= 1023, "{}", s);

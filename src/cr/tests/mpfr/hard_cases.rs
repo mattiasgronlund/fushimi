@@ -121,7 +121,7 @@ fn parse_hex(s: &str) -> Option<f64> {
     e += m.trailing_zeros() as i64;
     m >>= m.trailing_zeros();
     // m 2^e is in [2^top, 2^(top + 1)).
-    let top = e + 127 - m.leading_zeros() as i64;
+    let top = e + m.ilog2() as i64;
     if top > 1023 {
         None
     } else if top >= -1022 {

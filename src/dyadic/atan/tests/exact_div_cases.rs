@@ -305,7 +305,7 @@ fn exact_div_thresholds() {
     let mut guards = [0; 2];
     for y in around(TWO_M968, 2) {
         for xo in (1..=63_u64).step_by(2) {
-            let ex = 63 - xo.leading_zeros() as i32;
+            let ex = xo.ilog2() as i32;
             for t in [-1, -25, -26, -27, -60, -1021, -1022, -1060, -1080] {
                 let x = xo as f64 * pow2(-968 - t - ex);
                 if y == TWO_M968 && xo == 1 {

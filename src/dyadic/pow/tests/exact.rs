@@ -15,8 +15,8 @@ use super::*;
 
 // m 2^e if it is an `f64`, for m < 2^53: if m != 0 and its least and its top bit are in range.
 fn value(m: u64, e: i64) -> Option<f64> {
-    let top = e + 63 - i64::from(m.leading_zeros());
-    if m != 0 && e >= -1074 && top <= 1023 {
+    let top = e + i64::from(m.checked_ilog2()?);
+    if e >= -1074 && top <= 1023 {
         assert!(m < 1 << 53);
         // m and 2^e are `f64`s, and so is their product.
         Some(m as f64 * pow2(e))
