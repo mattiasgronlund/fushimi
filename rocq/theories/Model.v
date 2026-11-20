@@ -5772,13 +5772,18 @@ Definition is_odd_integer (y : f64) : bool :=
     is [to_bits y mod 2 ^ 32], the difference of [u32]s in [b] is the
     difference in [Z], as bit 52 is set, so that [trailing_zeros] is at
     most 52, [f64::from(b)] is [of_i64 b], and
-    [(0.0..53.0).contains(&t)] is [le zero t && lt t (of_i64 53)]. No
-    proof unfolds it: [DyPow.v] proves [pow_dir_with] for either value. *)
+    [(0.0..53.0).contains(&t)] is [le zero t && lt t (of_i64 53)].
+    [DyPowMaybe.v] proves that it is true at a normal [x > 0] other than 1
+    and a finite [y] other than 0 where [exact] returns an [f64]
+    ([maybe_exact_complete]). *)
 Definition maybe_exact (x y : f64) : bool :=
   if negb (to_bits y mod 2 ^ 32 =? 0) then false else
   let b := 52 - trailing_zeros 64 (Z.lor (to_bits x) (Z.shiftl 1 52)) in
   let t := mul (of_i64 b) y in
   le zero t && lt t (of_i64 53).
+
+(** [f64::MIN_POSITIVE], 2 ^ -1022, the least positive normal [f64]. *)
+Definition min_normal : f64 := from_bits 0x0010000000000000.
 
 (** The loop of [fn small_power(r: u64, p: u64) -> Option<u64>], run [p]
     times, where [t as u64] is [t], as [t < 2 ^ 53] there. *)
@@ -5962,12 +5967,12 @@ Definition fast_pow_near_call (fma : bool) (x y : f64) : option f64 :=
 
     [pown_pos] tries the fast path after its two rules and before [ziv],
     with [y = f64::from(n)]. [pow] tries [exact] before the fast path where
-    [maybe_exact] says so and after it otherwise, and then passes an
-    integer [y] to [pown_pos_ziv], which is [pown_pos] without the fast
-    path, and any other [y] to [ziv]. Their forms rounded to nearest do the
-    same before [ziv_near], with [exact_near] after the fast path.
-    The fast path takes [FMA] as an argument. The entries of the file,
-    [fast_pow_dir_call], [fast_pow_near_call], [pown_pos] and
+    [maybe_exact] says so, and otherwise after it at a subnormal [x] only,
+    and then passes an integer [y] to [pown_pos_ziv], which is [pown_pos]
+    without the fast path, and any other [y] to [ziv]. Their forms rounded
+    to nearest do the same before [ziv_near], with [exact_near] after the
+    fast path. The fast path takes [FMA] as an argument. The entries of
+    the file, [fast_pow_dir_call], [fast_pow_near_call], [pown_pos] and
     [pown_pos_near], pick it as in [DyadicExp] (the section [Driver]), and
     the functions below pass [false]:
     [FastPow.fast_pow_dir_fma] and [FastPow.fast_pow_near_fma] show that
@@ -6031,9 +6036,10 @@ Definition pown_pos_ziv_with (x : f64) (k : Z) (up : bool) : option f64 :=
     [x] is not NaN there, [a == b] of two [bool]s is [Bool.eqb], the
     sums of [i64]s are computed without a check, [y as i32] is [to_i32 y],
     and [f64::from(y as i32)] is [of_i64 (to_i32 y)]. The blocks under
-    [if first] and [if !first], which return from the function where
-    [exact] gives an [f64], are [r1] and [r2], [Some None] where their
-    [exact] is not called. The functions it calls come before it here, and
+    [if first] and [if !first && x < f64::MIN_POSITIVE], which return
+    from the function where [exact] gives an [f64], are [r1] and [r2],
+    [Some None] where their [exact] is not called, with [min_normal] for
+    [f64::MIN_POSITIVE]. The functions it calls come before it here, and
     [pown_pos_ziv_with] after it in the Rust. *)
 Definition pow_dir_with (x y : f64) (up : bool) : option f64 :=
   if eq y zero then Some DyadicExp.one
@@ -6063,7 +6069,8 @@ Definition pow_dir_with (x y : f64) (up : bool) : option f64 :=
           match fast_pow_dir_call false x y up with
           | Some v => Some v
           | None =>
-              let* r2 := (if first then Some None else exact x y) in
+              let* r2 :=
+                (if first || negb (lt x min_normal) then Some None else exact x y) in
               match r2 with
               | Some v => Some v
               | None =>

@@ -125,11 +125,24 @@ fn check_pow(x: f64, y: f64) {
     check_pow_results(x, y, lo, hi, pow_near(x, y));
 }
 
-// Checks `lo`, `hi` and `near`, which `pow` and `pow_near` gave at (x, y), as `check_pow`.
+// Checks `lo`, `hi` and `near`, which `pow` and `pow_near` gave at (x, y), as `check_pow`, and
+// that `maybe_exact` holds wherever `exact` gives an `f64` at a normal x, so that `pow` tries
+// `exact` before the fast path there (`maybe_exact_complete` in `rocq/theories/DyPowMaybe.v`).
 fn check_pow_results(x: f64, y: f64, lo: f64, hi: f64, near: f64) {
     let what = format!("pow({:e}, {:e})", x, y);
     check_pair(&what, lo, hi);
     check_near(&what, lo, hi, near);
+    // The arguments that `exact` takes, at a normal x.
+    if (f64::MIN_POSITIVE..f64::INFINITY).contains(&x) && x != 1.0 && y.is_finite() && y != 0.0 {
+        if let Some(v) = super::exact(x, y) {
+            assert!(
+                super::maybe_exact(x, y),
+                "{}: `exact` gives {:e}, but `maybe_exact` is false",
+                what,
+                v
+            );
+        }
+    }
     #[cfg(all(
         target_pointer_width = "64",
         any(target_os = "linux", target_os = "macos")

@@ -41,6 +41,39 @@ fn check_pow_is(x: f64, y: f64, want: Option<f64>) {
     check_pow(x, y);
 }
 
+// The exact cases of x^y that a test checked: those at a normal x, where `check_pow_results`
+// checks that `maybe_exact` holds, so that `pow` tries `exact` before the fast path, and the
+// late ones, at a subnormal x where `maybe_exact` is false, so that `pow` reaches `exact` only
+// after the fast path, as at x = 2^e below 2^-1022 and y < 0, where t = b y < 0.
+#[derive(Default)]
+struct Seen {
+    normal: usize,
+    late: usize,
+}
+
+impl Seen {
+    // Checks x^y as `check_pow_is`, and counts it if `want` is an `f64`.
+    fn check(&mut self, x: f64, y: f64, want: Option<f64>) {
+        check_pow_is(x, y, want);
+        if want.is_some() {
+            if x >= f64::MIN_POSITIVE {
+                self.normal += 1;
+            } else if !maybe_exact(x, y) {
+                self.late += 1;
+            }
+        }
+    }
+
+    // Prints the counts, and checks that there are cases at a normal x, and late ones if `late`.
+    fn finish(&self, what: &str, late: bool) {
+        eprintln!(
+            "{what}: {} exact cases at a normal x, {} late ones at a subnormal x",
+            self.normal, self.late
+        );
+        assert!(self.normal > 0 && (self.late > 0 || !late));
+    }
+}
+
 // The arguments one ulp from the cases of (A) are checked at every `STRIDE`-th case only, so
 // that the test takes a few seconds.
 const STRIDE: usize = 7;
@@ -57,8 +90,9 @@ const STRIDE: usize = 7;
 // `check_pow` only.
 #[test]
 fn powers_of_two() {
-    check_pow_is(4.0, 1.5, Some(8.0));
-    check_pow_is(pow2(-1024), pow2(-10), Some(0.5));
+    let mut seen = Seen::default();
+    seen.check(4.0, 1.5, Some(8.0));
+    seen.check(pow2(-1024), pow2(-10), Some(0.5));
     let mut case = 0;
     for e in (-1074..=1023i64).filter(|&e| e != 0) {
         let x = pow2(e);
@@ -75,7 +109,7 @@ fn powers_of_two() {
                 // |j| < 2^12, so that y is exact.
                 let y = j as f64 / f64::from(1u32 << k);
                 let want = if finer { None } else { value(1, f * j) };
-                check_pow_is(x, y, want);
+                seen.check(x, y, want);
                 case += 1;
                 if case % STRIDE != 0 {
                     continue;
@@ -85,7 +119,7 @@ fn powers_of_two() {
                 }
                 for x in [f64::next_down(x), f64::next_up(x)] {
                     if e >= -1022 {
-                        check_pow_is(x, y, if y == 1.0 { Some(x) } else { None });
+                        seen.check(x, y, if y == 1.0 { Some(x) } else { None });
                     } else {
                         check_pow(x, y);
                     }
@@ -93,6 +127,7 @@ fn powers_of_two() {
             }
         }
     }
+    seen.finish("powers of two", true);
 }
 
 // r^p if it is below 2^53.
@@ -127,9 +162,10 @@ const GREATEST: [u64; 6] = [(1 << 53) - 1, 94_906_265, 9741, 97, 9, 3];
 // power of an integer; and x ± 1 ulp, checked by `check_pow` only.
 #[test]
 fn powers_of_odd_numbers() {
-    check_pow_is(9.0, 0.5, Some(3.0));
+    let mut seen = Seen::default();
+    seen.check(9.0, 0.5, Some(3.0));
     let (r32, r33) = (power(3, 32).unwrap(), power(3, 33).unwrap());
-    check_pow_is(r32 as f64, 33.0 / 32.0, Some(r33 as f64));
+    seen.check(r32 as f64, 33.0 / 32.0, Some(r33 as f64));
     for (k, &g) in GREATEST.iter().enumerate() {
         let d = 1 << k;
         assert!(power(g, d).is_some() && power(g + 2, d).is_none());
@@ -152,7 +188,7 @@ fn powers_of_odd_numbers() {
                 for er in ers {
                     let x = value(big, er << k).unwrap();
                     let want = q.and_then(|q| value(q, er * i64::from(m)));
-                    check_pow_is(x, y, want);
+                    seen.check(x, y, want);
                     check_pow_is(x, -y, None);
                     for y in [f64::next_down(y), f64::next_up(y)] {
                         check_pow_is(x, y, None);
@@ -164,6 +200,7 @@ fn powers_of_odd_numbers() {
             }
         }
     }
+    seen.finish("powers of odd numbers", false);
 }
 
 // Checks x^n and (-x)^n in both directions against `want`, the `f64` that x^n is, if any, as

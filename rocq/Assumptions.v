@@ -14,7 +14,8 @@
     [DyHyp.v], those about its logarithms, [DyLog.v] and [DyLogHyp.v],
     those about π and its inverse trigonometric functions, [DyConstPi.v],
     [DyAtan.v] and [DyAsin.v], the one about its trigonometric functions,
-    [DyTrig.v], those about its powers, [DyPown.v] and [DyPow.v], those
+    [DyTrig.v], those about its powers, [DyPown.v], [DyPowMaybe.v] and
+    [DyPow.v], those
     about its functions rounded to nearest, from [DyDriverNear.v] to
     [DyPowNear.v], the one about the signs of [pow] in [src/cr.rs],
     [CrPow.v], those about its roots and the square roots of
@@ -43,8 +44,8 @@ From Inari Require Import Encoding AddRu SubRu TwoProduct MulRu DivRu SqrtRdRu A
   MpfrConsistent Contract OfPointCore OfPoint OfPointElem OfPointPow MpfrPoint
   PointTheorems PointDec PointValid.
 From Inari Require Limbs KnuthStep Knuth NatOps DyRound DyConv DyIsqrt DyOps DyDriver
-  DyConst DyExp DyHyp DyLog DyLogHyp DyConstPi DyAtan DyAsin DyTrig DyPown DyPow DyDriverNear
-  DyExpNear DyLogNear DyAtanNear DyTrigNear DyPowNearExact DyPowNear CrPow DyPoint
+  DyConst DyExp DyHyp DyLog DyLogHyp DyConstPi DyAtan DyAsin DyTrig DyPown DyPowMaybe DyPow
+  DyDriverNear DyExpNear DyLogNear DyAtanNear DyTrigNear DyPowNearExact DyPowNear CrPow DyPoint
   DyPointDec.
 From Inari Require RootReal RootRound DyIcbrt DyCbrt DyHypotExact DyHypotOdd DyHypot CrRoot.
 From Inari Require FastCbrtNewton FastCbrtStep FastCbrtReduce FastCbrt FastHypotFar FastHypotSum
@@ -661,6 +662,7 @@ Print Assumptions DyPown.pown_dir_correct.
 Print Assumptions DyPown.pown_dir_side.
 Print Assumptions DyPown.pown_dir_strict.
 Print Assumptions DyPow.pow_dir_exact.
+Print Assumptions DyPowMaybe.maybe_exact_complete.
 Print Assumptions DyPown.pown_dir_exact.
 Print Assumptions PowFactor.pow2_rational.
 Print Assumptions PowFactor.pow10_rational.

@@ -329,6 +329,7 @@ theories/DyTrigPos.v
 theories/DyPowArith.v
 theories/DyPowRules.v
 theories/DyPowExact.v
+theories/DyPowMaybe.v
 theories/DyPowCore.v
 theories/DyPown.v
 theories/DyPow.v

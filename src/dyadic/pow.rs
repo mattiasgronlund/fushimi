@@ -66,14 +66,16 @@
 // return `None` where the exponent of `fast_exp_edge` is 1024, at y ln x in about
 // (709.78263, `T_OVER`), where x^y is 2^1024 or more, or less than 2^-13 below it, relative.
 // Where the fast path returns `None`, `pown_pos` and `pown_pos_near` call `ziv` and `ziv_near`,
-// and `pow` and `pow_near` go on to `exact`, where `maybe_exact` did not send x^y there first,
-// and to `exact_near`, then to x^n at an integer y, and then to `ziv` and `ziv_near`. At an x^y
-// or x^n that is an `f64`, the directed test fails, as it passes only where the scaled result
-// lies strictly between two adjacent `f64`s, which is why `pow` tries `exact` first where
-// `maybe_exact` says that x^y may be one. `exact` then settles x^y, and the loop settles x^n at
-// its first level as above. The test to nearest fails at a midpoint, as it passes only where the
-// scaled result is less than half a gap from an `f64`, and `exact_near` settles those x^y.
-// Where the fast path returns, it returns the correct rounding, at these arguments too.
+// and `pow` and `pow_near` go on to `exact`, at a subnormal x where `maybe_exact` did not send
+// x^y there first (at a normal x, `exact` would return no `f64` there, as the comment on
+// `maybe_exact` says), and to `exact_near`, then to x^n at an integer y, and then to `ziv` and
+// `ziv_near`. At an x^y or x^n that is an `f64`, the directed test fails, as it passes only
+// where the scaled result lies strictly between two adjacent `f64`s, which is why `pow` tries
+// `exact` first where `maybe_exact` says that x^y may be one. `exact` then settles x^y, and the
+// loop settles x^n at its first level as above. The test to nearest fails at a midpoint, as it
+// passes only where the scaled result is less than half a gap from an `f64`, and `exact_near`
+// settles those x^y. Where the fast path returns, it returns the correct rounding, at these
+// arguments too.
 //
 // `rocq/theories/Model.v` transcribes each function of this file except the tests, so it has
 // to be updated along with them. `rocq/theories/DyPow.v` and `rocq/theories/DyPown.v` prove
@@ -84,10 +86,11 @@
 // `rocq/theories/Mpfr.v` says, `pow` in both of the orders of `exact` and the fast path that
 // `maybe_exact` picks from. `DyPow.v` builds on `rocq/theories/DyPowRules.v` for the rules,
 // `rocq/theories/DyPowCore.v` for `Pow`, `rocq/theories/DyPowExact.v` and
-// `rocq/theories/DyPowArith.v` for `exact`, `DyPown.v` for the integer y that `pow` passes to
-// x^n through `pown_pos_ziv`, and `rocq/theories/FastPow.v` for the fast path. `DyPown.v`
-// proves the rules of x^n and binary powering. `FastPow.v` proves that the fast path returns
-// x^y rounded, with and without an FMA, from `rocq/theories/FastPowLn.v` for `ln_acc`,
+// `rocq/theories/DyPowArith.v` for `exact`, `rocq/theories/DyPowMaybe.v` for `maybe_exact` at
+// a normal x, `DyPown.v` for the integer y that `pow` passes to x^n through `pown_pos_ziv`,
+// and `rocq/theories/FastPow.v` for the fast path. `DyPown.v` proves the rules of x^n and
+// binary powering. `FastPow.v` proves that the fast path returns x^y rounded, with and without
+// an FMA, from `rocq/theories/FastPowLn.v` for `ln_acc`,
 // `rocq/theories/FastPowMul.v` for t, `rocq/theories/FastExpCore.v` for `fast_exp`,
 // `rocq/theories/FastPowRules.v` for the rules on th, `rocq/theories/FastExpEdge.v` for
 // `fast_exp_edge` and `rocq/theories/FastRoundWideErr.v` for `round_dir_wide_err` and
@@ -194,13 +197,15 @@ pub(crate) fn is_odd_integer(y: f64) -> bool {
 }
 
 // Whether `pow` tries `exact` before the fast path, whose directed test fails where x^y is an
-// `f64`. For a normal x it is false only where `exact` returns `None`, by the argument of
-// `exact`, which is checked by reading, not proved: `exact` returns an `f64` only for an odd
-// part of y below 2^11, so that the 32 low bits of y are zeros, as y is normal there (the
-// rule `s <= -58` of `pow` takes every subnormal y), and, for x = mx 2^ex with
-// mx > 1, at y > 0 with b y < 53 for b = floor(log2 mx), as mx = mr^(2^k) and mr^p < 2^53
-// give b y <= p log2 mr < 53. The results do not depend on it, as the fast path and `exact`
-// both return the correct rounding where they return.
+// `f64`. At a normal x > 0 other than 1 and a finite y != 0, it is false only where `exact`
+// returns no `f64` (`maybe_exact_complete` in `rocq/theories/DyPowMaybe.v`), which is why
+// `pow` does not call `exact` after the fast path there: `exact` returns an `f64` only at
+// y = my 2^ey for an odd my < 2^11 and ey >= -10, a normal y whose 32 low bits are zeros, and,
+// for x = mx 2^ex, with b = floor(log2 mx), at b = 0 for mx = 1, where t = b y is ±0, and
+// otherwise at y > 0 with b y < 53, as mx = mr^(2^k) and mr^p < 2^53 give
+// b y <= p log2 mr < 53; there t = b y, with no rounding, as b my < 2^17. At a subnormal x,
+// the bits of x do not give floor(log2 mx), and `pow` calls `exact` after the fast path where
+// this is false.
 fn maybe_exact(x: f64, y: f64) -> bool {
     if y.to_bits() as u32 != 0 {
         return false;
@@ -543,8 +548,8 @@ fn pow_dir<const UP: bool>(x: f64, y: f64) -> f64 {
             // |y ln x| < 2^-54, as exp's rule near 0.
             near_one(if above { 1.0 } else { -1.0 }, UP)
         } else {
-            // `exact` first where x^y may be an `f64` (`maybe_exact`), and after the fast path
-            // otherwise.
+            // `exact` first where x^y may be an `f64` (`maybe_exact`), and otherwise after the
+            // fast path only for a subnormal x, as for a normal x `exact` then returns no `f64`.
             let first = maybe_exact(x, y);
             if first {
                 if let Some(v) = exact(x, y) {
@@ -554,7 +559,7 @@ fn pow_dir<const UP: bool>(x: f64, y: f64) -> f64 {
             if let Some(v) = fast_pow_dir_call::<UP>(x, y) {
                 return v;
             }
-            if !first {
+            if !first && x < f64::MIN_POSITIVE {
                 if let Some(v) = exact(x, y) {
                     return v;
                 }
