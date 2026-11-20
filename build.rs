@@ -18,7 +18,9 @@
 // `Baseline` says; elsewhere they are the slow paths of another backend, and are left to LLVM
 // as before.
 // `cfg(inari_sse42_backend)` is set where it uses `sse42` (`src/simd/x86_64.rs`), whose
-// `mul_add_ru` is then out of line, as `Baseline` says.
+// `mul_add_ru` is then out of line, and where `Baseline` calls its forwarder
+// `mul_add_ru_exported` unless `docsrs` is set, at which this does not look either, as `Baseline`
+// and `CrateBaseline` say.
 
 use std::env;
 

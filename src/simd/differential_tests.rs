@@ -271,7 +271,57 @@ fn binary_ops() -> Vec<(&'static str, HwBinary, Binary)> {
     ];
     ops.extend(binary_fpcr_ops());
     ops.extend(binary_c_abi_ops());
+    ops.extend(binary_exported_ops());
     ops
+}
+
+// The forwarders to `add_ru`, `div_ru` and `mul_ru` that the crate exports, which the methods of
+// `Baseline` call where the `fma` or `sse42` backend is the build's (see `Baseline` in
+// `src/simd/token.rs`). As in `binary_c_abi_ops`, the closures turn them into `fn` pointers of
+// Rust's ABI, and their names begin with the operation's.
+#[cfg(all(
+    target_arch = "x86_64",
+    target_feature = "sse4.2",
+    not(target_feature = "avx512f")
+))]
+fn binary_exported_ops() -> Vec<(&'static str, HwBinary, Binary)> {
+    vec![
+        (
+            "add_ru/exported",
+            |x, y| super::add_ru_exported(x, y),
+            generic::add_ru,
+        ),
+        (
+            "mul_ru/exported/fma",
+            |x, y| super::mul_ru_exported(x, y),
+            generic::mul_ru_impl::<true>,
+        ),
+        (
+            "mul_ru/exported/dekker",
+            |x, y| super::mul_ru_exported(x, y),
+            generic::mul_ru_impl::<false>,
+        ),
+        (
+            "div_ru/exported/fma",
+            |x, y| super::div_ru_exported(x, y),
+            generic::div_ru_impl::<true>,
+        ),
+        (
+            "div_ru/exported/dekker",
+            |x, y| super::div_ru_exported(x, y),
+            generic::div_ru_impl::<false>,
+        ),
+    ]
+}
+
+// Only the `fma` and `sse42` backends have `*_exported` forwarders.
+#[cfg(any(
+    target_arch = "aarch64",
+    target_arch = "wasm32",
+    all(target_feature = "sse4.2", target_feature = "avx512f")
+))]
+fn binary_exported_ops() -> Vec<(&'static str, HwBinary, Binary)> {
+    vec![]
 }
 
 // The copies of `add_ru`, `div_ru` and `mul_ru` that take the ABI `C`, which the
@@ -389,7 +439,39 @@ fn ternary_ops() -> Vec<(&'static str, HwTernary, Ternary)> {
         ),
     ];
     ops.extend(ternary_fpcr_ops());
+    ops.extend(ternary_exported_ops());
     ops
+}
+
+// As `binary_exported_ops`, for the forwarder to `mul_add_ru` of `sse42`.
+#[cfg(inari_sse42_backend)]
+fn ternary_exported_ops() -> Vec<(&'static str, HwTernary, Ternary)> {
+    let mul_add_ru: HwTernary = |x, y, z| super::mul_add_ru_exported(x, y, z);
+    vec![
+        (
+            "mul_add_ru/exported/fma",
+            mul_add_ru,
+            generic::mul_add_ru_impl::<true>,
+        ),
+        (
+            "mul_add_ru/exported/dekker",
+            mul_add_ru,
+            generic::mul_add_ru_impl::<false>,
+        ),
+    ]
+}
+
+// Only `sse42` has a forwarder to `mul_add_ru` that the crate exports.
+#[cfg(all(
+    not(inari_sse42_backend),
+    any(
+        target_arch = "aarch64",
+        target_arch = "wasm32",
+        target_feature = "sse4.2"
+    )
+))]
+fn ternary_exported_ops() -> Vec<(&'static str, HwTernary, Ternary)> {
+    vec![]
 }
 
 // As `binary_fpcr_ops`.

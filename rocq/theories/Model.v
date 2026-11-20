@@ -6889,10 +6889,10 @@ Definition quadrants (pt : point) (a b : f64) : f64 * f64 :=
     [shuffle02], [shuffle03], [shuffle13], [swap], [add_rn], [sub_rn],
     [hadd_rn], [add_ru], [sub_ru], [mul_ru], [div_ru], [mul_add_ru],
     [sqrt1_ru] and [sqrt_rd_ru], which are the ones in [Generic] here.
-    [x + y], [x - y] and [Interval::sqrt] are [add_with], [sub_with] and
-    [sqrt_with] of [impl Interval] called with the token [Baseline], whose
-    backend is the build's (see [src/simd/token.rs]). [x / y],
-    [Interval::mul_add], [Interval::recip] and [Interval::sqr] are
+    [Interval::sqrt] is [sqrt_with] of [impl Interval] called with the
+    token [Baseline], whose backend is the build's (see
+    [src/simd/token.rs]). [x + y], [x - y], [x / y], [Interval::mul_add],
+    [Interval::recip] and [Interval::sqr] are [add_with], [sub_with],
     [div_with], [mul_add_with], [recip_with] and [sqr_with] called with
     the token [CrateBaseline], private to the crate, whose backend is
     that of [Baseline] (see [src/simd/token.rs]), [x * y] is the body of
@@ -7853,7 +7853,7 @@ Definition neg (self : Interval) : Interval :=
 (** [pub fn add_with<S: Simd>(self, s: S, rhs: Self) -> Self] of
     [impl Interval], for an [s] whose backend is the portable one;
     [fn add(self, rhs: Self) -> Self] of [impl Add for Interval] is
-    [self.add_with(Baseline, rhs)] *)
+    [self.add_with(CrateBaseline, rhs)] *)
 Definition add (self rhs : Interval) : option Interval :=
   let x := rep self in
   let y := rep rhs in
@@ -7863,7 +7863,7 @@ Definition add (self rhs : Interval) : option Interval :=
 (** [pub fn sub_with<S: Simd>(self, s: S, rhs: Self) -> Self] of
     [impl Interval], for an [s] whose backend is the portable one;
     [fn sub(self, rhs: Self) -> Self] of [impl Sub for Interval] is
-    [self.sub_with(Baseline, rhs)] *)
+    [self.sub_with(CrateBaseline, rhs)] *)
 Definition sub (self rhs : Interval) : option Interval :=
   let x := rep self in
   let y := Generic.swap (rep rhs) in
@@ -9023,8 +9023,8 @@ Definition neg (self : DecInterval) : DecInterval :=
     [self.x().add_with(s, rhs.x())] is [Interval.add (itv self) (itv rhs)];
     [fn add(self, rhs: Self) -> Self] of [impl Add for DecInterval]
     expands the same macro with [self.x() + rhs.x()], which is
-    [self.x().add_with(Baseline, rhs.x())], and with [Self::set_dec],
-    which calls [Self::set_dec_impl]. *)
+    [self.x().add_with(CrateBaseline, rhs.x())], and with
+    [Self::set_dec], which calls [Self::set_dec_impl]. *)
 Definition add (self rhs : DecInterval) : option DecInterval :=
   if is_nai self || is_nai rhs then Some NAI
   else
@@ -9040,8 +9040,8 @@ Definition add (self rhs : DecInterval) : option DecInterval :=
     [self.x().sub_with(s, rhs.x())] is [Interval.sub (itv self) (itv rhs)];
     [fn sub(self, rhs: Self) -> Self] of [impl Sub for DecInterval]
     expands the same macro with [self.x() - rhs.x()], which is
-    [self.x().sub_with(Baseline, rhs.x())], and with [Self::set_dec],
-    which calls [Self::set_dec_impl]. *)
+    [self.x().sub_with(CrateBaseline, rhs.x())], and with
+    [Self::set_dec], which calls [Self::set_dec_impl]. *)
 Definition sub (self rhs : DecInterval) : option DecInterval :=
   if is_nai self || is_nai rhs then Some NAI
   else

@@ -34,6 +34,23 @@ pub(crate) extern "sysv64-unwind" fn add_ru(x: F64X2, y: F64X2) -> F64X2 {
     add_ru_body(x, y)
 }
 
+/// `add_ru_exported(x, y) = add_ru(x, y)`.
+// The forwarder to `add_ru` that `Baseline::add_ru` calls: that method is `#[inline(always)]`, so
+// a user's crate calls this forwarder, which the crate exports, without the method in between,
+// whereas the crate's own operations call `add_ru`, which it does not export, directly, through
+// `CrateBaseline` (see `Baseline` in `src/simd/token.rs`). It calls `add_ru`, and LLVM compiled
+// it to one `jmp` to `add_ru`. With the body of `add_ru` in its place, LLVM merged the two, as its
+// pass MergeFunctions does: it kept this function and made `add_ru` an alias of it, so that the
+// crate's operations in its codegen unit called this function through the global offset table,
+// every one of them with one codegen unit, where the slow path of `add_ru` also went out of line
+// (readelf and objdump, rustc 1.98, row 164).
+#[cfg(target_feature = "sse4.2")]
+#[allow(improper_ctypes_definitions)] // `__m128d` (see `Baseline` in `src/simd/token.rs`).
+#[inline(never)]
+pub(crate) extern "sysv64-unwind" fn add_ru_exported(x: F64X2, y: F64X2) -> F64X2 {
+    add_ru(x, y)
+}
+
 // The body of `add_ru`, which the copies of `V3` inline in every build (see the use of it in
 // `fma.rs`).
 #[inline(always)]

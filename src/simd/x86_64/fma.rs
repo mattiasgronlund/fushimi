@@ -35,6 +35,8 @@ use std::arch::x86_64::*;
 
 #[cfg(all(target_feature = "avx", target_feature = "fma"))]
 pub(crate) use super::lanewise::add_ru;
+#[cfg(all(target_feature = "avx", target_feature = "fma"))]
+pub(crate) use super::lanewise::add_ru_exported;
 // Without `avx` and `fma`, `lanewise::add_ru` can be the build's own backend function (that of
 // `sse42`), compiled without those features. Called from the copy of `V3` in
 // `src/simd/token.rs`, it took its vectors in memory from every caller, the build's operations
@@ -66,6 +68,18 @@ pub(crate) fn div_ru(x: F64X2, y: F64X2) -> F64X2 {
 #[inline(never)]
 pub(crate) extern "sysv64-unwind" fn div_ru(x: F64X2, y: F64X2) -> F64X2 {
     div_ru_body(x, y)
+}
+
+/// `div_ru_exported(x, y) = div_ru(x, y)`.
+// The forwarder to `div_ru` that `Baseline::div_ru` calls, which the crate exports, whereas
+// `CrateBaseline` calls `div_ru`. It calls `div_ru`, and LLVM compiled it to one `jmp` to it:
+// with the body of `div_ru` in its place, LLVM merged the two (see `add_ru_exported` in
+// `lanewise.rs`).
+#[cfg(all(target_feature = "avx", target_feature = "fma"))]
+#[allow(improper_ctypes_definitions)] // `__m128d` (see `Baseline` in `src/simd/token.rs`).
+#[inline(never)]
+pub(crate) extern "sysv64-unwind" fn div_ru_exported(x: F64X2, y: F64X2) -> F64X2 {
+    div_ru(x, y)
 }
 
 // The body of `div_ru`.
@@ -170,6 +184,18 @@ pub(crate) fn mul_ru(x: F64X2, y: F64X2) -> F64X2 {
 #[inline(never)]
 pub(crate) extern "sysv64-unwind" fn mul_ru(x: F64X2, y: F64X2) -> F64X2 {
     mul_ru_body(x, y)
+}
+
+/// `mul_ru_exported(x, y) = mul_ru(x, y)`.
+// The forwarder to `mul_ru` that `Baseline::mul_ru` calls, which the crate exports, whereas
+// `CrateBaseline` calls `mul_ru`. It calls `mul_ru`, and LLVM compiled it to one `jmp` to it:
+// with the body of `mul_ru` in its place, LLVM merged the two (see `add_ru_exported` in
+// `lanewise.rs`).
+#[cfg(all(target_feature = "avx", target_feature = "fma"))]
+#[allow(improper_ctypes_definitions)] // `__m128d` (see `Baseline` in `src/simd/token.rs`).
+#[inline(never)]
+pub(crate) extern "sysv64-unwind" fn mul_ru_exported(x: F64X2, y: F64X2) -> F64X2 {
+    mul_ru(x, y)
 }
 
 // The body of `mul_ru`.

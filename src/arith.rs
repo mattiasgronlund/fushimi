@@ -65,9 +65,10 @@ impl Add for Interval {
 
     fn add(self, rhs: Self) -> Self {
         // Proved correct in `rocq/theories/AddSub.v` for the portable backend, as `add_with`
-        // called with `Baseline`. `rocq/theories/Model.v` transcribes this call, so it has to
+        // called with `CrateBaseline`, whose backend is that of `Baseline` (see `CrateBaseline`
+        // in `src/simd/token.rs`). `rocq/theories/Model.v` transcribes this call, so it has to
         // be updated along with it.
-        self.add_with(Baseline, rhs)
+        self.add_with(CrateBaseline, rhs)
     }
 }
 
@@ -119,9 +120,10 @@ impl Sub for Interval {
 
     fn sub(self, rhs: Self) -> Self {
         // Proved correct in `rocq/theories/AddSub.v` for the portable backend, as `sub_with`
-        // called with `Baseline`. `rocq/theories/Model.v` transcribes this call, so it has to
+        // called with `CrateBaseline`, whose backend is that of `Baseline` (see `CrateBaseline`
+        // in `src/simd/token.rs`). `rocq/theories/Model.v` transcribes this call, so it has to
         // be updated along with it.
-        self.sub_with(Baseline, rhs)
+        self.sub_with(CrateBaseline, rhs)
     }
 }
 
@@ -513,11 +515,12 @@ impl Add for DecInterval {
 
     fn add(self, rhs: Self) -> Self {
         // Proved correct in `rocq/theories/AddSub.v` for the portable backend, as `add_with`
-        // called with `Baseline`: this is the body of `add_with`, `dec_add_sub_mul_with_body!`,
-        // with `self.x() + rhs.x()`, which is `self.x().add_with(Baseline, rhs.x())`, for the
-        // interval, and with `Self::set_dec`, which calls `Self::set_dec_impl` (see the comment
-        // on the macro). `rocq/theories/Model.v` transcribes this, so it has to be updated along
-        // with it.
+        // called with `CrateBaseline`, whose backend is that of `Baseline` (see `CrateBaseline`
+        // in `src/simd/token.rs`): this is the body of `add_with`, `dec_add_sub_mul_with_body!`,
+        // with `self.x() + rhs.x()`, which is `self.x().add_with(CrateBaseline, rhs.x())`, for
+        // the interval, and with `Self::set_dec`, which calls `Self::set_dec_impl` (see the
+        // comment on the macro). `rocq/theories/Model.v` transcribes this, so it has to be
+        // updated along with it.
         dec_add_sub_mul_with_body!(self, rhs, self.x() + rhs.x(), Self::set_dec)
     }
 }
@@ -570,11 +573,12 @@ impl Sub for DecInterval {
 
     fn sub(self, rhs: Self) -> Self {
         // Proved correct in `rocq/theories/AddSub.v` for the portable backend, as `sub_with`
-        // called with `Baseline`: this is the body of `sub_with`, `dec_add_sub_mul_with_body!`,
-        // with `self.x() - rhs.x()`, which is `self.x().sub_with(Baseline, rhs.x())`, for the
-        // interval, and with `Self::set_dec`, which calls `Self::set_dec_impl` (see the comment
-        // on the macro). `rocq/theories/Model.v` transcribes this, so it has to be updated along
-        // with it.
+        // called with `CrateBaseline`, whose backend is that of `Baseline` (see `CrateBaseline`
+        // in `src/simd/token.rs`): this is the body of `sub_with`, `dec_add_sub_mul_with_body!`,
+        // with `self.x() - rhs.x()`, which is `self.x().sub_with(CrateBaseline, rhs.x())`, for
+        // the interval, and with `Self::set_dec`, which calls `Self::set_dec_impl` (see the
+        // comment on the macro). `rocq/theories/Model.v` transcribes this, so it has to be
+        // updated along with it.
         dec_add_sub_mul_with_body!(self, rhs, self.x() - rhs.x(), Self::set_dec)
     }
 }

@@ -27,6 +27,8 @@ use super::{add_rn, all, and, constant, eq, extract, gt, lt, or, splat, sub_rn, 
 use crate::simd::generic;
 use std::arch::x86_64::*;
 
+#[cfg(target_feature = "sse4.2")]
+pub(crate) use super::lanewise::add_ru_exported;
 pub(crate) use super::lanewise::{add_ru, sqrt1_ru, sub1_ru, sub_ru};
 #[cfg(test)]
 pub(crate) use super::lanewise::{sqrt1_rd_mxcsr, sqrt1_ru_mxcsr};
@@ -49,6 +51,18 @@ pub(crate) fn div_ru(x: F64X2, y: F64X2) -> F64X2 {
 #[inline(never)]
 pub(crate) extern "sysv64-unwind" fn div_ru(x: F64X2, y: F64X2) -> F64X2 {
     div_ru_body(x, y)
+}
+
+/// `div_ru_exported(x, y) = div_ru(x, y)`.
+// The forwarder to `div_ru` that `Baseline::div_ru` calls, which the crate exports, whereas
+// `CrateBaseline` calls `div_ru`. It calls `div_ru`, and LLVM compiled it to one `jmp` to it:
+// with the body of `div_ru` in its place, LLVM merged the two (see `add_ru_exported` in
+// `lanewise.rs`).
+#[cfg(target_feature = "sse4.2")]
+#[allow(improper_ctypes_definitions)] // `__m128d` (see `Baseline` in `src/simd/token.rs`).
+#[inline(never)]
+pub(crate) extern "sysv64-unwind" fn div_ru_exported(x: F64X2, y: F64X2) -> F64X2 {
+    div_ru(x, y)
 }
 
 // The body of `div_ru`.
@@ -113,6 +127,18 @@ pub(crate) extern "sysv64-unwind" fn mul_add_ru(a: F64X2, b: F64X2, c: F64X2) ->
     mul_add_ru_body(a, b, c)
 }
 
+/// `mul_add_ru_exported(x, y, z) = mul_add_ru(x, y, z)`.
+// The forwarder to `mul_add_ru` that `Baseline::mul_add_ru` calls, which the crate exports,
+// whereas `CrateBaseline` calls `mul_add_ru`. It calls `mul_add_ru`, and LLVM compiled it to one
+// `jmp` to it: with the body of `mul_add_ru` in its place, LLVM merged the two (see
+// `add_ru_exported` in `lanewise.rs`).
+#[cfg(target_feature = "sse4.2")]
+#[allow(improper_ctypes_definitions)] // `__m128d` (see `Baseline` in `src/simd/token.rs`).
+#[inline(never)]
+pub(crate) extern "sysv64-unwind" fn mul_add_ru_exported(a: F64X2, b: F64X2, c: F64X2) -> F64X2 {
+    mul_add_ru(a, b, c)
+}
+
 // The body of `mul_add_ru`.
 #[inline(always)]
 fn mul_add_ru_body(a: F64X2, b: F64X2, c: F64X2) -> F64X2 {
@@ -174,6 +200,18 @@ pub(crate) fn mul_ru(x: F64X2, y: F64X2) -> F64X2 {
 #[inline(never)]
 pub(crate) extern "sysv64-unwind" fn mul_ru(x: F64X2, y: F64X2) -> F64X2 {
     mul_ru_body(x, y)
+}
+
+/// `mul_ru_exported(x, y) = mul_ru(x, y)`.
+// The forwarder to `mul_ru` that `Baseline::mul_ru` calls, which the crate exports, whereas
+// `CrateBaseline` calls `mul_ru`. It calls `mul_ru`, and LLVM compiled it to one `jmp` to it:
+// with the body of `mul_ru` in its place, LLVM merged the two (see `add_ru_exported` in
+// `lanewise.rs`).
+#[cfg(target_feature = "sse4.2")]
+#[allow(improper_ctypes_definitions)] // `__m128d` (see `Baseline` in `src/simd/token.rs`).
+#[inline(never)]
+pub(crate) extern "sysv64-unwind" fn mul_ru_exported(x: F64X2, y: F64X2) -> F64X2 {
+    mul_ru(x, y)
 }
 
 // The body of `mul_ru`.

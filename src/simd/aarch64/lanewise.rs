@@ -27,7 +27,8 @@ pub(crate) fn add_ru(x: F64X2, y: F64X2) -> F64X2 {
 // The copy of `add_ru` with the ABI `C`, which passes and returns each vector in a register, and
 // which `Baseline::add_ru` calls: that method is `#[inline(always)]`, so a user's crate calls this
 // copy, which the crate exports, and so do `x + y` and `x - y` of intervals, which call
-// `add_with` and `sub_with` with `Baseline` (see `Baseline` in `src/simd/token.rs`).
+// `add_with` and `sub_with` with `CrateBaseline`, whose `add_ru` calls that method (see `Baseline`
+// and `CrateBaseline` in `src/simd/token.rs`).
 #[allow(improper_ctypes_definitions)] // `float64x2_t`, but only Rust code calls it.
 pub(crate) extern "C-unwind" fn add_ru_c_abi(x: F64X2, y: F64X2) -> F64X2 {
     add_ru_body(x, y)
