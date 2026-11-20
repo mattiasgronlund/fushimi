@@ -225,8 +225,8 @@ jobs:
       - name: Clippy
         run: cargo clippy --all-targets
 
-      # The newest versions of some dependencies need a newer Rust. Pick the newest
-      # versions that support the `rust-version` in Cargo.toml.
+      # The newest versions of some dependencies can need a newer Rust. Pick the
+      # newest versions that support the `rust-version` in Cargo.toml.
       - name: Generate lockfile (MSRV)
         run: cargo +stable --config 'resolver.incompatible-rust-versions="fallback"' generate-lockfile
 
@@ -281,8 +281,8 @@ jobs:
           override: true
           profile: minimal
 
-      # The newest versions of some dependencies need a newer Rust. Pick the newest
-      # versions that support the `rust-version` in Cargo.toml.
+      # The newest versions of some dependencies can need a newer Rust. Pick the
+      # newest versions that support the `rust-version` in Cargo.toml.
       - name: Generate lockfile
         run: cargo +stable --config 'resolver.incompatible-rust-versions="fallback"' generate-lockfile
 
