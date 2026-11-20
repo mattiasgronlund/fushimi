@@ -270,7 +270,7 @@ destruct (DyadicLog.fast_log10_near false x) eqn:F; cbv iota in H.
 destruct (List.find (fun k => eq (DyadicExp.pow10 (Z.of_nat k)) x) (List.seq 0 23))
   as [k|] eqn:Ef.
 - injection H as <-. exact (log10_pow10_near x k Fx Ef).
-- apply (ziv_near_strict_correct (DyadicLog.ev_log10 x) 1%nat _ v); [|exact H].
+- apply (ziv_near_strict_correct (DyadicLog.ev_log10 x) 2%nat _ v); [|exact H].
   intros n a Hn Ha. exact (ev_log10_correct x n a Hn Ha).
 Qed.
 
@@ -285,7 +285,7 @@ destruct (lt (fabs x) DyadicExp.tiny_near) eqn:G; cbv iota in H.
 { injection H as <-. exact (asinh_tiny_near_rule x Fx G). }
 destruct (DyadicLog.fast_asinh_near false x) eqn:F; cbv iota in H.
 { injection H as <-. exact (fast_asinh_near_correct false x _ Fx (fast_not_tiny_near x Fx G) F). }
-apply (ziv_near_strict_correct (DyadicLog.ev_asinh x) 1%nat _ v); [|exact H].
+apply (ziv_near_strict_correct (DyadicLog.ev_asinh x) 2%nat _ v); [|exact H].
 intros n a Hn Ha. exact (ev_asinh_correct x n a Hn Ha).
 Qed.
 

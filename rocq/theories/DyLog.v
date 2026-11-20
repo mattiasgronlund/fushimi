@@ -216,7 +216,7 @@ destruct (DyadicLog.fast_log10_dir false x up) eqn:F; cbv iota in H.
 destruct (List.find (fun k => eq (DyadicExp.pow10 (Z.of_nat k)) x) (List.seq 0 23))
   as [k|] eqn:Ef.
 - injection H as <-. apply Hp. exact (log10_pow10_rule x up k Fx Ef).
-- apply (Hz (DyadicLog.ev_log10 x) up 1%nat); [|exact H].
+- apply (Hz (DyadicLog.ev_log10 x) up 2%nat); [|exact H].
   intros n a Hn Ha. exact (ev_log10_correct x n a Hn Ha).
 Qed.
 

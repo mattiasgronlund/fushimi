@@ -742,9 +742,10 @@ thread_local! {
 }
 
 // `reset_ziv_level` and `ziv_level` have the `cfg` of their callers, the MPFR tests of
-// `src/mpfr_calls/tests.rs`, of `src/dyadic/atan/tests.rs` (`near_level2`) and of
-// `src/cr/tests/mpfr/hard_cases.rs`, so that they are not dead code in the tests of the other
-// platforms. They record the levels of `ziv_near` too.
+// `src/mpfr_calls/tests.rs`, of `src/dyadic/atan/tests.rs` (`near_level2`), of
+// `src/dyadic/log/tests.rs` (`with_level`), of `src/dyadic/exp/tests.rs`
+// (`tanh_hard_cases_reach_ziv`) and of `src/cr/tests/mpfr/hard_cases.rs`, so that they are not
+// dead code in the tests of the other platforms. They record the levels of `ziv_near` too.
 
 /// Forgets the levels that `ziv` has used on this thread, so that `ziv_level` is `(0, 0)` until
 /// `ziv` is called again.

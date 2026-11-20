@@ -1245,7 +1245,10 @@ fn ahyp_near_taken() {
 ))]
 mod mpfr {
     use super::*;
-    use crate::mpfr_calls::mpfr::*;
+    use crate::{
+        dyadic::{reset_ziv_level, ziv_level},
+        mpfr_calls::mpfr::*,
+    };
     use rug::{
         float::{Constant, Round},
         Float,
@@ -1627,6 +1630,95 @@ mod mpfr {
                 d.to_f64(),
                 lx.to_f64()
             );
+        }
+    }
+
+    // The function `i` at `x`, toward +∞ if `up` is `Some(true)`, toward -∞ if it is
+    // `Some(false)` and to nearest if it is `None`, with the levels that `ziv` and `ziv_near`
+    // used in it, `(level, failed)` as `ziv_level` gives them: level 0 where a rule or a fast
+    // path settled it. `ziv_level` has the `cfg` of this module.
+    fn with_level(i: usize, x: f64, up: Option<bool>) -> (f64, (usize, usize)) {
+        reset_ziv_level();
+        let y = match up {
+            Some(up) => FUNCTIONS[i].1(x, up),
+            None => NEAR[i](x),
+        };
+        (y, ziv_level())
+    }
+
+    // ln 1 and acosh 1 in the three roundings, log2 2^k in both directions for every k from
+    // -1074 to 1023, and log2 1 to nearest are exact results that the rules and the fast paths
+    // of `log.rs` leave to `ziv` and `ziv_near`. Each reaches them, and the first rounding test
+    // that they make passes and gives the result: `Ln` and `Acosh` give the point 0 at 1, and
+    // `Log2` the point k at 2^k, at every level (`ev_ln_one`, `ev_acosh_one` and `ev_log2_exact`
+    // in `rocq/theories/DyLogPoint.v`; `exact_enclosures` tests levels 1 and 64), so this holds
+    // whichever level the call starts at. log2 2^k to nearest for k other than 0 is not here:
+    // its fast path settles it.
+    #[test]
+    fn exact_points_reach_ziv() {
+        let exact = |i: usize, x: f64, up: Option<bool>, want: f64| {
+            let (y, (level, failed)) = with_level(i, x, up);
+            assert!(
+                y.to_bits() == want.to_bits() && level > 0 && failed == 0,
+                "{}({x:e}), up = {up:?}: {y:e} at level {level} after {failed} failed tests, not \
+                 {want:e} from the first test of `ziv`",
+                FUNCTIONS[i].0
+            );
+        };
+        for i in [LN, ACOSH] {
+            for up in [Some(false), Some(true), None] {
+                exact(i, 1.0, up, 0.0);
+            }
+        }
+        for k in -1074..=1023 {
+            for up in [false, true] {
+                exact(LOG2, pow2(k), Some(up), f64::from(k));
+            }
+        }
+        exact(LOG2, 1.0, None, 0.0);
+    }
+
+    // One argument per call of `ziv` and `ziv_near` in `log.rs`, as (function, to nearest, x):
+    // for each function, one at which its fast path fails in both directions, so that it
+    // reaches `ziv` in both, and one at which it fails to nearest, so that it reaches
+    // `ziv_near`. Each is, of the arguments of that function in
+    // `src/cr/tests/mpfr/hard_cases.wc` at which it reaches that call in a build for Haswell,
+    // the one with the highest h, the hardness that its comment there gives, with ties going to
+    // the first in the file.
+    const ZIV_CASES: [(usize, bool, f64); 12] = [
+        (LN, false, 1.7374296064433466e204),   // h=118
+        (LN, true, 4.492700575938173e220),     // h=115
+        (LOG2, false, 7.677667061806275e-309), // h=109, subnormal
+        (LOG2, true, 4.327990102461302e-3),    // h=108
+        (LOG10, false, 2.889107606708965e1),   // h=120
+        (LOG10, true, 2.605753595336707e129),  // h=121
+        (ASINH, false, 1.7881393432625764e-6), // h=126
+        (ASINH, true, 2.2463502879690864e220), // h=115
+        (ACOSH, false, 8.687148032216733e203), // h=118
+        (ACOSH, true, 2.2463502879690864e220), // h=115
+        (ATANH, false, 8.940696716307164e-7),  // h=126
+        (ATANH, true, 3.0940828994190924e-4),  // h=109
+    ];
+
+    // Each argument of `ZIV_CASES` reaches its call of `ziv` or `ziv_near`, and the function
+    // gives MPFR's roundings there, in both directions and to nearest (`check`).
+    #[test]
+    fn hard_cases_reach_ziv() {
+        for (i, near, x) in ZIV_CASES {
+            let ups: &[Option<bool>] = if near {
+                &[None]
+            } else {
+                &[Some(false), Some(true)]
+            };
+            for &up in ups {
+                let (_, (level, _)) = with_level(i, x, up);
+                assert!(
+                    level > 0,
+                    "{}({x:e}), up = {up:?}: `ziv` not reached",
+                    FUNCTIONS[i].0
+                );
+            }
+            super::check(i, x);
         }
     }
 }

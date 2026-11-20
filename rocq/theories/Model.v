@@ -3880,7 +3880,7 @@ Definition log10_dir_with (x : f64) (up : bool) : option f64 :=
       | None =>
           match List.find (fun k => eq (DyadicExp.pow10 (Z.of_nat k)) x) (List.seq 0 23) with
           | Some k => Some (of_u64 (Z.of_nat k))
-          | None => ziv (ev_log10 x) up 1
+          | None => ziv (ev_log10 x) up 2
           end
       end
   end.
@@ -3890,7 +3890,7 @@ Definition log10_dir_with (x : f64) (up : bool) : option f64 :=
 Definition asinh_dir_with (x : f64) (up : bool) : option f64 :=
   if is_nan x || (eq x infinity || eq x DyadicExp.neg_infinity) then Some x
   else if lt (fabs x) DyadicExp.tiny_hyp then Some (DyadicExp.toward_zero x up)
-  else match fast_asinh_dir false x up with Some r => Some r | None => ziv (ev_asinh x) up 1 end.
+  else match fast_asinh_dir false x up with Some r => Some r | None => ziv (ev_asinh x) up 2 end.
 
 (** [pub(crate) fn acosh(x: f64, up: bool) -> f64] *)
 Definition acosh_dir_with (x : f64) (up : bool) : option f64 :=
@@ -3946,7 +3946,7 @@ Definition log10_near_with (x : f64) : option f64 :=
       | None =>
           match List.find (fun k => eq (DyadicExp.pow10 (Z.of_nat k)) x) (List.seq 0 23) with
           | Some k => Some (of_u64 (Z.of_nat k))
-          | None => ziv_near (ev_log10 x) 1
+          | None => ziv_near (ev_log10 x) 2
           end
       end
   end.
@@ -3955,7 +3955,7 @@ Definition log10_near_with (x : f64) : option f64 :=
 Definition asinh_near_with (x : f64) : option f64 :=
   if is_nan x || (eq x infinity || eq x DyadicExp.neg_infinity) then Some x
   else if lt (fabs x) DyadicExp.tiny_near then Some x
-  else match fast_asinh_near false x with Some r => Some r | None => ziv_near (ev_asinh x) 1 end.
+  else match fast_asinh_near false x with Some r => Some r | None => ziv_near (ev_asinh x) 2 end.
 
 (** [pub(crate) fn acosh_near(x: f64) -> f64] *)
 Definition acosh_near_with (x : f64) : option f64 :=

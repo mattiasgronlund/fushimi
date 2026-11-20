@@ -913,7 +913,13 @@ fn log10_dir_with<const FMA: bool, const UP: bool>(x: f64) -> f64 {
             None => match POW10.iter().position(|&p| p == x) {
                 // log10(10^k) = k.
                 Some(k) => k as f64,
-                None => ziv(&Log10(x), UP, 1),
+                // `ziv` starts at 2 limbs: where the fast test fails, log10 x is within about
+                // 2^-67 |log10 x| of an `f64`, and when `ziv` started at 1 limb here, no call
+                // returned at 1 limb at the arguments of `hard_cases`, `random_levels` and
+                // `full_hard_cases` in `src/cr/tests/mpfr/hard_cases.rs` (the last with a clone
+                // of CORE-MATH of 2026-11-01), in builds for Haswell and without an FMA. That
+                // is measured, not proved.
+                None => ziv(&Log10(x), UP, 2),
             },
         },
     }
@@ -934,7 +940,10 @@ fn log10_near_with<const FMA: bool>(x: f64) -> f64 {
             None => match POW10.iter().position(|&p| p == x) {
                 // log10(10^k) = k.
                 Some(k) => k as f64,
-                None => ziv_near(&Log10(x), 1),
+                // `ziv_near` starts at 2 limbs, as `ziv` in `log10_dir_with`: here log10 x is
+                // within about 2^-67 |log10 x| of a midpoint between two `f64`s, and no call
+                // returned at 1 limb at the arguments of the same tests (measured, not proved).
+                None => ziv_near(&Log10(x), 2),
             },
         },
     }
@@ -958,7 +967,11 @@ fn asinh_with<const FMA: bool>(x: f64, up: bool) -> f64 {
     } else {
         match fast_asinh_dir::<FMA>(x, up) {
             Some(r) => r,
-            None => ziv(&Asinh(x), up, 1),
+            // `ziv` starts at 2 limbs, as in `log10_dir_with`: where the fast test fails,
+            // asinh x is within about 2^-66 |asinh x| of an `f64` (2^-67 from |x| = 2^-8 on),
+            // and no call returned at 1 limb at the arguments of the same tests (measured, not
+            // proved).
+            None => ziv(&Asinh(x), up, 2),
         }
     }
 }
@@ -980,7 +993,11 @@ fn asinh_near_with<const FMA: bool>(x: f64) -> f64 {
     } else {
         match fast_asinh_near::<FMA>(x) {
             Some(r) => r,
-            None => ziv_near(&Asinh(x), 1),
+            // `ziv_near` starts at 2 limbs, as `ziv` in `log10_dir_with`: where the fast test
+            // fails, asinh x is within about 2^-66 |asinh x| of a midpoint between two `f64`s
+            // (2^-67 from |x| = 2^-8 on), and no call returned at 1 limb at the arguments of
+            // the same tests (measured, not proved).
+            None => ziv_near(&Asinh(x), 2),
         }
     }
 }

@@ -282,7 +282,7 @@ destruct (lt (fabs x) DyadicExp.tiny_hyp) eqn:G; cbv iota in H.
 destruct (DyadicLog.fast_asinh_dir false x up) eqn:F; cbv iota in H.
 { injection H as <-. apply Hp.
   exact (fast_asinh_dir_correct false x up _ Fx (fast_not_tiny x Fx G) F). }
-apply (Hz (DyadicLog.ev_asinh x) up 1%nat); [|exact H].
+apply (Hz (DyadicLog.ev_asinh x) up 2%nat); [|exact H].
 intros n a Hn Ha. exact (ev_asinh_correct x n a Hn Ha).
 Qed.
 

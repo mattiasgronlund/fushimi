@@ -1782,7 +1782,10 @@ fn hyp_widened() {
 ))]
 mod mpfr {
     use super::*;
-    use crate::mpfr_calls::mpfr::*;
+    use crate::{
+        dyadic::{reset_ziv_level, ziv_level},
+        mpfr_calls::mpfr::*,
+    };
     use rug::{
         float::{Constant, Round},
         Float,
@@ -2249,6 +2252,39 @@ mod mpfr {
                  = {:e}",
                 d.to_f64()
             );
+        }
+    }
+
+    // Arguments at which the fast path of tanh fails in both directions, so that `tanh`
+    // reaches its call of `ziv` in both. Of the 22 arguments of tanh in
+    // `src/cr/tests/mpfr/hard_cases.wc` at which it does in a build for Haswell, they are the 5
+    // with the highest h, the hardness that their comments there give, and the 2 others from
+    // 1/8 on, where `fast_tanh_pos` takes e^-2t and not the Taylor polynomials.
+    const TANH_ZIV_CASES: [f64; 7] = [
+        8.940696716309547e-7,  // h=126
+        1.788139343262481e-6,  // h=120
+        3.576278686529536e-6,  // h=114
+        8.098706545339999e0,   // h=110
+        5.364418029805739e-6,  // h=110
+        1.3606539252983993e-1, // h=107
+        1.250000018589041e-1,  // h=65
+    ];
+
+    // Each argument of `TANH_ZIV_CASES` reaches the call of `ziv` in `tanh` in both directions,
+    // where `ziv_level` gives a level above 0, and tanh gives MPFR's roundings there, in both
+    // directions and to nearest (`check`). `ziv_level` has the `cfg` of this module.
+    #[test]
+    fn tanh_hard_cases_reach_ziv() {
+        for x in TANH_ZIV_CASES {
+            for up in [false, true] {
+                reset_ziv_level();
+                tanh(x, up);
+                assert!(
+                    ziv_level().0 > 0,
+                    "tanh({x:e}), up = {up}: `ziv` not reached"
+                );
+            }
+            super::check(TANH, x);
         }
     }
 }
