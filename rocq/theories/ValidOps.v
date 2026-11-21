@@ -10,8 +10,8 @@
     an [option], the theorem also shows that it returns [Some]. The
     theorems here take [valid y] out of them. *)
 
-From Inari Require Import Model Ieee1788.
-From Inari Require Integer Round Trunc Sign Abs MaxMin Neg AddSub Mul MulAdd Sqr Sqrt
+From Fushimi Require Import Model Ieee1788.
+From Fushimi Require Integer Round Trunc Sign Abs MaxMin Neg AddSub Mul MulAdd Sqr Sqrt
   Recip Div MulRev Cancel CancelSpec ValidMake.
 
 Theorem floor_valid : forall x, valid x -> valid (Interval.floor x).

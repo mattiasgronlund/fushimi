@@ -6,7 +6,7 @@
     infinities and NaN. They never panic. *)
 
 From Flocq Require Import IEEE754.BinarySingleNaN.
-From Inari Require Import Model AddRu.
+From Fushimi Require Import Model AddRu.
 
 (** [x - y] is [x + (-y)], including the sign of a zero result, as
     [sub_ru] and [sub1_ru] rely on. Flocq defines [Bminus] by its own

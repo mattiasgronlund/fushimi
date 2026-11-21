@@ -20,9 +20,9 @@
 
 From Stdlib Require Import ZArith Reals.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Ieee1788 Elementary Mpfr Elem Cosh Atanh ClosedDom Atan2 Cbrt
+From Fushimi Require Import Model Ieee1788 Elementary Mpfr Elem Cosh Atanh ClosedDom Atan2 Cbrt
   Hypot Contract OfPointCore OfPoint OfPointElem OfPointPow.
-From Inari Require Sin Cos Tan Pow Powi.
+From Fushimi Require Sin Cos Tan Pow Powi.
 
 Open Scope R_scope.
 

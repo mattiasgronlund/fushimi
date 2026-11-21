@@ -31,7 +31,7 @@
 
 From Stdlib Require Import Reals Lra.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Ieee1788 Integer Sign MaxMin AddSub Classify2
+From Fushimi Require Import Model Ieee1788 Integer Sign MaxMin AddSub Classify2
   Classes DivRu DivTight DivLane DivSets.
 
 Open Scope R_scope.

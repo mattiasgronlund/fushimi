@@ -6,7 +6,7 @@
     and [Knuth.v] proves [div_rem]. *)
 
 From Stdlib Require Import ZArith Lia List.
-From Inari Require Import Model.
+From Fushimi Require Import Model.
 
 Open Scope Z_scope.
 

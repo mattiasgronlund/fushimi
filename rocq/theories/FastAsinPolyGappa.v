@@ -14,7 +14,7 @@
 From Stdlib Require Import Reals Lra.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
 From Gappa Require Import Gappa_tactic.
-From Inari Require Import Model TwoSum FastExpErr FastExpTables.
+From Fushimi Require Import Model TwoSum FastExpErr FastExpTables.
 
 (* coq-gappa 1.11.0 names [Coq.Init.Logic.and] and other paths that Rocq 9
    renamed, and Rocq warns about each at every [gappa] call. The build turns

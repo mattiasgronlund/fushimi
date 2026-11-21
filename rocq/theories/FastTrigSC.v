@@ -23,8 +23,8 @@
 From Stdlib Require Import ZArith Reals Lra Lia.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
 From Flocq Require Import Relative.
-From Inari Require Import Model TwoSum FastExpErr FastTrigTables.
-From Inari Require CancelLanes MulRuTiny.
+From Fushimi Require Import Model TwoSum FastExpErr FastTrigTables.
+From Fushimi Require CancelLanes MulRuTiny.
 
 Open Scope R_scope.
 

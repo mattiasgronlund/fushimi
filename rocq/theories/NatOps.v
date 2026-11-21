@@ -8,7 +8,7 @@
 
 From Stdlib Require Import ZArith Lia List.
 From Flocq Require Import Core.Core.
-From Inari Require Import Model Limbs Knuth.
+From Fushimi Require Import Model Limbs Knuth.
 
 Open Scope Z_scope.
 

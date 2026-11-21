@@ -31,9 +31,9 @@
 
 From Stdlib Require Import ZArith Reals Lra Lia Psatz.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN Relative.
-From Inari Require Import Model Elementary Encoding TwoSum FastDdSqrt FastRoundErr AsinhTaylor
+From Fushimi Require Import Model Elementary Encoding TwoSum FastDdSqrt FastRoundErr AsinhTaylor
   FastAhypNear1Poly FastAhypNear1Sum.
-From Inari Require FastLogReduce.
+From Fushimi Require FastLogReduce.
 
 Open Scope R_scope.
 

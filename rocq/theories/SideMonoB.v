@@ -9,7 +9,7 @@
 
 From Stdlib Require Import ZArith Reals.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Ieee1788 Mpfr SideDefs SideMono.
+From Fushimi Require Import Model Ieee1788 Mpfr SideDefs SideMono.
 
 Open Scope R_scope.
 

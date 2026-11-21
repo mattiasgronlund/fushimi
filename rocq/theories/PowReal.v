@@ -8,7 +8,7 @@
     including the positive [y] axis. *)
 
 From Stdlib Require Import ZArith Reals Lra.
-From Inari Require Import Ieee1788 Elementary.
+From Fushimi Require Import Ieee1788 Elementary.
 
 Open Scope R_scope.
 

@@ -21,7 +21,7 @@
 
 From Stdlib Require Import Reals.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Encoding Spec EmulatedFma MulAddRuFast MulAddRuSlow.
+From Fushimi Require Import Model Encoding Spec EmulatedFma MulAddRuFast MulAddRuSlow.
 
 Open Scope R_scope.
 

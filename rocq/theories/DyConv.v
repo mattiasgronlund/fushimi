@@ -5,7 +5,7 @@
 
 From Stdlib Require Import ZArith Reals Lra Lia List.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Mpfr Limbs Spec Encoding Decompose RoundUpExact ParseScale
+From Fushimi Require Import Model Mpfr Limbs Spec Encoding Decompose RoundUpExact ParseScale
   ParseRound DyRound.
 
 Open Scope Z_scope.

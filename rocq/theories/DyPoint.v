@@ -27,7 +27,7 @@
 
 From Stdlib Require Import ZArith Reals Lra Lia.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Ieee1788 Elementary Mpfr MpfrRound MpfrIdeal IdealGetD Elem Cosh
+From Fushimi Require Import Model Ieee1788 Elementary Mpfr MpfrRound MpfrIdeal IdealGetD Elem Cosh
   Atanh Contract OfPointCore OfPoint OfPointElem PointTheorems DyDriver DyExp DyHyp DyLog DyLogHyp
   DyAtan DyAsin DyTrig DyPowRules DyPown DyPow DyCbrt DyHypot Cbrt Hypot.
 

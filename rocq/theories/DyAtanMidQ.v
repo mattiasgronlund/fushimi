@@ -21,7 +21,7 @@
 
 From Stdlib Require Import ZArith Reals Lra Lia.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Encoding NearF64 NearAtanMid DyRound MidRound MidQuot
+From Fushimi Require Import Model Encoding NearF64 NearAtanMid DyRound MidRound MidQuot
   AtanExactDiv.
 
 Open Scope R_scope.

@@ -12,7 +12,7 @@
 
 From Stdlib Require Import ZArith Reals Lia Lra.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN Plus_error.
-From Inari Require Import Model Encoding Spec TwoSum Decompose RoundUpExact
+From Fushimi Require Import Model Encoding Spec TwoSum Decompose RoundUpExact
   SumRoundUp.
 
 Open Scope R_scope.

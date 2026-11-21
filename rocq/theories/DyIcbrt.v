@@ -11,7 +11,7 @@
     P. Zimmermann, Modern Computer Arithmetic, 1.5.2). *)
 
 From Stdlib Require Import ZArith Lia List.
-From Inari Require Import Model Limbs Knuth.
+From Fushimi Require Import Model Limbs Knuth.
 
 Open Scope Z_scope.
 

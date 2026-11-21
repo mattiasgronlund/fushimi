@@ -13,7 +13,7 @@
 
 From Stdlib Require Import ZArith Reals Lra Lia.
 From Flocq Require Import Core.Core.
-From Inari Require Import Model Encoding TwoSum.
+From Fushimi Require Import Model Encoding TwoSum.
 
 Open Scope R_scope.
 

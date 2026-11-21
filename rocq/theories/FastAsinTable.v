@@ -9,7 +9,7 @@
 
 From Stdlib Require Import ZArith Reals Lra Lia List Bool.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model TwoSum AsinSeries FastExpTables.
+From Fushimi Require Import Model TwoSum AsinSeries FastExpTables.
 
 Import ListNotations.
 

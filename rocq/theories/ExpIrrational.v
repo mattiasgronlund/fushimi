@@ -13,7 +13,7 @@
     reduces to it: [(e^(p/q))^q = e^p], and [e^(-k) = 1 / e^k]. *)
 
 From Stdlib Require Import ZArith Reals Lra Lia List.
-From Inari Require Import NivenPoly NivenAlt NivenSym.
+From Fushimi Require Import NivenPoly NivenAlt NivenSym.
 
 Open Scope R_scope.
 

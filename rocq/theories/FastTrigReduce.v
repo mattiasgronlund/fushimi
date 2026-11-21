@@ -8,8 +8,8 @@
 
 From Stdlib Require Import ZArith Reals Lra Lia QArith Qreals.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Mpfr Encoding TwoSum TwoProduct FastTrigTables FastExpReduce.
-From Inari Require ConstTight.
+From Fushimi Require Import Model Mpfr Encoding TwoSum TwoProduct FastTrigTables FastExpReduce.
+From Fushimi Require ConstTight.
 
 Open Scope R_scope.
 

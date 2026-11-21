@@ -10,8 +10,8 @@
 
 From Stdlib Require Import ZArith Reals Lra Lia List.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Elementary Encoding AccPowArith AccPowTables FastLogTaylor.
-From Inari Require FastLogReduce DyPowRules.
+From Fushimi Require Import Model Elementary Encoding AccPowArith AccPowTables FastLogTaylor.
+From Fushimi Require FastLogReduce DyPowRules.
 
 Open Scope R_scope.
 

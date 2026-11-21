@@ -12,7 +12,7 @@
 
 From Stdlib Require Import ZArith Reals Lra.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Ieee1788 Elementary Mpfr Integer Sign MaxMin AddSub
+From Fushimi Require Import Model Ieee1788 Elementary Mpfr Integer Sign MaxMin AddSub
   ValidSetOp DecBinary MpfrRound Interior ElemDec TrigReal.
 
 Open Scope R_scope.

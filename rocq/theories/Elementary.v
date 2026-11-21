@@ -64,7 +64,7 @@ Definition pow_dom (r t : R) : Prop := 0 < r \/ (r = 0 /\ 0 < t).
     of R: [Rpower r (/ 3)], i.e. [exp (ln r / 3)], for [r > 0], 0 at 0,
     and [- Rpower (- r) (/ 3)] for [r < 0]. [RootReal.v] proves that its
     cube is [r] and that it is the only real whose cube is [r]. It is the
-    [cbrt] of [src/dyadic/root.rs] and [inari::cr]. *)
+    [cbrt] of [src/dyadic/root.rs] and [fushimi::cr]. *)
 Definition Rcbrt (r : R) : R :=
   if Rlt_dec 0 r then Rpower r (/ 3)
   else if Rlt_dec r 0 then - Rpower (- r) (/ 3)
@@ -73,7 +73,7 @@ Definition Rcbrt (r : R) : R :=
 (** The point function [hypot(x, y)] of two reals, which the standard
     recommends, on all of R²: the distance [sqrt (r * r + t * t)] of the
     point [(r, t)] of the plane from the origin. It is the [hypot] of
-    [src/dyadic/root.rs] and [inari::cr], whose theorems in [DyHypot.v]
+    [src/dyadic/root.rs] and [fushimi::cr], whose theorems in [DyHypot.v]
     state it unfolded. *)
 Definition Rhypot (r t : R) : R := sqrt (r * r + t * t).
 

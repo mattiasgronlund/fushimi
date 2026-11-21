@@ -5,7 +5,7 @@
     they have no bound at the ends of their domains. *)
 
 From Stdlib Require Import Reals Lra.
-From Inari Require Import Elementary.
+From Fushimi Require Import Elementary.
 
 Open Scope R_scope.
 

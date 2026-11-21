@@ -67,7 +67,7 @@
 
 From Stdlib Require Import Reals Lra Psatz.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Ieee1788 Integer Sign MaxMin DecBinary AddSub
+From Fushimi Require Import Model Ieee1788 Integer Sign MaxMin DecBinary AddSub
   Abs Classes MulRu MulLane MulTight MulNP MulZero Sqrt ElemDec.
 
 Open Scope R_scope.

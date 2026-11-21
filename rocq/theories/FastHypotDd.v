@@ -12,8 +12,8 @@
 
 From Stdlib Require Import Bool ZArith Reals Lra Lia Psatz.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN Mult_error.
-From Inari Require Import Model Encoding TwoSum FastDdSqrt FastHypotSum.
-From Inari Require FastLogReduce SqrtSlow.
+From Fushimi Require Import Model Encoding TwoSum FastDdSqrt FastHypotSum.
+From Fushimi Require FastLogReduce SqrtSlow.
 
 Open Scope R_scope.
 

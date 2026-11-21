@@ -28,7 +28,7 @@
 
 From Stdlib Require Import ZArith Reals Lra Lia List Bool.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Elementary AtanhSeries DyConst FastExpTables.
+From Fushimi Require Import Model Elementary AtanhSeries DyConst FastExpTables.
 
 Import ListNotations.
 

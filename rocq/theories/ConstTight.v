@@ -23,8 +23,8 @@
 
 From Stdlib Require Import ZArith Lia Reals Lra QArith Qreals.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Ieee1788 Integer MaxMin AddSub PiTight.
-From Inari Require DecBinary.
+From Fushimi Require Import Model Ieee1788 Integer MaxMin AddSub PiTight.
+From Fushimi Require DecBinary.
 
 Open Scope R_scope.
 

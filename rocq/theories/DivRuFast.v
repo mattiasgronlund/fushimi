@@ -26,7 +26,7 @@
 
 From Stdlib Require Import ZArith Reals Lia Lra Psatz.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN Relative Sterbenz.
-From Inari Require Import Model Encoding TwoSum TwoProduct DivRemainder.
+From Fushimi Require Import Model Encoding TwoSum TwoProduct DivRemainder.
 
 Open Scope R_scope.
 

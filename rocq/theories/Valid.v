@@ -52,9 +52,9 @@
     the literal, as any floats that its bounds convert to make a [valid]
     interval. They take the result of a call that does not panic. *)
 
-From Inari Require Import Model Mpfr ValidMake ValidSetOp ValidOps ValidDecOps
+From Fushimi Require Import Model Mpfr ValidMake ValidSetOp ValidOps ValidDecOps
   ValidElem PointValid DyPoint.
-From Inari Require Sqrt.
+From Fushimi Require Sqrt.
 
 Inductive made : Interval -> Prop :=
   | made_EMPTY : made Interval.EMPTY

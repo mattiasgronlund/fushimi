@@ -21,10 +21,10 @@
 
 From Stdlib Require Import ZArith Reals Lra Lia.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Mpfr Encoding Elementary AtanReal AtanIdent TwoSum DyDriver
+From Fushimi Require Import Model Mpfr Encoding Elementary AtanReal AtanIdent TwoSum DyDriver
   NearF64 NearCells FastRound FastRoundErr FastDiv FastHypPos FastAtanTables FastAtanIdent
   FastAtanCore FastAtanAsm FastAtanQuot FastAtan1Quot FastAtan1.
-From Inari Require DyExp DyPown FastExpErr FastLogReduce AtanSeries TwoProduct.
+From Fushimi Require DyExp DyPown FastExpErr FastLogReduce AtanSeries TwoProduct.
 
 Open Scope R_scope.
 

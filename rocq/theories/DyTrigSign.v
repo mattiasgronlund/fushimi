@@ -13,7 +13,7 @@
 
 From Stdlib Require Import ZArith Reals Lra Lia List.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Mpfr Limbs Knuth Elementary DyRound DyConv DyOps DyDriver DyGrow
+From Fushimi Require Import Model Mpfr Limbs Knuth Elementary DyRound DyConv DyOps DyDriver DyGrow
   DyConst DyExpCore DyExp DyExpRules DyConstPi DyAtanCore DyTrigReduce KahanMcDonald.
 
 Open Scope Z_scope.
@@ -227,7 +227,7 @@ end.
   assert (Hcv' : Limbs.val c = Limbs.val p - Limbs.val R).
   { rewrite Hpl in Hcv. destruct cb; cbn [Z.b2z] in Hcv; lia. }
   (* [up] iff [R > P - R] *)
-  rewrite (Inari.Limbs.cmp_correct R c HRok Hcok) in H.
+  rewrite (Fushimi.Limbs.cmp_correct R c HRok Hcok) in H.
   set (up := match Limbs.val R ?= Limbs.val c with Gt => true | _ => false end) in H.
   assert (Hup : up = true <-> Limbs.val c < Limbs.val R).
   { unfold up. destruct (Z.compare_spec (Limbs.val R) (Limbs.val c)); split; intro;

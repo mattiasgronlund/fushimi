@@ -16,7 +16,7 @@
 
 From Stdlib Require Import ZArith Reals Lra Lia.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Ieee1788 Integer Div PiBounds Sign DecBinary ClosedDom
+From Fushimi Require Import Model Ieee1788 Integer Div PiBounds Sign DecBinary ClosedDom
   TrigQuot TrigReduce Encoding Decompose MonoInc.
 
 Open Scope R_scope.

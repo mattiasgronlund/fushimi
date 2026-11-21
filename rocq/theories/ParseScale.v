@@ -28,7 +28,7 @@
 
 From Stdlib Require Import ZArith Reals Lia Lra.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model NatOps.
+From Fushimi Require Import Model NatOps.
 
 Open Scope R_scope.
 

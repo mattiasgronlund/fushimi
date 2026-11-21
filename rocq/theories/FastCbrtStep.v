@@ -9,9 +9,9 @@
 
 From Stdlib Require Import ZArith Reals Lra Lia Psatz.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN Sterbenz.
-From Inari Require Import Model Elementary Encoding TwoSum TwoProduct FastExpErr
+From Fushimi Require Import Model Elementary Encoding TwoSum TwoProduct FastExpErr
   FastCbrtNewton.
-From Inari Require MulRuTiny CancelLanes FastRound.
+From Fushimi Require MulRuTiny CancelLanes FastRound.
 
 Open Scope R_scope.
 

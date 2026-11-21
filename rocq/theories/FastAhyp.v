@@ -29,10 +29,10 @@
 
 From Stdlib Require Import ZArith Reals Lra Lia.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Mpfr Elementary Encoding TwoSum TwoProduct DyDriver NearF64
+From Fushimi Require Import Model Mpfr Elementary Encoding TwoSum TwoProduct DyDriver NearF64
   FastRound FastSign FastLogNorm FastLogDd FastAhypAsinh FastAhypAcosh FastAhypAtanh
   FastAhypOdd FastAhypNear1.
-From Inari Require DyLogRules DyExp DyPown NearCells FastRoundErr FastHypPos.
+From Fushimi Require DyLogRules DyExp DyPown NearCells FastRoundErr FastHypPos.
 
 Open Scope R_scope.
 

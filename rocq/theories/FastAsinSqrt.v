@@ -9,11 +9,11 @@
 
 From Stdlib Require Import ZArith Reals Lra Lia.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN Sterbenz.
-From Inari Require Import Model Mpfr Elementary AtanReal AtanIdent TwoSum TwoProduct DyDriver
+From Fushimi Require Import Model Mpfr Elementary AtanReal AtanIdent TwoSum TwoProduct DyDriver
   NearF64 NearCells FastRound FastRoundErr FastDiv FastHypPos FastAtanTables FastAtanIdent
   FastAtanCore FastAtanAsm FastDdSqrt.
-From Inari Require DyExp DyPown DyAtanTiny DyExpRules FastExpErr MulRuTiny FastLogNorm.
-From Inari Require Import FastAsinReal FastAsinAngle.
+From Fushimi Require DyExp DyPown DyAtanTiny DyExpRules FastExpErr MulRuTiny FastLogNorm.
+From Fushimi Require Import FastAsinReal FastAsinAngle.
 
 Open Scope R_scope.
 

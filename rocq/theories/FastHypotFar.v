@@ -9,8 +9,8 @@
 
 From Stdlib Require Import ZArith Reals Lra Lia.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Mpfr DyDriver NearF64 Encoding MpfrRound.
-From Inari Require IdealGetD DyExpRules FastRound StepUp.
+From Fushimi Require Import Model Mpfr DyDriver NearF64 Encoding MpfrRound.
+From Fushimi Require IdealGetD DyExpRules FastRound StepUp.
 
 Open Scope R_scope.
 

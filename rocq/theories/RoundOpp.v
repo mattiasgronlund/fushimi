@@ -12,8 +12,8 @@
 
 From Stdlib Require Import Reals Lra.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Mpfr.
-From Inari Require ParseRound.
+From Fushimi Require Import Model Mpfr.
+From Fushimi Require ParseRound.
 
 Open Scope R_scope.
 

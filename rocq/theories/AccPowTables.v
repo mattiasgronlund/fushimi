@@ -25,8 +25,8 @@
 
 From Stdlib Require Import ZArith Reals Lra Lia List Bool.
 From Flocq Require Import Core.Core.
-From Inari Require Import Model Elementary.
-From Inari Require FastLogTables FastExpTables DyConst.
+From Fushimi Require Import Model Elementary.
+From Fushimi Require FastLogTables FastExpTables DyConst.
 
 Import ListNotations.
 

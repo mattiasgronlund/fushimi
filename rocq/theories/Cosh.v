@@ -7,7 +7,7 @@
 
 From Stdlib Require Import ZArith Reals Lra.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Ieee1788 Elementary Mpfr
+From Fushimi Require Import Model Ieee1788 Elementary Mpfr
   Integer Sign MaxMin AddSub MulTight DecBinary DivTight Sqrt MpfrRound ExpReal ElemDec
   MonoInc.
 

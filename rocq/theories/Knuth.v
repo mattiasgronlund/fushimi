@@ -13,7 +13,7 @@
 From Stdlib Require Import ZArith Lia List.
 (* [Limbs] last, so that its helpers take precedence over any of the same
    name in [KnuthStep]. *)
-From Inari Require Import Model KnuthStep Limbs.
+From Fushimi Require Import Model KnuthStep Limbs.
 
 Open Scope Z_scope.
 

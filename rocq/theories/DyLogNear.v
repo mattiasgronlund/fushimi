@@ -11,10 +11,10 @@
 
 From Stdlib Require Import ZArith Reals Lra Lia List.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Mpfr Limbs Elementary LogReal DyRound DyConv DyOps DyDriver
+From Fushimi Require Import Model Mpfr Limbs Elementary LogReal DyRound DyConv DyOps DyDriver
   DyGrow DyConst DyExpCore DyExpRules DyExp ExpReal DyHyp DyLogRules DyLogTiny DyLogCore DyLog
   DyLogHyp NearF64 NearCells DyDriverNear FastLog FastAhyp.
-From Inari Require AtanhSeries DySinhTiny Decompose.
+From Fushimi Require AtanhSeries DySinhTiny Decompose.
 
 Open Scope Z_scope.
 

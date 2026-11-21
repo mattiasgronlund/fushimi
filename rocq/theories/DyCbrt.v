@@ -15,9 +15,9 @@
 
 From Stdlib Require Import ZArith Reals Lra Lia List.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Mpfr Limbs Elementary Decompose DyRound DyConv DyConvNear NearF64
+From Fushimi Require Import Model Mpfr Limbs Elementary Decompose DyRound DyConv DyConvNear NearF64
   RootReal RootRound DyIcbrt.
-From Inari Require FastCbrt.
+From Fushimi Require FastCbrt.
 
 Open Scope Z_scope.
 

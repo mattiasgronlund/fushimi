@@ -1,4 +1,4 @@
--R theories Inari
+-R theories Fushimi
 
 theories/ModelTrigTable.v
 theories/ModelAsinTable.v

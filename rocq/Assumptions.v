@@ -33,7 +33,7 @@
     [sinh], [cosh], [asinh] and [acosh] and of their forms with a driver,
     so the lines below do not print it. *)
 
-From Inari Require Import Encoding AddRu SubRu TwoProduct MulRu DivRu SqrtRdRu AddOdd
+From Fushimi Require Import Encoding AddRu SubRu TwoProduct MulRu DivRu SqrtRdRu AddOdd
   EmulatedFma MulAddRuSlow MulAddRu Integer IntegerDec RoundTiesEven Trunc Round Sign Abs MaxMin
   DecBinary DecTernary DecMaxMin Neg AddSub Mul MulAdd Sqrt Sqr Recip Div ComCommon
   MulRevSets MulRev CancelSpec Cancel MpfrRound ElemDec ClosedDom Elem Atanh Cosh
@@ -43,34 +43,34 @@ From Inari Require Import Encoding AddRu SubRu TwoProduct MulRu DivRu SqrtRdRu A
   ValidElem Valid MpfrIdeal IdealRound IdealGetD IdealElem IdealPow IdealAtan2 IdealHypot
   MpfrConsistent Contract OfPointCore OfPoint OfPointElem OfPointPow MpfrPoint
   PointTheorems PointDec PointValid.
-From Inari Require Limbs KnuthStep Knuth NatOps DyRound DyConv DyIsqrt DyOps DyDriver
+From Fushimi Require Limbs KnuthStep Knuth NatOps DyRound DyConv DyIsqrt DyOps DyDriver
   DyConst DyExp DyHyp DyLog DyLogHyp DyConstPi DyAtan DyAsin DyTrig DyPown DyPowMaybe DyPow
   DyDriverNear DyExpNear DyLogNear DyAtanNear DyTrigNear DyPowNearExact DyPowNear CrPow DyPoint
   DyPointDec.
-From Inari Require RootReal RootRound DyIcbrt DyCbrt DyHypotExact DyHypotOdd DyHypot CrRoot.
-From Inari Require FastCbrtNewton FastCbrtStep FastCbrtReduce FastCbrt FastHypotFar FastHypotSum
+From Fushimi Require RootReal RootRound DyIcbrt DyCbrt DyHypotExact DyHypotOdd DyHypot CrRoot.
+From Fushimi Require FastCbrtNewton FastCbrtStep FastCbrtReduce FastCbrt FastHypotFar FastHypotSum
   FastHypotDd FastHypot.
-From Inari Require FastRound FastExpTables FastExpReduce FastExpCore FastExp.
-From Inari Require FastRoundErr FastDiv FastHypPoly FastCoshPoly FastHypPos FastCoshPos FastTanhPos
+From Fushimi Require FastRound FastExpTables FastExpReduce FastExpCore FastExp.
+From Fushimi Require FastRoundErr FastDiv FastHypPoly FastCoshPoly FastHypPos FastCoshPos FastTanhPos
   FastHyp.
-From Inari Require FastSign FastLogTables FastLogTaylor FastLogHorner FastLogPoly FastLogReduce
+From Fushimi Require FastSign FastLogTables FastLogTaylor FastLogHorner FastLogPoly FastLogReduce
   FastLogCore FastLogNorm FastLogLn FastLogBy FastLog.
-From Inari Require FastTrigTables FastTrigReduce FastTrigSC FastTrigGappa FastTrigEval FastTrigDiv
+From Fushimi Require FastTrigTables FastTrigReduce FastTrigSC FastTrigGappa FastTrigEval FastTrigDiv
   FastTrigRound FastTrigBigInt FastTrigBigMul FastTrigBigDec FastTrigBigSum FastTrigBig
   FastTrigBandRed FastTrigBandInt FastTrigBandMul FastTrigBandBig FastTrigBandDiv FastTrigBandEval
   FastTrigCore FastTrigOne FastTrig.
-From Inari Require FastPowTaylor FastPowHorner FastPowCube FastPowPoly FastPowCore FastPowLn FastPowMul
+From Fushimi Require FastPowTaylor FastPowHorner FastPowCube FastPowPoly FastPowCore FastPowLn FastPowMul
   FastPowRules FastPow FastPowiLoop FastPowi.
-From Inari Require AccPowArith AccPowTables AccPowLn AccPowExp AccPow.
-From Inari Require FastDdSqrt FastLogDd AsinhTaylor FastAhypOdd FastAhypNear1 FastAhypAsinh FastAhypAcosh
+From Fushimi Require AccPowArith AccPowTables AccPowLn AccPowExp AccPow.
+From Fushimi Require FastDdSqrt FastLogDd AsinhTaylor FastAhypOdd FastAhypNear1 FastAhypAsinh FastAhypAcosh
   FastAhypAtanh FastAhyp.
-From Inari Require FastAtanTables FastAtanPoly FastAtanCore FastAtan AsinSeries FastAsinTable
+From Fushimi Require FastAtanTables FastAtanPoly FastAtanCore FastAtan AsinSeries FastAsinTable
   FastAsinPolyGappa FastAsinPolyTail FastAsinPolyRed FastAsinPolyB FastAsinPoly FastAsin AtanExactDiv
   AtanPiConst.
-From Inari Require FastRoundSubBits FastRoundSubCommon FastRoundSub FastRoundWide FastRoundWideErr
+From Fushimi Require FastRoundSubBits FastRoundSubCommon FastRoundSub FastRoundWide FastRoundWideErr
   FastExpEdge FastExpByEdge.
-From Inari Require KahanMcDonald DyTrigPos SideTight SideTheorems DyPointSide.
-From Inari Require ExpQuadratic PowFactor ExpIrrational CosNiven CosIrrational DyExactDriver
+From Fushimi Require KahanMcDonald DyTrigPos SideTight SideTheorems DyPointSide.
+From Fushimi Require ExpQuadratic PowFactor ExpIrrational CosNiven CosIrrational DyExactDriver
   DyExactPoint DyTrigExact DyExpPoint DyExpExact DyLogSeries DyLogPoint DyLogExact DyAtanExact.
 
 Print Assumptions add1_ru_fast_correct.

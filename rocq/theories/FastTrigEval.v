@@ -12,9 +12,9 @@
 
 From Stdlib Require Import ZArith Reals Lra Lia QArith Qreals.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Mpfr TwoSum TwoProduct FastRound FastExpErr FastExpTables
+From Fushimi Require Import Model Mpfr TwoSum TwoProduct FastRound FastExpErr FastExpTables
   TrigSeries.
-From Inari Require CancelLanes MulRuTiny PiBounds TrigPieces FastTrigSC FastTrigGappa.
+From Fushimi Require CancelLanes MulRuTiny PiBounds TrigPieces FastTrigSC FastTrigGappa.
 
 Open Scope R_scope.
 

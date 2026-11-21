@@ -19,7 +19,7 @@
 From Stdlib Require Import ZArith Reals Lia Lra Psatz.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN Mult_error Relative.
 From Flocq Require Pff.Pff2Flocq.
-From Inari Require Import Model Encoding Decompose TwoSum.
+From Fushimi Require Import Model Encoding Decompose TwoSum.
 
 Open Scope R_scope.
 

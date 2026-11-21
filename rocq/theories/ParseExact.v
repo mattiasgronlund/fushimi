@@ -9,7 +9,7 @@
 
 From Stdlib Require Import ZArith Reals Qreals Lra.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Ieee1788 Mpfr MpfrRound ParseRound Integer ValidMake.
+From Fushimi Require Import Model Ieee1788 Mpfr MpfrRound ParseRound Integer ValidMake.
 
 Open Scope R_scope.
 

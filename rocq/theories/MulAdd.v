@@ -29,7 +29,7 @@
     bounded if the image is ([fma_addend_bounded]). *)
 
 From Stdlib Require Import Reals Lra.
-From Inari Require Import Model Ieee1788 ComCommon DecBinary DecTernary Abs Mul
+From Fushimi Require Import Model Ieee1788 ComCommon DecBinary DecTernary Abs Mul
   MulAddZero MulAddMM MulAddMRow MulAddNP.
 
 Open Scope R_scope.

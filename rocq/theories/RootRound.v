@@ -16,7 +16,7 @@
 
 From Stdlib Require Import ZArith Reals Lra Lia List.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN Round_odd.
-From Inari Require Import Model Mpfr Limbs DyRound NearF64.
+From Fushimi Require Import Model Mpfr Limbs DyRound NearF64.
 
 Open Scope Z_scope.
 

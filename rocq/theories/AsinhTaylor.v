@@ -15,7 +15,7 @@
     degree 15 ([binom7_bounds]). *)
 
 From Stdlib Require Import Reals Lra Lia.
-From Inari Require Import FastLogTaylor.
+From Fushimi Require Import FastLogTaylor.
 
 Open Scope R_scope.
 

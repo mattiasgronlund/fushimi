@@ -17,7 +17,7 @@
 
 From Stdlib Require Import ZArith Reals Lra Lia List.
 From Stdlib Require Import Znumtheory Zpow_facts.
-From Inari Require Import NivenPoly NivenAlt NivenSym.
+From Fushimi Require Import NivenPoly NivenAlt NivenSym.
 
 Open Scope R_scope.
 

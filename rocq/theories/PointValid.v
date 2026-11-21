@@ -11,7 +11,7 @@
 
 From Stdlib Require Import ZArith Reals.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Ieee1788 Elementary Mpfr ValidElem Contract OfPointCore OfPoint
+From Fushimi Require Import Model Ieee1788 Elementary Mpfr ValidElem Contract OfPointCore OfPoint
   OfPointElem OfPointPow.
 
 Theorem exp_valid_point :

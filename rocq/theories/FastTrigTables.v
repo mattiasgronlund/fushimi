@@ -43,8 +43,8 @@
 
 From Stdlib Require Import ZArith Reals Lra Lia List Bool.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Mpfr TwoSum TrigSeries.
-From Inari Require FastExpTables DyConstPi.
+From Fushimi Require Import Model Mpfr TwoSum TrigSeries.
+From Fushimi Require FastExpTables DyConstPi.
 
 Import ListNotations.
 

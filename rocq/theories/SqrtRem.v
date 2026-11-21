@@ -21,7 +21,7 @@
 
 From Stdlib Require Import ZArith Reals Lia Lra Psatz.
 From Flocq Require Import Core.Core Div_sqrt_error.
-From Inari Require Import Model Encoding TwoSum.
+From Fushimi Require Import Model Encoding TwoSum.
 
 Open Scope R_scope.
 

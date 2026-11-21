@@ -9,7 +9,7 @@
 
 From Stdlib Require Import Reals Lra.
 From Stdlib Require Import Machin.
-From Inari Require Import Elementary AtanReal AtanIdent AtanSeries.
+From Fushimi Require Import Elementary AtanReal AtanIdent AtanSeries.
 
 Open Scope R_scope.
 
@@ -91,7 +91,7 @@ Qed.
     only here, after the proofs above. *)
 
 From Flocq Require Import Core.Core.
-From Inari Require FastAtanTables.
+From Fushimi Require FastAtanTables.
 
 (** The core's [2^-74] relative error at [q'] near [q], as an absolute
     error at [q] ([atan_upper], [atan_lipschitz]). *)

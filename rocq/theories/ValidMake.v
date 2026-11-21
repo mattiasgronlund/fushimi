@@ -12,7 +12,7 @@
 
 From Stdlib Require Import ZArith.
 From Flocq Require Import IEEE754.BinarySingleNaN.
-From Inari Require Import Model Integer.
+From Fushimi Require Import Model Integer.
 
 (** ** [Interval] *)
 

@@ -7,7 +7,7 @@
 
 From Stdlib Require Import ZArith Reals Lia.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Encoding.
+From Fushimi Require Import Model Encoding.
 
 (** ** Integer operations that do not overflow *)
 

@@ -10,7 +10,7 @@
 
 From Stdlib Require Import ZArith Reals Lra Lia List.
 From Flocq Require Import Core.Core.
-From Inari Require Import Model Limbs Knuth DyRound DyIsqrt.
+From Fushimi Require Import Model Limbs Knuth DyRound DyIsqrt.
 
 Open Scope Z_scope.
 Open Scope list_scope.

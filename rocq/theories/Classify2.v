@@ -11,7 +11,7 @@
     the pair of their classes. *)
 
 From Stdlib Require Import ZArith.
-From Inari Require Import Model.
+From Fushimi Require Import Model.
 
 Lemma classify2_pair :
   forall x y c1 c2, Interval.classify x = Some c1 -> Interval.classify y = Some c2 ->

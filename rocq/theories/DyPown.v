@@ -40,10 +40,10 @@
 
 From Stdlib Require Import ZArith Reals Lra Lia List.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Mpfr Limbs Elementary MpfrRound OfPointCore DyRound DyConv DyOps
+From Fushimi Require Import Model Mpfr Limbs Elementary MpfrRound OfPointCore DyRound DyConv DyOps
   DyDriver DyGrow DyExpRules DyExp DyPowArith DyPowRules.
 From Stdlib Require Zquot.
-From Inari Require RoundOpp FastLogNorm DyPowCore FastPow FastPowi.
+From Fushimi Require RoundOpp FastLogNorm DyPowCore FastPow FastPowi.
 
 Open Scope Z_scope.
 

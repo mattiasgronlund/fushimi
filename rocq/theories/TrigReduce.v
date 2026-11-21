@@ -22,7 +22,7 @@
 
 From Stdlib Require Import ZArith Reals Lra Lia.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Ieee1788 Integer Div PiBounds Sign AddSub AddRu Encoding
+From Fushimi Require Import Model Ieee1788 Integer Div PiBounds Sign AddSub AddRu Encoding
   Decompose DecBinary TrigQuot.
 
 Open Scope R_scope.

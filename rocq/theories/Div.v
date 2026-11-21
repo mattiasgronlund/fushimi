@@ -47,7 +47,7 @@
 
 From Stdlib Require Import ZArith Reals Lra Lia.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Ieee1788 Integer Sign MaxMin ComCommon DecBinary
+From Fushimi Require Import Model Ieee1788 Integer Sign MaxMin ComCommon DecBinary
   AddSub Abs Mul DivZero DivCases Recip Dom2.
 
 Open Scope R_scope.

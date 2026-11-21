@@ -7,7 +7,7 @@
     [FastHypPoly.v] and [FastCoshPoly.v] approximate these two. *)
 
 From Stdlib Require Import ZArith Reals Lra Lia.
-From Inari Require Import ExpSeries.
+From Fushimi Require Import ExpSeries.
 
 Open Scope R_scope.
 

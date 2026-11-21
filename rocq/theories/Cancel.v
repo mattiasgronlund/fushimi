@@ -23,7 +23,7 @@
 
 From Stdlib Require Import Bool ZArith Reals Lra Lia.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Encoding Ieee1788 Integer MaxMin DecBinary Neg CancelSpec
+From Fushimi Require Import Model Encoding Ieee1788 Integer MaxMin DecBinary Neg CancelSpec
   CancelLanes CancelWidths CancelHull.
 
 Open Scope R_scope.

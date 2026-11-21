@@ -28,7 +28,7 @@
 
 From Stdlib Require Import ZArith Reals Lra.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Integer MaxMin.
+From Fushimi Require Import Model Integer MaxMin.
 
 Open Scope R_scope.
 

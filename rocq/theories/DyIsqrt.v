@@ -6,7 +6,7 @@
 
 From Stdlib Require Import ZArith Reals Lra Lia List.
 From Flocq Require Import Core.Core.
-From Inari Require Import Model Limbs Knuth DyRound.
+From Fushimi Require Import Model Limbs Knuth DyRound.
 
 Open Scope Z_scope.
 Open Scope list_scope.
@@ -157,7 +157,7 @@ Proof.
     split; [apply Z.div_pos; lia | apply Z.div_lt_upper_bound; lia]. }
   split; [exact Hy |]. split; [exact Hly |]. split; [exact Hyv |].
   cbn [Dyadic.isqrt_loop]. rewrite Hdr. cbv beta iota zeta. rewrite Ha. cbn [fst].
-  rewrite (Inari.Limbs.cmp_correct _ _ Hy Hs). reflexivity.
+  rewrite (Fushimi.Limbs.cmp_correct _ _ Hy Hs). reflexivity.
 Qed.
 
 (** ** The loop *)

@@ -13,7 +13,7 @@
 
 From Stdlib Require Import ZArith Reals Lra Classical_Prop.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Ieee1788 Elementary Mpfr Integer Sign MaxMin AddSub
+From Fushimi Require Import Model Ieee1788 Elementary Mpfr Integer Sign MaxMin AddSub
   DecBinary DivTight MpfrRound Interior ComCommon Dom2 PowReal PowMpfr PowCases
   PowNeg PowPos PowMix.
 

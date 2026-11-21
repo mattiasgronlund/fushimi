@@ -13,7 +13,7 @@
 
 From Stdlib Require Import ZArith Reals.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Ieee1788 Elementary Mpfr ComCommon Contract PointDec DyPoint.
+From Fushimi Require Import Model Ieee1788 Elementary Mpfr ComCommon Contract PointDec DyPoint.
 
 Open Scope R_scope.
 

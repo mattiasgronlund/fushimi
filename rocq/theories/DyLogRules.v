@@ -10,7 +10,7 @@
 
 From Stdlib Require Import ZArith Reals Lra Lia List.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Mpfr Decompose Elementary LogReal AtanhSeries MpfrRound DyExpRules
+From Fushimi Require Import Model Mpfr Decompose Elementary LogReal AtanhSeries MpfrRound DyExpRules
   DyExp.
 
 Open Scope R_scope.

@@ -11,7 +11,7 @@
 
 From Stdlib Require Import ZArith Reals Lra Lia.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model NearF64 NearCells DyAtanTiny.
+From Fushimi Require Import Model NearF64 NearCells DyAtanTiny.
 
 Open Scope R_scope.
 

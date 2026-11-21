@@ -10,7 +10,7 @@
 
 From Stdlib Require Import ZArith Reals Lra.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Integer Sign MaxMin AddSub PiBounds.
+From Fushimi Require Import Model Integer Sign MaxMin AddSub PiBounds.
 
 Open Scope R_scope.
 

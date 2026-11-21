@@ -18,7 +18,7 @@
       ([Ratan2_not_cont_in2]). *)
 
 From Stdlib Require Import Reals Lra Classical_Prop.
-From Inari Require Import Model Ieee1788 Elementary AtanReal DecBinary Dom2.
+From Fushimi Require Import Model Ieee1788 Elementary AtanReal DecBinary Dom2.
 
 Open Scope R_scope.
 

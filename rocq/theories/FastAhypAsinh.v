@@ -13,10 +13,10 @@
 
 From Stdlib Require Import ZArith Reals Lra Lia Psatz.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN Plus_error Mult_error Sterbenz.
-From Inari Require Import Model Elementary Encoding TwoSum TwoProduct FastRound FastRoundErr
+From Fushimi Require Import Model Elementary Encoding TwoSum TwoProduct FastRound FastRoundErr
   FastDiv FastDdSqrt FastLogTables FastLogPoly FastLogCore FastLogNorm FastLogFin FastLogDd
   FastExpErr.
-From Inari Require FastLogReduce FastHypPos CancelLanes DyLogRules.
+From Fushimi Require FastLogReduce FastHypPos CancelLanes DyLogRules.
 From Flocq Require Import Relative.
 
 Open Scope R_scope.

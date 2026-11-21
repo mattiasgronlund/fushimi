@@ -17,7 +17,7 @@
 
 From Stdlib Require Import Reals Lra.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Ieee1788 Elementary Mpfr Integer Sign MaxMin AddSub DivTight
+From Fushimi Require Import Model Ieee1788 Elementary Mpfr Integer Sign MaxMin AddSub DivTight
   MpfrRound MonoInc Classes ClosedDom AtanReal PiTight Atan2Mpfr.
 
 Open Scope R_scope.

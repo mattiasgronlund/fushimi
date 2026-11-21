@@ -15,7 +15,7 @@
 
 From Stdlib Require Import ZArith Reals Lra.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Ieee1788 Integer Sign MaxMin DecBinary AddSub
+From Fushimi Require Import Model Ieee1788 Integer Sign MaxMin DecBinary AddSub
   Classify2 Classes Abs DivZero Div MulRevSets MulRevTwo MulRevCases.
 
 Open Scope R_scope.

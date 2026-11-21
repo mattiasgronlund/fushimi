@@ -85,9 +85,9 @@
 From Stdlib Require Import ZArith Rdefinitions List.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
 From Flocq Require IEEE754.Binary IEEE754.Bits.
-From Inari Require ModelTrigTable.
-From Inari Require ModelAsinTable.
-From Inari Require ModelPowTable.
+From Fushimi Require ModelTrigTable.
+From Fushimi Require ModelAsinTable.
+From Fushimi Require ModelPowTable.
 
 Open Scope Z_scope.
 Open Scope bool_scope.
@@ -2683,7 +2683,7 @@ Definition fast_tanh_near (fma : bool) (x : f64) : option f64 :=
     [|x|], and then the other tests of the body of the entry, such as
     [exp_near_entry] for [exp_near]. The functions make that test before
     they call their entry where [TINY_IN_CALLER], which is
-    [!cfg!(inari_kernel_dispatch)], is true, and the body makes it as its
+    [!cfg!(fushimi_kernel_dispatch)], is true, and the body makes it as its
     first test where it is false, so that the order of the tests is the
     same in both builds. [cosh] and [cosh_near] make it on [t = x.abs()],
     and pass their entries, [cosh_dir] and [cosh_near_abs],
@@ -2692,7 +2692,7 @@ Definition fast_tanh_near (fma : bool) (x : f64) : option f64 :=
     case and its [abs()] in the second, so it has [t = x.abs()] in both
     builds.
     The entry runs its body with [FMA] equal to [HAS_FMA], which depends
-    on the target, or, in a build with [cfg(inari_kernel_dispatch)] (see
+    on the target, or, in a build with [cfg(fushimi_kernel_dispatch)] (see
     [build.rs]), with [true] in a copy compiled with the target feature
     [fma] on a CPU that has [fma], and with [false] on any other. The
     functions below pass [false]:
@@ -5446,7 +5446,7 @@ Definition fast_band_eval (q : Z) (rh rl rr : f64) : f64 * f64 :=
     fast_band_big(x: f64, s: i64) -> Option<(f64, f64)>], where [n >> 11]
     is [Z.shiftr], as in [fast_quad], and [?] is a [match]. Each calls
     its body, [fast_band_body] or [fast_band_big_body], which these
-    transcribe, or, in a build with [cfg(inari_kernel_dispatch)] and with
+    transcribe, or, in a build with [cfg(fushimi_kernel_dispatch)] and with
     [FMA] false, [fast_band_dekker] or [fast_band_big_dekker], which call
     that body with [false]. [FastTrigCore.v] proves them, with [fast_sin]
     and the others. *)
@@ -5622,7 +5622,7 @@ Variable ziv : (nat -> option Dyadic.encl) -> bool -> nat -> option f64.
     of an [Option<f64>] [o], [o.or_else(|| p)] is [match o with Some v =>
     Some v | None => p end] and [o.unwrap_or_else(|| e)] is [match o with
     Some v => Some v | None => e end]. In a build with
-    [cfg(inari_kernel_dispatch)], the body ends in an [if let] chain
+    [cfg(fushimi_kernel_dispatch)], the body ends in an [if let] chain
     instead, which is the same [match]. *)
 Definition sin_dir_with (x : f64) (up : bool) : option f64 :=
   if negb (is_finite x) then Some B754_nan
@@ -6918,10 +6918,11 @@ End Cr.
     [mpfr::get_emin], [mpfr::get_emax], [mpfr::set_emin],
     [mpfr::set_emax], [mpfr::set_q] and [mpfr::subnormalize], and
     [fmt_bound_mpfr], which prints a bound of an interval with
-    [mpfr::asprintf] and [mpfr::free_str], as inari did before
-    [src/format/digits.rs], are not modelled. Outside these, what it does
-    through [rug] is [Float::with_val], which is [with_val] below, and
-    the allocation and freeing of MPFR numbers, which are left out.
+    [mpfr::asprintf] and [mpfr::free_str], as inari 2.0.0 did and
+    fushimi did before [src/format/digits.rs], are not modelled. Outside
+    these, what it does through [rug] is [Float::with_val], which is
+    [with_val] below, and the allocation and freeing of MPFR numbers,
+    which are left out.
 
     [Contract.v] states what each field of [point] must do at the level
     of [f64]s; [MpfrPoint.v] shows that [mpfr_point m] does it under
@@ -9447,7 +9448,7 @@ Definition mul (has_fma : bool) (self rhs : DecInterval) : option DecInterval :=
     [self.d().min(rhs.d().min(addend.d()))] is
     [dec_min (dec self) (dec_min (dec rhs) (dec addend))];
     [pub fn mul_add(self, rhs: Self, addend: Self) -> Self] is a
-    [cfg_if!] on [cfg(inari_generic_backend)], which build.rs sets with
+    [cfg_if!] on [cfg(fushimi_generic_backend)], which build.rs sets with
     the [force-generic] feature and for a target other than [aarch64],
     [x86_64] with [sse4.2] and [wasm32] with [simd128]. Where it is set,
     [mul_add] expands the same macro with

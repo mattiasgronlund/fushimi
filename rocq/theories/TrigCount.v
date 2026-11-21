@@ -15,7 +15,7 @@
 
 From Stdlib Require Import ZArith Reals Lra Lia QArith Qreals.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Ieee1788 Elementary Mpfr MpfrRound TrigPieces TrigQuad
+From Fushimi Require Import Model Ieee1788 Elementary Mpfr MpfrRound TrigPieces TrigQuad
   Encoding Decompose AddSub AddRu PiBounds TrigReduce.
 
 Open Scope R_scope.

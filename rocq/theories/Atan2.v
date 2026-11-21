@@ -20,7 +20,7 @@
 
 From Stdlib Require Import ZArith Reals Lra.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Ieee1788 Elementary Mpfr Integer Abs Classify2 Classes
+From Fushimi Require Import Model Ieee1788 Elementary Mpfr Integer Abs Classify2 Classes
   DecBinary ComCommon AtanReal Dom2 Atan2Dec Atan2Const Atan2Right Atan2Lower
   Atan2Left.
 

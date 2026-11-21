@@ -13,7 +13,7 @@
 
 From Stdlib Require Import ZArith Reals Lra Lia List.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Mpfr Limbs Elementary DyRound DyConv DyOps DyDriver DyGrow
+From Fushimi Require Import Model Mpfr Limbs Elementary DyRound DyConv DyOps DyDriver DyGrow
   DyConst DyExpCore DyExpRules DyExp DyLogRules DyLogCore DyLog.
 
 Open Scope Z_scope.

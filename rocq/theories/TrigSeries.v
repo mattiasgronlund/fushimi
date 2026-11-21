@@ -13,7 +13,7 @@
     π/2 + a] or [k π/2 - a] from [sin a] and [cos a] by [k mod 4]. *)
 
 From Stdlib Require Import ZArith Reals Lra Lia.
-From Inari Require Import TrigPieces.
+From Fushimi Require Import TrigPieces.
 
 Open Scope R_scope.
 

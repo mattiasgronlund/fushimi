@@ -14,7 +14,7 @@
 From Stdlib Require Import ZArith Reals Lia Lra.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
 From Flocq Require Pff.Pff2Flocq.
-From Inari Require Import Model Encoding.
+From Fushimi Require Import Model Encoding.
 
 Open Scope R_scope.
 

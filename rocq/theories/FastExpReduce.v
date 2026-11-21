@@ -19,8 +19,8 @@
 
 From Stdlib Require Import ZArith Reals Lra Lia QArith Qreals.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN Sterbenz.
-From Inari Require Import Model Elementary Encoding TwoSum TwoProduct FastExpTables.
-From Inari Require ConstTight.
+From Fushimi Require Import Model Elementary Encoding TwoSum TwoProduct FastExpTables.
+From Fushimi Require ConstTight.
 
 Open Scope R_scope.
 

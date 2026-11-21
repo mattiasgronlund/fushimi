@@ -45,7 +45,7 @@
     and then the box is bounded. *)
 
 From Stdlib Require Import Reals Lra.
-From Inari Require Import Model Ieee1788 ComCommon DecBinary Abs MulMM MulMRow MulNP
+From Fushimi Require Import Model Ieee1788 ComCommon DecBinary Abs MulMM MulMRow MulNP
   MulZero.
 
 Open Scope R_scope.

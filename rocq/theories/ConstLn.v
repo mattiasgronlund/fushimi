@@ -16,7 +16,7 @@
 
 From Stdlib Require Import ZArith Reals Lra QArith Qreals.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Ieee1788 ConstTight ExpSeries.
+From Fushimi Require Import Model Ieee1788 ConstTight ExpSeries.
 
 Open Scope R_scope.
 

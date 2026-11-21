@@ -21,9 +21,9 @@
 
 From Stdlib Require Import ZArith Reals Lra Lia.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Ieee1788 Elementary Mpfr MpfrRound MpfrIdeal IdealGetD Contract
+From Fushimi Require Import Model Ieee1788 Elementary Mpfr MpfrRound MpfrIdeal IdealGetD Contract
   ContractSide SideDefs.
-From Inari Require TrigPieces.
+From Fushimi Require TrigPieces.
 
 Open Scope R_scope.
 

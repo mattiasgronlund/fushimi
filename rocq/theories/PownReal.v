@@ -6,7 +6,7 @@
     0, and its continuity at each point of the domain [pown_dom n]. *)
 
 From Stdlib Require Import ZArith Reals Lra Lia.
-From Inari Require Import Elementary.
+From Fushimi Require Import Elementary.
 
 Open Scope R_scope.
 

@@ -14,8 +14,8 @@
 
 From Stdlib Require Import ZArith Reals Lra Lia.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN Mult_error.
-From Inari Require Import Model Mpfr Elementary Encoding TwoSum TwoProduct FastRound FastExpErr.
-From Inari Require MulRuTiny.
+From Fushimi Require Import Model Mpfr Elementary Encoding TwoSum TwoProduct FastRound FastExpErr.
+From Fushimi Require MulRuTiny.
 
 Open Scope R_scope.
 

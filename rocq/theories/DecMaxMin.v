@@ -28,7 +28,7 @@
     arguments do. *)
 
 From Stdlib Require Import Reals Lra.
-From Inari Require Import Model Ieee1788 Integer ComCommon MaxMin DecBinary.
+From Fushimi Require Import Model Ieee1788 Integer ComCommon MaxMin DecBinary.
 
 Open Scope R_scope.
 

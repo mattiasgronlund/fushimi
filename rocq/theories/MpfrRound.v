@@ -11,7 +11,7 @@
 
 From Stdlib Require Import ZArith Reals Lra Lia.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Elementary Mpfr Integer MaxMin AddSub Sign.
+From Fushimi Require Import Model Elementary Mpfr Integer MaxMin AddSub Sign.
 
 Open Scope R_scope.
 

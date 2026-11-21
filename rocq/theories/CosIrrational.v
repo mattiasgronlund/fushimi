@@ -18,7 +18,7 @@
     ([cv_speed_pow_fact]). *)
 
 From Stdlib Require Import ZArith Reals Lra Lia Znumtheory.
-From Inari Require Import NivenPoly NivenAlt CosNiven.
+From Fushimi Require Import NivenPoly NivenAlt CosNiven.
 
 Open Scope R_scope.
 

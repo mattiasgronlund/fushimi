@@ -9,7 +9,7 @@
 From Stdlib Require Import Reals Lra.
 (* [Machin.v] has the subtraction formula [atan_sub_correct]. *)
 From Stdlib Require Import Machin.
-From Inari Require Import Elementary AtanReal.
+From Fushimi Require Import Elementary AtanReal.
 
 Open Scope R_scope.
 

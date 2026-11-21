@@ -18,7 +18,7 @@
 
 From Stdlib Require Import ZArith Reals Lia Lra Psatz.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN Round_odd Plus_error.
-From Inari Require Import Model Encoding TwoSum StepUp.
+From Fushimi Require Import Model Encoding TwoSum StepUp.
 
 Open Scope R_scope.
 

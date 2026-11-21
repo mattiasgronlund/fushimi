@@ -11,7 +11,7 @@
 
 From Stdlib Require Import ZArith Reals Lra Lia List.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Mpfr MpfrRound Limbs Elementary DyRound DyConv DyOps DyDriver
+From Fushimi Require Import Model Mpfr MpfrRound Limbs Elementary DyRound DyConv DyOps DyDriver
   DyGrow DyConst DyExpCore DyExpRules DyExp DyLogRules DyLogCore DyPowArith DyPowRules
   DyPowExact DyPowCore NearF64 NearCells DyConvNear DyDriverNear.
 

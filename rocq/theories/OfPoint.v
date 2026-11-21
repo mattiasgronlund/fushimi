@@ -22,7 +22,7 @@
 
 From Stdlib Require Import ZArith Reals Lra Lia FunctionalExtensionality.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Elementary Mpfr MpfrRound MpfrIdeal IdealRound IdealGetD
+From Fushimi Require Import Model Elementary Mpfr MpfrRound MpfrIdeal IdealRound IdealGetD
   Contract OfPointCore.
 
 Open Scope R_scope.

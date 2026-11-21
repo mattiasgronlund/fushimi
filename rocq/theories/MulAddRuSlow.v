@@ -14,7 +14,7 @@
 
 From Stdlib Require Import ZArith Reals Lia Lra Psatz.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN Calc.Operations.
-From Inari Require Import Model Encoding Spec Decompose RoundUpExact
+From Fushimi Require Import Model Encoding Spec Decompose RoundUpExact
   SumRoundUp StepUp MulRu.
 
 Open Scope R_scope.

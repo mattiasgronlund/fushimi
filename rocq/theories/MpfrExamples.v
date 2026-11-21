@@ -24,7 +24,7 @@
     constructor has an [Example] here (see the [Makefile]). *)
 
 From Stdlib Require Import ZArith.
-From Inari Require Import Model Mpfr MpfrIdeal MpfrConsistent MpfrRound ClosedDom Elem
+From Fushimi Require Import Model Mpfr MpfrIdeal MpfrConsistent MpfrRound ClosedDom Elem
   Atanh Cosh TrigQuad TrigCount Cos Sin Tan Pow Powi Atan2 Cbrt Hypot ValidMake ValidElem Valid
   MpfrPoint.
 

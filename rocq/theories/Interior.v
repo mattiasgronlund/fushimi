@@ -21,7 +21,7 @@
 
 From Stdlib Require Import Bool ZArith Reals Lra.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Integer MaxMin ValidSetOp Sign.
+From Fushimi Require Import Model Integer MaxMin ValidSetOp Sign.
 
 Open Scope R_scope.
 

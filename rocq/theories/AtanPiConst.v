@@ -13,8 +13,8 @@
 
 From Stdlib Require Import ZArith Reals Lra Lia QArith.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Mpfr MpfrRound DyDriver NearF64 NearCells.
-From Inari Require PiBounds PiTight.
+From Fushimi Require Import Model Mpfr MpfrRound DyDriver NearF64 NearCells.
+From Fushimi Require PiBounds PiTight.
 
 Open Scope Z_scope.
 

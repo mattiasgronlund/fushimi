@@ -13,9 +13,9 @@
 
 From Stdlib Require Import ZArith Reals Lra Classical_Prop.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Ieee1788 Elementary Mpfr Integer DecBinary
+From Fushimi Require Import Model Ieee1788 Elementary Mpfr Integer DecBinary
   MpfrRound.
-From Inari Require Import Sign MaxMin AddSub MulTight DivTight Sqrt MonoInc Cosh.
+From Fushimi Require Import Sign MaxMin AddSub MulTight DivTight Sqrt MonoInc Cosh.
 
 Open Scope R_scope.
 

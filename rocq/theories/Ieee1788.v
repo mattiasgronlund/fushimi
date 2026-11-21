@@ -24,7 +24,7 @@
 
 From Stdlib Require Import Reals Qreals.
 From Flocq Require Import Core.Raux Core.Generic_fmt Core.Round_NE.
-From Inari Require Import Model.
+From Fushimi Require Import Model.
 
 Open Scope R_scope.
 
@@ -426,7 +426,7 @@ Definition strongest3 (d : Decoration) (f : R -> R -> R -> R) (x y z w : Interva
 (** ** Two-output division
 
     The standard's [mulRevToPair(b, c)] is [b.mul_rev_to_pair(c)] in
-    inari, whose doc comment writes its set [c ⊘′ b]: the reals [z] with
+    fushimi, whose doc comment writes its set [c ⊘′ b]: the reals [z] with
     [t * z] in [c] for some [t] in [b]. The doc comment says that the set
     is empty, or has one or two connected components, and that the two
     intervals enclose them. [two_output] states what it asks of them. *)

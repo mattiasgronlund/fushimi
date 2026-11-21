@@ -9,7 +9,7 @@
     ([hypot_exact_branch]). [DyHypotOdd.v] uses it. *)
 
 From Stdlib Require Import ZArith Lia List.
-From Inari Require Import Model Limbs Knuth DyRound DyIsqrt.
+From Fushimi Require Import Model Limbs Knuth DyRound DyIsqrt.
 
 Open Scope Z_scope.
 
@@ -130,7 +130,7 @@ Proof.
   (* [sq = s^2] in 6 limbs, and [cmp] compares it with [xx]. *)
   destruct (mul_into_correct s s Hr Hr) as (sq & Em & Hq & Hql & Hqv).
   rewrite Hrl in Em. change (3 + 3)%nat with 6%nat in Em. rewrite Em. cbv beta iota.
-  rewrite (Inari.Limbs.cmp_correct sq xx Hq Hx), Hqv.
+  rewrite (Fushimi.Limbs.cmp_correct sq xx Hq Hx), Hqv.
   exists s, h,
     (match Z.compare (Limbs.val s * Limbs.val s) (Limbs.val xx) with Eq => false | _ => true end).
   split; [reflexivity |].

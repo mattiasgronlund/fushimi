@@ -17,7 +17,7 @@
 
 From Stdlib Require Import ZArith Reals Lra QArith Qreals.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Ieee1788 PiBounds PiTight ConstTight.
+From Fushimi Require Import Model Ieee1788 PiBounds PiTight ConstTight.
 
 Open Scope R_scope.
 

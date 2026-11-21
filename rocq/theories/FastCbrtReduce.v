@@ -9,8 +9,8 @@
 
 From Stdlib Require Import ZArith Reals Lra Lia Psatz.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN Relative Mult_error.
-From Inari Require Import Model Encoding TwoSum.
-From Inari Require Limbs SqrtSlow.
+From Fushimi Require Import Model Encoding TwoSum.
+From Fushimi Require Limbs SqrtSlow.
 
 Open Scope R_scope.
 

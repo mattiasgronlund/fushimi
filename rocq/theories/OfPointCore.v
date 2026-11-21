@@ -9,7 +9,7 @@
 
 From Stdlib Require Import ZArith Reals Lra Lia Eqdep_dec.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Elementary Mpfr MpfrRound MpfrIdeal IdealRound IdealGetD
+From Fushimi Require Import Model Elementary Mpfr MpfrRound MpfrIdeal IdealRound IdealGetD
   Contract.
 
 Open Scope R_scope.

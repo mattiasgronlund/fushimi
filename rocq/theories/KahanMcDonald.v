@@ -24,7 +24,7 @@
 
 From Stdlib Require Import ZArith Reals Lra Lia List Bool.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Mpfr Limbs DyConstPi.
+From Fushimi Require Import Model Mpfr Limbs DyConstPi.
 
 Open Scope R_scope.
 

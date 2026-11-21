@@ -12,8 +12,8 @@
 
 From Stdlib Require Import ZArith Reals Lra Lia.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN Sterbenz.
-From Inari Require Import Model Mpfr Elementary MpfrRound DyExpRules.
-From Inari Require Import Encoding Decompose Spec ExpReal LogReal.
+From Fushimi Require Import Model Mpfr Elementary MpfrRound DyExpRules.
+From Fushimi Require Import Encoding Decompose Spec ExpReal LogReal.
 
 Open Scope Z_scope.
 

@@ -15,7 +15,7 @@
 
 From Stdlib Require Import Reals.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model.
+From Fushimi Require Import Model.
 
 Open Scope R_scope.
 

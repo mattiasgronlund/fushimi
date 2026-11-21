@@ -28,7 +28,7 @@
 
 From Stdlib Require Import ZArith Reals Lra Lia.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Ieee1788 Integer DecBinary ElemDec.
+From Fushimi Require Import Model Ieee1788 Integer DecBinary ElemDec.
 
 Open Scope R_scope.
 

@@ -18,7 +18,7 @@
     default exponent range. *)
 
 From Stdlib Require Import ZArith Reals Lia.
-From Inari Require Import Model Elementary Mpfr MpfrIdeal IdealRound IdealGetD IdealElem
+From Fushimi Require Import Model Elementary Mpfr MpfrIdeal IdealRound IdealGetD IdealElem
   IdealPow IdealAtan2 IdealHypot.
 
 Definition mpfr_ok (emin emax : Z) (m : mpfr) : Prop :=

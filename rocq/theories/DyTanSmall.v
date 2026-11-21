@@ -14,7 +14,7 @@
 
 From Stdlib Require Import ZArith Reals Lra Lia.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Mpfr Encoding Decompose MpfrRound DyExpRules DyTrigTiny
+From Fushimi Require Import Model Mpfr Encoding Decompose MpfrRound DyExpRules DyTrigTiny
   DyTrigSmall DyCosSmall DySinSmall.
 
 Open Scope R_scope.

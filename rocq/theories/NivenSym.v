@@ -12,7 +12,7 @@
 
 From Stdlib Require Import ZArith Reals Lra Lia List.
 Import ListNotations.
-From Inari Require Import NivenPoly NivenAlt.
+From Fushimi Require Import NivenPoly NivenAlt.
 
 Open Scope R_scope.
 

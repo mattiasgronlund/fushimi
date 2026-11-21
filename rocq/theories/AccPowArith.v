@@ -9,8 +9,8 @@
 
 From Stdlib Require Import ZArith Reals Lra Lia.
 From Flocq Require Import Core.Core.
-From Inari Require Import Model.
-From Inari Require Limbs.
+From Fushimi Require Import Model.
+From Fushimi Require Limbs.
 
 Open Scope Z_scope.
 

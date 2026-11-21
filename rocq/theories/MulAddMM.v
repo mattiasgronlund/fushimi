@@ -12,7 +12,7 @@
 
 From Stdlib Require Import Reals Lra.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Encoding Spec Ieee1788 Integer Sign MaxMin AddRu
+From Fushimi Require Import Model Encoding Spec Ieee1788 Integer Sign MaxMin AddRu
   DecBinary Neg AddSub Classify2 Classes MulAddRu MulLane MulTight MulAddLane.
 
 Open Scope R_scope.

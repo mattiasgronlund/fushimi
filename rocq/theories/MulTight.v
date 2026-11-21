@@ -41,7 +41,7 @@
     ([image2_mult_opp_l], [image2_mult_opp_r], [image2_mult_opp_lr]). *)
 
 From Stdlib Require Import Reals Lra.
-From Inari Require Import Model Ieee1788 MaxMin AddSub.
+From Fushimi Require Import Model Ieee1788 MaxMin AddSub.
 
 Open Scope R_scope.
 

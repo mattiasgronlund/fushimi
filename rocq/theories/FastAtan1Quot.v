@@ -13,10 +13,10 @@
 
 From Stdlib Require Import ZArith Reals Lra Lia QArith Qreals.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN Plus_error Mult_error Sterbenz Relative.
-From Inari Require Import Model Mpfr Encoding Elementary TwoSum TwoProduct DyDriver NearF64
+From Fushimi Require Import Model Mpfr Encoding Elementary TwoSum TwoProduct DyDriver NearF64
   FastRound FastRoundErr FastDiv CancelLanes FastHypPos FastAtanTables FastAtanIdent
   FastAtanPoly FastAtanCore FastAtan1Rem FastAtan1Mid.
-From Inari Require FastExpErr FastExpReduce ConstTight FastAtanQuot DyExpCore.
+From Fushimi Require FastExpErr FastExpReduce ConstTight FastAtanQuot DyExpCore.
 
 Open Scope R_scope.
 

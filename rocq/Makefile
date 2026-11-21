@@ -38,7 +38,7 @@ RocqMakefile: _CoqProject
 # of two `Search`es to MpfrSearch.out and MpfrSearchValid.out, for `examples`.
 assumptions: proofs
 	rm -f MpfrSearch.out MpfrSearchValid.out
-	rocq compile $(COQEXTRAFLAGS) -output-directory . -R theories Inari Assumptions.v \
+	rocq compile $(COQEXTRAFLAGS) -output-directory . -R theories Fushimi Assumptions.v \
 		| sed -n 's/^\([^ ]*\) :.*/\1/p' | LC_ALL=C sort -u > Assumptions.out
 	printf '%s\n' $(AXIOMS) | LC_ALL=C sort | diff -u - Assumptions.out
 

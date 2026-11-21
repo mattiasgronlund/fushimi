@@ -7,7 +7,7 @@
     apply. *)
 
 From Stdlib Require Import Reals Lra.
-From Inari Require Import Elementary RealBounds.
+From Fushimi Require Import Elementary RealBounds.
 
 Open Scope R_scope.
 

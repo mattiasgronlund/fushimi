@@ -26,8 +26,8 @@
 
 From Stdlib Require Import ZArith Reals Lra Lia.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Encoding TwoSum TwoProduct FastExpErr.
-From Inari Require FastRound FastLogNorm.
+From Fushimi Require Import Model Encoding TwoSum TwoProduct FastExpErr.
+From Fushimi Require FastRound FastLogNorm.
 
 Open Scope R_scope.
 

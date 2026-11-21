@@ -51,7 +51,7 @@
 
 From Stdlib Require Import ZArith Reals.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Elementary.
+From Fushimi Require Import Model Elementary.
 
 Open Scope R_scope.
 

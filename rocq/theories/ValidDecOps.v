@@ -10,7 +10,7 @@
     arguments' intervals are, by the theorems in [ValidOps.v] and
     [ValidSetOp.v] and [set_dec_valid]. *)
 
-From Inari Require Import Model ValidMake ValidSetOp ValidOps.
+From Fushimi Require Import Model ValidMake ValidSetOp ValidOps.
 
 (** [impl_dec!] in [src/integer.rs], for any [f] that keeps intervals
     [valid]. *)

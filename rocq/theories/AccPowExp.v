@@ -8,7 +8,7 @@
 
 From Stdlib Require Import ZArith Reals Lra Lia List.
 From Flocq Require Import Core.Core.
-From Inari Require Import Model Elementary AccPowArith AccPowTables HypTaylor.
+From Fushimi Require Import Model Elementary AccPowArith AccPowTables HypTaylor.
 
 Open Scope R_scope.
 

@@ -8,7 +8,7 @@
 
 From Stdlib Require Import ZArith Reals Lra Lia.
 From Flocq Require Import Core.Core.
-From Inari Require Import Elementary.
+From Fushimi Require Import Elementary.
 
 Open Scope R_scope.
 

@@ -12,7 +12,7 @@
 
 From Stdlib Require Import Reals Lra Classical.
 From Flocq Require Import IEEE754.BinarySingleNaN.
-From Inari Require Import Model Ieee1788 Integer DecBinary AddSub DivZero ValidMake.
+From Fushimi Require Import Model Ieee1788 Integer DecBinary AddSub DivZero ValidMake.
 
 Open Scope R_scope.
 

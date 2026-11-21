@@ -8,7 +8,7 @@
     happens at most once. [Knuth.v] proves the loop over the windows. *)
 
 From Stdlib Require Import ZArith Lia List.
-From Inari Require Import Model Limbs.
+From Fushimi Require Import Model Limbs.
 
 Open Scope Z_scope.
 

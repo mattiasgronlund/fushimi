@@ -16,7 +16,7 @@
 
 From Stdlib Require Import ZArith Reals Lra Lia List.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Mpfr Limbs Knuth Elementary DyRound DyConv DyOps DyDriver DyGrow
+From Fushimi Require Import Model Mpfr Limbs Knuth Elementary DyRound DyConv DyOps DyDriver DyGrow
   DyConst DyExpCore DyExp DyExpRules DyConstPi DyAtanCore.
 
 Open Scope Z_scope.
@@ -146,7 +146,7 @@ Lemma dy_lt_false :
   (Dyadic.dy_R y <= Dyadic.dy_R x)%R.
 Proof.
 intros n x y Hn Hx Hy H. unfold DyadicExp.dy_lt in H.
-rewrite (Inari.DyRound.cmp_correct n _ _ Hn Hx Hy) in H.
+rewrite (Fushimi.DyRound.cmp_correct n _ _ Hn Hx Hy) in H.
 destruct (Rcompare_spec (Dyadic.dy_R x) (Dyadic.dy_R y)); [discriminate H | lra | lra].
 Qed.
 
@@ -156,7 +156,7 @@ Lemma dy_gt_false :
   (Dyadic.dy_R x <= Dyadic.dy_R y)%R.
 Proof.
 intros n x y Hn Hx Hy H. unfold DyadicExp.dy_gt in H.
-rewrite (Inari.DyRound.cmp_correct n _ _ Hn Hx Hy) in H.
+rewrite (Fushimi.DyRound.cmp_correct n _ _ Hn Hx Hy) in H.
 destruct (Rcompare_spec (Dyadic.dy_R x) (Dyadic.dy_R y)); [lra | lra | discriminate H].
 Qed.
 
@@ -291,7 +291,7 @@ end.
   assert (Hcv' : Limbs.val c = Limbs.val p - Limbs.val R).
   { rewrite Hpl in Hcv. destruct cb; cbn [Z.b2z] in Hcv; lia. }
   (* [up] iff [R > P - R] *)
-  rewrite (Inari.Limbs.cmp_correct R c HRok Hcok) in H.
+  rewrite (Fushimi.Limbs.cmp_correct R c HRok Hcok) in H.
   set (up := match Limbs.val R ?= Limbs.val c with Gt => true | _ => false end) in H.
   assert (Hup : up = true <-> Limbs.val c < Limbs.val R).
   { unfold up. destruct (Z.compare_spec (Limbs.val R) (Limbs.val c)); split; intro;

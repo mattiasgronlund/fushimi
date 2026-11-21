@@ -14,7 +14,7 @@
     and [atan_cont] of [TrigReal.v]. *)
 
 From Stdlib Require Import Reals Lra.
-From Inari Require Import Model Ieee1788 Elementary RealBounds TrigReal.
+From Fushimi Require Import Model Ieee1788 Elementary RealBounds TrigReal.
 
 Open Scope R_scope.
 

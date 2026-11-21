@@ -12,7 +12,7 @@
 
 From Stdlib Require Import Reals Lra Lia.
 From Flocq Require Import Core.Core.
-From Inari Require Import FastLogTaylor.
+From Fushimi Require Import FastLogTaylor.
 
 Open Scope R_scope.
 

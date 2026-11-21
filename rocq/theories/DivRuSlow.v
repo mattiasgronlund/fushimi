@@ -18,7 +18,7 @@
 
 From Stdlib Require Import ZArith Reals Lia Lra Psatz.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Encoding Spec Decompose RoundUpExact
+From Fushimi Require Import Model Encoding Spec Decompose RoundUpExact
   SumRoundUp.
 
 (** Where [div1_ru_fast] and [div1_ru_slow] return [x / y] as computed in

@@ -17,7 +17,7 @@
 
 From Stdlib Require Import Reals Lra.
 From Flocq Require Import IEEE754.BinarySingleNaN.
-From Inari Require Import Model Ieee1788 DecBinary AddSub Classes Classify2.
+From Fushimi Require Import Model Ieee1788 DecBinary AddSub Classes Classify2.
 
 Open Scope R_scope.
 

@@ -8,7 +8,7 @@
 
 From Stdlib Require Import ZArith Reals.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Ieee1788 Elementary Mpfr ValidMake ValidDecOps
+From Fushimi Require Import Model Ieee1788 Elementary Mpfr ValidMake ValidDecOps
   Elem Atanh Cosh ClosedDom Cos Sin Tan Pow Powi Atan2 Cbrt Hypot.
 
 (** [DecInterval::$f] of [impl_dec!($f)] is [set_dec] of [Interval::$f],

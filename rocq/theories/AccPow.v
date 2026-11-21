@@ -10,9 +10,9 @@
 
 From Stdlib Require Import ZArith Reals Lra Lia List.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Mpfr MpfrRound Limbs Elementary DyRound DyConv DyDriver NearF64
+From Fushimi Require Import Model Mpfr MpfrRound Limbs Elementary DyRound DyConv DyDriver NearF64
   DyConvNear DyDriverNear AccPowLn AccPowExp.
-From Inari Require Encoding.
+From Fushimi Require Encoding.
 
 Open Scope R_scope.
 

@@ -5,7 +5,7 @@
     monotone and continuous, and their bounds at -inf and +inf. *)
 
 From Stdlib Require Import Reals Lra.
-From Inari Require Import Elementary RealBounds.
+From Fushimi Require Import Elementary RealBounds.
 
 Open Scope R_scope.
 

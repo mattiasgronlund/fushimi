@@ -44,7 +44,7 @@
 
 From Stdlib Require Import ZArith Reals Lra.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Encoding Ieee1788 Integer ComCommon DecBinary ElemDec.
+From Fushimi Require Import Model Encoding Ieee1788 Integer ComCommon DecBinary ElemDec.
 
 Open Scope R_scope.
 

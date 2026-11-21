@@ -62,7 +62,7 @@
 
 From Stdlib Require Import ZArith Reals Lra Lia Psatz.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Encoding Spec Ieee1788 Integer Sign MaxMin
+From Fushimi Require Import Model Encoding Spec Ieee1788 Integer Sign MaxMin
   DecBinary AddSub SqrtRdRu ElemDec.
 
 Open Scope R_scope.

@@ -10,7 +10,7 @@
 
 From Stdlib Require Import ZArith Reals Lra.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Inari Require Import Model Ieee1788 Elementary Mpfr RealBounds ComCommon
+From Fushimi Require Import Model Ieee1788 Elementary Mpfr RealBounds ComCommon
   MpfrRound Interior ExpReal LogReal TrigReal MonoInc LogDom ClosedDom.
 
 Open Scope R_scope.

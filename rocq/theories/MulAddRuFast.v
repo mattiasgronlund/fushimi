@@ -27,7 +27,7 @@
 From Stdlib Require Import ZArith Reals Lia Lra Psatz.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN Plus_error.
 From Flocq Require Pff.Pff2Flocq.
-From Inari Require Import Model Encoding Spec Decompose TwoSum StepUp
+From Fushimi Require Import Model Encoding Spec Decompose TwoSum StepUp
   TwoProduct.
 
 Open Scope R_scope.
