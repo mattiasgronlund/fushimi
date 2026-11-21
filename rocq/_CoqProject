@@ -2,6 +2,7 @@
 
 theories/ModelTrigTable.v
 theories/ModelAsinTable.v
+theories/ModelPowTable.v
 theories/Model.v
 theories/Encoding.v
 theories/Spec.v
@@ -334,6 +335,11 @@ theories/DyPowExact.v
 theories/DyPowMaybe.v
 theories/DyPowCore.v
 theories/DyPown.v
+theories/AccPowArith.v
+theories/AccPowTables.v
+theories/AccPowLn.v
+theories/AccPowExp.v
+theories/AccPow.v
 theories/DyPow.v
 theories/ExpQuadratic.v
 theories/PowFactor.v

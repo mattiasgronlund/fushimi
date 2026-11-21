@@ -1563,6 +1563,7 @@ mod mpfr {
     }
 }
 
+mod acc;
 mod exact;
 mod levels;
 mod near;

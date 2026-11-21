@@ -87,6 +87,7 @@ From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
 From Flocq Require IEEE754.Binary IEEE754.Bits.
 From Inari Require ModelTrigTable.
 From Inari Require ModelAsinTable.
+From Inari Require ModelPowTable.
 
 Open Scope Z_scope.
 Open Scope bool_scope.
@@ -5711,8 +5712,7 @@ End DyadicTrig.
     [ziv] (the section [Driver] below). *)
 Module DyadicPow.
 
-(** [POW_START_BITS] and [POWN_START_BITS]. No proof depends on them. *)
-Definition pow_start_bits : Z := 10.
+(** [POWN_START_BITS]. No proof depends on it. *)
 Definition pown_start_bits : Z := 9.
 
 (** [k as f64] for an [i64] [k], which rounds to nearest, ties to even,
@@ -5958,6 +5958,240 @@ Definition fast_pow_dir_call (fma : bool) (x y : f64) (up : bool) : option f64 :
 Definition fast_pow_near_call (fma : bool) (x y : f64) : option f64 :=
   fast_pow_near fma x y.
 
+(** The accurate phase of [src/dyadic/pow/acc.rs], which [pow_dir] and
+    [pow_near] try after the fast path and [exact], and before [ziv], at a
+    [y] that is not an integer of [i32]. Its tables [ACC_R], [ACC_G],
+    [ACC_LN], [EXP_HI] and [EXP_LO] of [src/dyadic/pow/tables.rs] are in
+    [ModelPowTable.v], which the test [acc_table_in_rocq] of
+    [src/dyadic/pow/tests/acc.rs] checks against [tables.rs], and a table
+    read at [i] is [nth (Z.to_nat i) T 0], where [i] is in bounds. The
+    [u64]s, [u128]s, [i64]s and [i128]s are [Z]s: the conversions that
+    cannot change a value ([u128::from], [i128::from] and [i64::from] of an
+    integer, [as usize] of [(k >> 6) & 63] and [k & 63], [(tl >> 64) as
+    i64], the [as i64] of the product shifted by 101, and [wl as u128] and
+    [wh as u128] after their check) are left out, [unsigned_abs] is
+    [Z.abs], [u128::from(b)] of a [bool] [b] is [if b then 1 else 0], [!=]
+    of two [bool]s is [xorb], [?] is [let*], and the operations that cannot
+    overflow are computed without a check. [AccPowArith.v], [AccPowTables.v],
+    [AccPowLn.v], [AccPowExp.v] and [AccPow.v] prove them. *)
+Definition ACC_R : list Z := ModelPowTable.ACC_R.
+Definition ACC_G : list Z := ModelPowTable.ACC_G.
+Definition ACC_LN : list Z := ModelPowTable.ACC_LN.
+Definition EXP_HI : list Z := ModelPowTable.EXP_HI.
+Definition EXP_LO : list Z := ModelPowTable.EXP_LO.
+
+Definition acc_r (i : Z) : Z := nth (Z.to_nat i) ACC_R 0.
+Definition acc_g (i : Z) : Z := nth (Z.to_nat i) ACC_G 0.
+Definition acc_ln (i : Z) : Z := nth (Z.to_nat i) ACC_LN 0.
+Definition exp_hi (j : Z) : Z := nth (Z.to_nat j) EXP_HI 0.
+Definition exp_lo (j : Z) : Z := nth (Z.to_nat j) EXP_LO 0.
+
+(** [M64] and [FRAC] of [acc.rs]. *)
+Definition m64 : Z := 2 ^ 64 - 1.
+Definition FRAC : Z := 2 ^ 52 - 1.
+
+(** [LOG_C[j]] and [EXP_D[j]], which [const] blocks compute:
+    [(1 << 127) / (j as u128 + 1)], and [1 << 127] for [j] 0 and 1 and
+    [EXP_D[j - 1] / j as u128] from [j = 2] on. *)
+Definition log_c (j : nat) : Z := 2 ^ 127 / (Z.of_nat j + 1).
+
+Fixpoint exp_d (j : nat) : Z :=
+  match j with
+  | O => 2 ^ 127
+  | S k => match k with O => 2 ^ 127 | _ => exp_d k / Z.of_nat j end
+  end.
+
+(** [LN2] and [INV_LN2] of [acc.rs]. *)
+Definition LN2 : Z := 0xb17217f7d1cf79abc9e3b39803f2f6af.
+Definition INV_LN2 : Z := 0x5c551d94ae0bf85e.
+
+(** [fn mul_wide(a: u128, b: u128) -> (u128, u128)], where [mid << 64],
+    which drops the bits of [mid] from 2 ^ 64 up, is
+    [Z.shiftl mid 64 mod 2 ^ 128]. *)
+Definition mul_wide (a b : Z) : Z * Z :=
+  let a0 := Z.land a m64 in
+  let a1 := Z.shiftr a 64 in
+  let b0 := Z.land b m64 in
+  let b1 := Z.shiftr b 64 in
+  let p00 := a0 * b0 in
+  let p01 := a0 * b1 in
+  let p10 := a1 * b0 in
+  let p11 := a1 * b1 in
+  let mid := Z.shiftr p00 64 + Z.land p01 m64 + Z.land p10 m64 in
+  (p11 + Z.shiftr p01 64 + Z.shiftr p10 64 + Z.shiftr mid 64,
+   Z.lor (Z.shiftl mid 64 mod 2 ^ 128) (Z.land p00 m64)).
+
+(** [fn shr_dn((hi, lo): (u128, u128), s: i64) -> Option<u128>], where
+    the [<<]s of [u128]s, which drop the bits from 2 ^ 128 up, are
+    [mod 2 ^ 128], and the [&&], whose right side is not evaluated where
+    its left is false, is [&&] of [bool]s. *)
+Definition shr_dn (p : Z * Z) (s : Z) : option Z :=
+  let '(hi, lo) := p in
+  if 256 <=? s then Some 0
+  else if 128 <=? s then Some (Z.shiftr hi (s - 128))
+  else if 0 <? s then
+    if negb (Z.shiftr hi s =? 0) then None
+    else Some (Z.lor (Z.shiftl hi (128 - s) mod 2 ^ 128) (Z.shiftr lo s))
+  else if negb (hi =? 0) then None
+  else if s =? 0 then Some lo
+  else if (-128 <? s) && (Z.shiftr lo (128 + s) =? 0) then Some (Z.shiftl lo (- s) mod 2 ^ 128)
+  else if lo =? 0 then Some 0
+  else None.
+
+(** [fn shr_up((hi, lo): (u128, u128), s: i64) -> Option<u128>], where
+    [q.checked_add(..)] is [checked_u 128]. *)
+Definition shr_up (p : Z * Z) (s : Z) : option Z :=
+  let '(hi, lo) := p in
+  let* q := shr_dn (hi, lo) s in
+  let dropped :=
+    if 256 <=? s then negb (Z.lor hi lo =? 0)
+    else if 128 <=? s then negb (lo =? 0) || negb (Z.land hi (Z.shiftl 1 (s - 128) - 1) =? 0)
+    else if 0 <? s then negb (Z.land lo (Z.shiftl 1 s - 1) =? 0)
+    else false in
+  checked_u 128 (q + (if dropped then 1 else 0)).
+
+(** [fn mul_dn(a: u128, b: u128, s: u32) -> u128] and [fn mul_up(a: u128,
+    b: u128, s: u32) -> u128], as [shr_dn] for [0 < s < 128]. *)
+Definition mul_dn (a b s : Z) : Z :=
+  let '(hi, lo) := mul_wide a b in
+  Z.lor (Z.shiftl hi (128 - s) mod 2 ^ 128) (Z.shiftr lo s).
+
+Definition mul_up (a b s : Z) : Z :=
+  let '(hi, lo) := mul_wide a b in
+  Z.lor (Z.shiftl hi (128 - s) mod 2 ^ 128) (Z.shiftr lo s)
+  + (if Z.land lo (Z.shiftl 1 s - 1) =? 0 then 0 else 1).
+
+(** [fn signed(neg: bool, lo: u128, hi: u128) -> Option<(i128, i128)>],
+    where [i128::try_from(..).ok()] is [checked_i 128]. *)
+Definition signed (neg : bool) (lo hi : Z) : option (Z * Z) :=
+  let* lo := checked_i 128 lo in
+  let* hi := checked_i 128 hi in
+  Some (if neg then (- hi, - lo) else (lo, hi)).
+
+(** The loop [for &c in LOG_C[..13].iter().rev()] of [acc_t], run [n]
+    times from [LOG_C[n - 1]] down, with [z > 0] as [pos]. *)
+Fixpoint log_q (n : nat) (pos : bool) (a ql qh : Z) : Z * Z :=
+  match n with
+  | O => (ql, qh)
+  | S j =>
+      let c := log_c j in
+      let '(l, h) :=
+        if pos then (c - mul_up a qh 63, c + 1 - mul_dn a ql 63)
+        else (c + mul_dn a ql 63, c + 1 + mul_up a qh 63) in
+      log_q j pos a l h
+  end.
+
+(** The loop [for &d in EXP_D[..8].iter().rev()] of [acc_exp], run [n]
+    times from [EXP_D[n - 1]] down. *)
+Fixpoint exp_p (n : nat) (wl wh pl ph : Z) : Z * Z :=
+  match n with
+  | O => (pl, ph)
+  | S j => let d := exp_d j in exp_p j wl wh (d + mul_dn wl pl 115) (d + 1 + mul_up wh ph 115)
+  end.
+
+(** [fn acc_t(x: f64, y: f64) -> Option<(i128, i128)>], where the
+    [u64] [b] is [to_bits m], whose exponent field is 1022 or 1023, so
+    that [(b >> 52) - 1022] does not wrap and the [<<] drops no bit,
+    [y < 0.0] is [lt y zero], and [checked_add] is [checked_i 128]. *)
+Definition acc_t (x y : f64) : option (Z * Z) :=
+  let '(e, m, i) := DyadicLog.ln_split x in
+  let b := to_bits m in
+  let mm := Z.shiftl (Z.lor (Z.land b FRAC) (Z.shiftl 1 52)) (Z.shiftr b 52 - 1022) in
+  let z := mm * acc_r i - 2 ^ 63 in
+  let a := Z.abs z in
+  if 2 ^ 54 <? a then None else
+  let '(ql, qh) := log_q 13 (0 <? z) a (log_c 13) (log_c 13 + 1) in
+  let '(ql, qh) := (ql - 1, qh + 1) in
+  let '(my, ey) := odd_parts y in
+  let neg_y := lt y zero in
+  let ae := my * Z.abs e in
+  let s := 13 - ey in
+  let* lo := shr_dn (mul_wide ae LN2) s in
+  let* hi := shr_up (mul_wide ae (LN2 + 1)) s in
+  let* (al, ah) := signed (xorb neg_y (e <? 0)) lo hi in
+  let t := acc_ln i in
+  let tm := Z.abs t in
+  let s := 12 + acc_g i - ey in
+  let* lo := shr_dn (mul_wide my (tm - (if t <? 0 then 1 else 0))) s in
+  let* hi := shr_up (mul_wide my (tm + (if 0 <? t then 1 else 0))) s in
+  let* (bl, bh) := signed (xorb neg_y (t <? 0)) lo hi in
+  let n := my * a in
+  let s := 75 - ey in
+  let* lo := shr_dn (mul_wide n ql) s in
+  let* hi := shr_up (mul_wide n qh) s in
+  let* (cl, ch) := signed (xorb neg_y (z <? 0)) lo hi in
+  let* tl := checked_i 128 (al + bl) in
+  let* tl := checked_i 128 (tl + cl) in
+  let* th := checked_i 128 (ah + bh) in
+  let* th := checked_i 128 (th + ch) in
+  Some (tl, th).
+
+(** [fn acc_exp(tl: i128, th: i128) -> Option<(u128, u128, i64)>],
+    where the [>>] of [i128]s and [i64]s, which round toward -∞, are
+    [Z.shiftr], the [&] of an [i64] is [Z.land], which reads a negative
+    [Z] in two's complement as Rust does, and [checked_sub] is
+    [checked_i 128]. *)
+Definition acc_exp (tl th : Z) : option (Z * Z * Z) :=
+  let k := Z.shiftr (Z.shiftr tl 64 * INV_LN2) 101 in
+  let km := Z.abs k in
+  if 2 ^ 25 <=? km then None else
+  let* (cl, ch) := signed (k <? 0) (mul_dn km LN2 25) (mul_up km (LN2 + 1) 25) in
+  let* wl := checked_i 128 (tl - ch) in
+  let* wh := checked_i 128 (th - cl) in
+  if (wl <? 0) || (2 ^ 103 <? wh) then None else
+  let '(pl, ph) := exp_p 8 wl wh (exp_d 8) (exp_d 8 + 1) in
+  let ph := ph + 2 in
+  let eh := exp_hi (Z.land (Z.shiftr k 6) 63) in
+  let el := exp_lo (Z.land k 63) in
+  let sl := mul_dn eh el 127 in
+  let sh := mul_up (eh + 1) (el + 1) 127 in
+  let '(lo, _) := mul_wide sl pl in
+  let '(hi, rest) := mul_wide sh ph in
+  Some (lo, hi + (if rest =? 0 then 0 else 1), Z.shiftr k 12 - 126).
+
+(** [pub(super) fn acc_pow(x: f64, y: f64) -> Option<(u128, u128, i64)>] *)
+Definition acc_pow (x y : f64) : option (Z * Z * Z) :=
+  let* (tl, th) := acc_t x y in
+  acc_exp tl th.
+
+(** [fn acc_bounds(x: f64, y: f64) -> Option<(Dyadic<2>, Dyadic<2>)>],
+    with [Some None] where [acc_pow] declines, and [None] where [round]
+    panics, as in [exact]; [&[lo as u64, (lo >> 64) as u64]] is
+    [lo mod 2 ^ 64 :: Z.shiftr lo 64 :: nil]. *)
+Definition acc_bounds (x y : f64) : option (option (Dyadic.dyadic * Dyadic.dyadic)) :=
+  match acc_pow x y with
+  | None => Some None
+  | Some (lo, hi, e) =>
+      let* l := Dyadic.round 2 false (lo mod 2 ^ 64 :: Z.shiftr lo 64 :: nil) e false false in
+      let* h := Dyadic.round 2 false (hi mod 2 ^ 64 :: Z.shiftr hi 64 :: nil) e false true in
+      Some (Some (l, h))
+  end.
+
+(** [pub(super) fn acc_pow_dir(x: f64, y: f64, up: bool) -> Option<f64>]
+    and [pub(super) fn acc_pow_near(x: f64, y: f64) -> Option<f64>],
+    without the statements under [#[cfg(test)]], which only the tests
+    compile, with [Some None] where they return [None], and [None] where
+    they panic. *)
+Definition acc_pow_dir (x y : f64) (up : bool) : option (option f64) :=
+  let* r := acc_bounds x y in
+  match r with
+  | None => Some None
+  | Some (l, h) =>
+      let* a := Dyadic.to_f64 2 l up in
+      let* b := Dyadic.to_f64 2 h up in
+      Some (if eq a b then Some a else None)
+  end.
+
+Definition acc_pow_near (x y : f64) : option (option f64) :=
+  let* r := acc_bounds x y in
+  match r with
+  | None => Some None
+  | Some (l, h) =>
+      let* a := Dyadic.to_f64_near 2 l in
+      let* b := Dyadic.to_f64_near 2 h in
+      Some (if to_bits a =? to_bits b then Some a else None)
+  end.
+
 (** [const SMALL_MAX: i64 = 8]. [FastPowi.v] uses that it is 8, as
     [FastPowiLoop.v] bounds the loop of [pown_small] for [|n|] from 1 to
     8 only. *)
@@ -6028,16 +6262,17 @@ Definition pown_small_near (fma : bool) (x : f64) (k g : Z) : option f64 :=
     before the fast path where [maybe_exact] says so, and otherwise after
     it at a subnormal [x] only, and then passes an integer [y] to
     [pown_pos_ziv], which is [pown_pos] without [pown_small_dir] and the
-    fast path, and any other [y] to [ziv]. Their forms rounded to nearest
-    do the same before [ziv_near], with [pown_small_near] for
-    [pown_small_dir] and [exact_near] after the fast path. The fast path
-    and [pown_small] take [FMA] as an argument. The entries of the file,
-    [fast_pow_dir_call], [fast_pow_near_call], [pown_pos_dir] and
-    [pown_pos_near], pick it as in [DyadicExp] (the section [Driver]),
-    and the functions below pass [false]: [FastPow.fast_pow_dir_fma],
-    [FastPow.fast_pow_near_fma], [FastPowi.pown_small_dir_fma] and
-    [FastPowi.pown_small_near_fma] show that [true] gives the same result
-    at every argument that reaches it. *)
+    fast path, and any other [y] to the accurate phase [acc_pow_dir] and,
+    where that declines, to [ziv]. Their forms rounded to nearest do the
+    same before [ziv_near], with [pown_small_near] for [pown_small_dir],
+    [acc_pow_near] for [acc_pow_dir] and [exact_near] after the fast
+    path. The fast path and [pown_small] take [FMA] as an argument. The
+    entries of the file, [fast_pow_dir_call], [fast_pow_near_call],
+    [pown_pos_dir] and [pown_pos_near], pick it as in [DyadicExp] (the
+    section [Driver]), and the functions below pass [false]:
+    [FastPow.fast_pow_dir_fma], [FastPow.fast_pow_near_fma],
+    [FastPowi.pown_small_dir_fma] and [FastPowi.pown_small_near_fma] show
+    that [true] gives the same result at every argument that reaches it. *)
 Section Driver.
 Variable ziv : (nat -> option Dyadic.encl) -> bool -> nat -> option f64.
 
@@ -6144,8 +6379,11 @@ Definition pow_dir_with (x y : f64) (up : bool) : option f64 :=
               | None =>
                   if eq (of_i64 (to_i32 y)) y then pown_pos_ziv_with x (to_i32 y) up
                   else
-                    ziv (ev_pow x y) up
-                      (if pow_start_bits <=? Z.min ey (s + 4) then 2%nat else 1%nat)
+                    let* r3 := acc_pow_dir x y up in
+                    match r3 with
+                    | Some v => Some v
+                    | None => ziv (ev_pow x y) up 4%nat
+                    end
               end
           end
       end.
@@ -6230,7 +6468,11 @@ Definition pow_near_with (x y : f64) : option f64 :=
           | None =>
               if eq (of_i64 (to_i32 y)) y then pown_pos_near_ziv_with x (to_i32 y)
               else
-                ziv_near (ev_pow x y) (if pow_start_bits <=? Z.min ey (s + 4) then 2%nat else 1%nat)
+                let* r3 := acc_pow_near x y in
+                match r3 with
+                | Some v => Some v
+                | None => ziv_near (ev_pow x y) 4%nat
+                end
           end
       end.
 

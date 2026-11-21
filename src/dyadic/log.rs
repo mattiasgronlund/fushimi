@@ -351,8 +351,9 @@ const FRAC: u64 = 0x000f_ffff_ffff_ffff;
 
 // (e, m, i) with x = 2^e m exactly, m in [(362 + i) / 512, (363 + i) / 512) and i in [0, 361],
 // for a finite x > 0. Then m is in [0.707, 1.415) and e in [-1074, 1024].
-// `rocq/theories/FastLogReduce.v` proves it (`ln_split_correct`).
-fn ln_split(x: f64) -> (i64, f64, usize) {
+// `rocq/theories/FastLogReduce.v` proves it (`ln_split_correct`). The accurate phase of x^y
+// (`src/dyadic/pow/acc.rs`) takes it too.
+pub(super) fn ln_split(x: f64) -> (i64, f64, usize) {
     let (mut b, mut e) = (x.to_bits(), 0);
     if b < 1 << 52 {
         // A subnormal x: x 2^52 is exact and normal.

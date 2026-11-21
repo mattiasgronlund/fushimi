@@ -43,7 +43,7 @@ Definition near_post (z : (nat -> option Dyadic.encl) -> nat -> option f64)
     [2^1024 - 2^970] in magnitude between two such numbers of one sign has
     their sign, and a nonzero number between them has the sign of [lo]
     if negative and of [hi] if positive. *)
-Local Lemma near_between :
+Lemma near_between :
   forall lo hi r v,
   (lo <= r <= hi)%R -> near_round lo v -> near_round hi v -> near_round r v.
 Proof.

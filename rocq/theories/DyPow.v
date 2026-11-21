@@ -16,29 +16,32 @@
     [pown_pos_ziv_post] of [DyPown.v] for an integer [y] from [-2^31] to
     [2^31 - 1], which [pow] passes to [pown_pos_ziv], [pown_pos] without
     [pown_small_dir] and without the fast path that [pow] has already
-    tried; and otherwise the driver with the enclosure of
-    [ev_pow_correct] of [DyPowCore.v]. So,
-    for such [x] and [y]: with [ziv_strict], the kernel rounds [Rpow] in
-    the direction [up] where it returns
+    tried; and otherwise the accurate phase [acc_pow_dir], which returns,
+    where it returns an [f64], x^y rounded in the direction [up]
+    ([acc_pow_dir_correct] of [AccPow.v]), and, where it returns [None],
+    the driver from level 4 with the enclosure of [ev_pow_correct] of
+    [DyPowCore.v]. So, for such [x] and [y]: with [ziv_strict], the
+    kernel rounds [Rpow] in the direction [up] where it returns
     ([pow_dir_correct]); the Rust ([pow_dir], with [Dyadic.ziv]) returns
-    the same value there ([pow_dir_strict]); and wherever the Rust
+    the same value there ([pow_dir_strict], with [acc_ziv_strict] for the
+    accurate phase and the driver after it); and wherever the Rust
     returns, its result is at or above [Rpow] if [up] and at or below it
     otherwise ([pow_dir_side]). Where the result at a finite [x > 0] is
     itself a finite [f64], the Rust returns it ([pow_dir_exact]), from
     [exact] ([exact_complete]) or from the fast path where that comes
     first and returns ([fast_pow_dir_exact]), as [maybe_exact] puts
     [exact] first at a normal [x] whose [exact] returns an [f64]
-    ([maybe_exact_complete] of [DyPowMaybe.v]), so Ziv's loop never runs
-    on such an argument. That a rounding test
-    passes by the cap at the other arguments is not proved.
-    [pown_dir] is in [DyPown.v]. *)
+    ([maybe_exact_complete] of [DyPowMaybe.v]), so neither the accurate
+    phase nor Ziv's loop runs on such an argument. That a rounding test
+    passes by the cap at the other arguments is not proved. [pown_dir] is
+    in [DyPown.v]. *)
 
 From Stdlib Require Import ZArith Reals Lra Lia List.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
 From Inari Require Import Model Mpfr MpfrRound Limbs Elementary DyRound DyConv DyOps DyDriver
   DyGrow DyConst DyExpCore DyExpRules DyExp DyLogRules DyLogCore DyPowArith DyPowRules
   DyPowExact DyPowCore DyPowMaybe.
-From Inari Require DyPown FastPow.
+From Inari Require DyPown FastPow AccPow.
 
 Open Scope Z_scope.
 
@@ -259,13 +262,19 @@ assert (HF : forall w, DyadicPow.fast_pow_dir_call false x y up = Some w ->
              post up (Rpower (B2R x) (B2R y)) w).
 { intros w F. apply Hp.
   exact (FastPow.fast_pow_dir_correct false x y up w Fx Px Fy (or_intror Hb60) F). }
-(* What both orders reach last: [pown_pos_ziv] or the driver. *)
-assert (HT : forall start,
+(* What both orders reach last: [pown_pos_ziv], or the accurate phase and
+   then the driver. *)
+assert (HT :
   (if eq (DyadicPow.of_i64 (DyadicPow.to_i32 y)) y
    then DyadicPow.pown_pos_ziv_with z x (DyadicPow.to_i32 y) up
-   else z (DyadicPow.ev_pow x y) up start) = Some v ->
+   else
+     let* r3 := DyadicPow.acc_pow_dir x y up in
+     match r3 with
+     | Some w => Some w
+     | None => z (DyadicPow.ev_pow x y) up 4%nat
+     end) = Some v ->
   post up (Rpower (B2R x) (B2R y)) v).
-{ intros start E'. destruct (eq (DyadicPow.of_i64 (DyadicPow.to_i32 y)) y) eqn:I.
+{ intros E'. destruct (eq (DyadicPow.of_i64 (DyadicPow.to_i32 y)) y) eqn:I.
   - (* An integer [y] from [-2^31] to [2^31 - 1]: x^y is [powerRZ x k] for [k = y]. *)
     assert (Hi : is_i32 (DyadicPow.to_i32 y)) by apply to_i32_range.
     destruct (of_i64_exact (DyadicPow.to_i32 y)) as [Fk Vk]; [unfold is_i32 in Hi; lia |].
@@ -274,8 +283,11 @@ assert (HT : forall start,
       by (intros K; apply Y0; rewrite <- I, K; reflexivity).
     rewrite <- I, <- (powerRZ_Rpower _ _ Px).
     exact (DyPown.pown_pos_ziv_post z post Hp Hz x _ up v Fx Px Hk Hi E').
-  - refine (Hz (DyadicPow.ev_pow x y) up _ _ v _ E').
-    intros n a Hn Ea. exact (ev_pow_correct n x y a Hn Fx Px Fy Ea). }
+  - destruct (DyadicPow.acc_pow_dir x y up) as [[w|]|] eqn:A in E'; [| | discriminate E'];
+      cbv beta iota in E'.
+    + injection E' as <-. apply Hp. exact (AccPow.acc_pow_dir_correct x y up w Fx Px Fy Y0 A).
+    + refine (Hz (DyadicPow.ev_pow x y) up _ _ v _ E').
+      intros n a Hn Ea. exact (ev_pow_correct n x y a Hn Fx Px Fy Ea). }
 destruct (DyadicPow.maybe_exact x y); cbv iota in E; cbn [orb] in E.
 - (* [exact] first, then the fast path. *)
   destruct (DyadicPow.exact x y) as [[w|]|] eqn:Ex in E; [| | discriminate E].
@@ -283,15 +295,15 @@ destruct (DyadicPow.maybe_exact x y); cbv iota in E; cbn [orb] in E.
   cbv beta iota in E.
   destruct (DyadicPow.fast_pow_dir_call false x y up) as [w|] eqn:F in E; cbv iota in E.
   { injection E as <-. exact (HF w F). }
-  exact (HT _ E).
+  exact (HT E).
 - (* The fast path first, then [exact] at a subnormal [x]. *)
   destruct (DyadicPow.fast_pow_dir_call false x y up) as [w|] eqn:F in E; cbv iota in E.
   { injection E as <-. exact (HF w F). }
   destruct (lt x DyadicPow.min_normal) in E; cbn [negb] in E; cbv iota in E.
   + destruct (DyadicPow.exact x y) as [[w|]|] eqn:Ex in E; [| | discriminate E].
     { injection E as <-. exact (HE w Ex). }
-    cbv beta iota in E. exact (HT _ E).
-  + cbv beta iota in E. exact (HT _ E).
+    cbv beta iota in E. exact (HT E).
+  + cbv beta iota in E. exact (HT E).
 Qed.
 
 Theorem pow_dir_correct :
@@ -307,6 +319,21 @@ Theorem pow_dir_side :
   DyadicPow.pow_dir x y up = Some v ->
   f64_side up (Rpow (B2R x) (B2R y)) v.
 Proof. exact (pow_dir_post Dyadic.ziv f64_side rounds_side ziv_side). Qed.
+
+(** The accurate phase and then the driver, as [pow] calls them: what
+    [ziv_strict] returns there, [Dyadic.ziv] returns too. *)
+Lemma acc_ziv_strict :
+  forall x y up v,
+  (let* r3 := DyadicPow.acc_pow_dir x y up in
+   match r3 with Some w => Some w | None => ziv_strict (DyadicPow.ev_pow x y) up 4%nat end)
+    = Some v ->
+  (let* r3 := DyadicPow.acc_pow_dir x y up in
+   match r3 with Some w => Some w | None => Dyadic.ziv (DyadicPow.ev_pow x y) up 4%nat end)
+    = Some v.
+Proof.
+intros x y up v. destruct (DyadicPow.acc_pow_dir x y up) as [[w|]|]; cbv beta iota;
+  [exact (fun h => h) | apply ziv_strict_ziv | exact (fun h => h)].
+Qed.
 
 Theorem pow_dir_strict :
   forall x y (up : bool) v,
@@ -329,16 +356,16 @@ destruct (DyadicPow.maybe_exact x y); cbv beta iota; cbn [orb].
   destruct (DyadicPow.fast_pow_dir_call false x y up); [exact (fun h => h) |].
   cbv beta iota.
   destruct (eq (DyadicPow.of_i64 (DyadicPow.to_i32 y)) y);
-    [apply DyPown.pown_pos_ziv_strict | apply ziv_strict_ziv].
+    [apply DyPown.pown_pos_ziv_strict | apply acc_ziv_strict].
 - destruct (DyadicPow.fast_pow_dir_call false x y up); [exact (fun h => h) |].
   cbv beta iota.
   destruct (lt x DyadicPow.min_normal); cbn [negb]; cbv beta iota.
   + destruct (DyadicPow.exact x y) as [[w|]|]; [exact (fun h => h) | | exact (fun h => h)].
     cbv beta iota.
     destruct (eq (DyadicPow.of_i64 (DyadicPow.to_i32 y)) y);
-      [apply DyPown.pown_pos_ziv_strict | apply ziv_strict_ziv].
+      [apply DyPown.pown_pos_ziv_strict | apply acc_ziv_strict].
   + destruct (eq (DyadicPow.of_i64 (DyadicPow.to_i32 y)) y);
-      [apply DyPown.pown_pos_ziv_strict | apply ziv_strict_ziv].
+      [apply DyPown.pown_pos_ziv_strict | apply acc_ziv_strict].
 Qed.
 
 (** Where x^y is a finite [f64] [v] and the fast path returns, it returns

@@ -7,34 +7,45 @@
     [DyPowCore.v] and [DyPown.v], the rules before it by the cells of
     [NearCells.v] and the bounds of [DyPowRules.v], the fast path, which
     [pow_near] tries right after its rules, by [fast_pow_near_correct] of
-    [FastPow.v], and [exact_near], which comes after the fast path, by
-    [exact_near_sound] of [DyPowNearExact.v]. [pown_pos_near_with], which
-    [pown_near_with] calls, tries [pown_small_near] after its rules and
-    before the fast path. [pown_small_near] returns [None] at a subnormal
-    [x], for [|n|] above 8 and where its [round_near_wide_err] does. Where
-    it returns after the rules, it returns the rounding to nearest by
-    [pown_small_near_correct] of [FastPowi.v]. As the fast path, where it
-    returns, returns the rounding to nearest, [exact_near] returns at
-    every finite [x > 0] other than 1 and finite [y <> 0] at which x^y
-    is q 2^e for an integer [0 < q < 2^54] and [e >= -1075], below
-    2^1024 ([exact_near_complete]), and the rules before them return at
-    [x = 1] and [y = 0], [pow_near] returns the rounding to nearest at
+    [FastPow.v], [exact_near], which comes after the fast path, by
+    [exact_near_sound] of [DyPowNearExact.v], and the accurate phase
+    [acc_pow_near], which comes after [exact_near], by
+    [acc_pow_near_correct] of [AccPow.v]. [pow_near] tries the phase only
+    at a [y] that is not an integer from [-2^31] to [2^31 - 1], and runs
+    the loop there, from level 4, only where the phase returns [None].
+    [pown_pos_near_with], which [pown_near_with] calls, tries
+    [pown_small_near] after its rules and before the fast path.
+    [pown_small_near] returns [None] at a subnormal [x], for [|n|] above 8
+    and where its [round_near_wide_err] does. Where it returns after the
+    rules, it returns the rounding to nearest by [pown_small_near_correct]
+    of [FastPowi.v]. Where [pow_near_with ziv_near_strict] or
+    [pown_near_with ziv_near_strict] returns, the Rust ([pow_near] or
+    [pown_near], with [Dyadic.ziv_near]) returns the same value
+    ([pow_near_strict], with [acc_ziv_near_strict] for the accurate phase
+    and the loop after it, and [pown_near_strict]). As the fast path,
+    where it returns, returns the rounding to nearest, [exact_near]
+    returns at every finite [x > 0] other than 1 and finite [y <> 0] at
+    which x^y is q 2^e for an integer [0 < q < 2^54] and [e >= -1075],
+    below 2^1024 ([exact_near_complete]), and the rules before them return
+    at [x = 1] and [y = 0], [pow_near] returns the rounding to nearest at
     every finite [x > 0] and finite [y] at which x^y is such a number
     ([pow_near_midpoint]), the midpoints of two adjacent [f64]s among
-    them, which an enclosure settles only if it is one of its bounds.
-    That proof needs no fact about where the fast path returns. Its test
-    to nearest is expected to pass where x^y is an [f64], except next to
-    2^1024, where [fast_exp_edge] gives the exponent 1024 and the fast
-    path returns [None] without a test (at the largest [f64] and [y = 1],
-    for one), and to fail at a midpoint; [exact_near] then settles those.
-    No proof here shows either. *)
+    them, which an enclosure settles only if it is one of its bounds. That
+    proof needs no fact about where the fast path or the accurate phase
+    returns: at such an argument, [pow_near] returns by a rule, by the
+    fast path or by [exact_near], which all come before the phase. The
+    fast path's test to nearest is expected to pass where x^y is an [f64],
+    except next to 2^1024, where [fast_exp_edge] gives the exponent 1024
+    and the fast path returns [None] without a test (at the largest [f64]
+    and [y = 1], for one), and to fail at a midpoint; [exact_near] then
+    settles those. No proof here shows either. *)
 
 From Stdlib Require Import ZArith Reals Lra Lia List.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
 From Inari Require Import Model Mpfr MpfrRound Limbs Elementary DyRound DyConv DyOps DyDriver
   DyGrow DyConst DyExpCore DyExpRules DyExp DyLogRules DyLogCore DyPowArith DyPowRules
   DyPowExact DyPowCore NearF64 NearCells DyDriverNear DyPowNearExact.
-From Inari Require DyPown DyPow FastPow FastPowi.
+From Inari Require DyPown DyPow FastPow FastPowi AccPow.
 
 Open Scope Z_scope.
 
@@ -355,9 +366,12 @@ destruct (DyadicPow.exact_near x y) as [[w|]|] eqn:Ex; [| | discriminate E].
       by (intros K; apply Y0; rewrite <- I, K; reflexivity).
     rewrite <- I, <- (powerRZ_Rpower _ _ Px).
     exact (pown_pos_near_ziv x _ v Fx Px Hk Hi E).
-  + (* The driver. *)
-    refine (ziv_near_strict_correct _ _ _ _ _ E).
-    intros n a Hn Ea. exact (ev_pow_correct n x y a Hn Fx Px Fy Ea).
+  + (* The accurate phase, and then the driver. *)
+    destruct (DyadicPow.acc_pow_near x y) as [[w|]|] eqn:A in E; [| | discriminate E];
+      cbv beta iota in E.
+    * injection E as <-. exact (AccPow.acc_pow_near_correct x y w Fx Px Fy Y0 A).
+    * refine (ziv_near_strict_correct _ _ _ _ _ E).
+      intros n a Hn Ea. exact (ev_pow_correct n x y a Hn Fx Px Fy Ea).
 Qed.
 
 Theorem pown_near_correct :
@@ -399,6 +413,21 @@ destruct (Z.eq_dec n 0) as [-> | Hn].
       apply H; [apply Rabs_pos_lt; exact Nx | exact Hn | exact Hi | exact E].
 Qed.
 
+(** The accurate phase and then the driver, as [pow_near] calls them: what
+    [ziv_near_strict] returns there, [Dyadic.ziv_near] returns too. *)
+Lemma acc_ziv_near_strict :
+  forall x y v,
+  (let* r3 := DyadicPow.acc_pow_near x y in
+   match r3 with Some w => Some w | None => ziv_near_strict (DyadicPow.ev_pow x y) 4%nat end)
+    = Some v ->
+  (let* r3 := DyadicPow.acc_pow_near x y in
+   match r3 with Some w => Some w | None => Dyadic.ziv_near (DyadicPow.ev_pow x y) 4%nat end)
+    = Some v.
+Proof.
+intros x y v. destruct (DyadicPow.acc_pow_near x y) as [[w|]|]; cbv beta iota;
+  [exact (fun h => h) | apply ziv_near_strict_ziv | exact (fun h => h)].
+Qed.
+
 Theorem pow_near_strict :
   forall x y v,
   DyadicPow.pow_near_with ziv_near_strict x y = Some v -> DyadicPow.pow_near x y = Some v.
@@ -419,7 +448,7 @@ cbv beta iota.
 destruct (DyadicPow.exact_near x y) as [[w|]|]; [exact (fun h => h) | | exact (fun h => h)].
 cbv beta iota.
 destruct (eq (DyadicPow.of_i64 (DyadicPow.to_i32 y)) y);
-  [apply pown_pos_near_ziv_strict | apply ziv_near_strict_ziv].
+  [apply pown_pos_near_ziv_strict | apply acc_ziv_near_strict].
 Qed.
 
 Theorem pown_near_strict :

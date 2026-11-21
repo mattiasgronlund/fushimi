@@ -61,6 +61,7 @@ From Inari Require FastTrigTables FastTrigReduce FastTrigSC FastTrigGappa FastTr
   FastTrigCore FastTrigOne FastTrig.
 From Inari Require FastPowTaylor FastPowHorner FastPowCube FastPowPoly FastPowCore FastPowLn FastPowMul
   FastPowRules FastPow FastPowiLoop FastPowi.
+From Inari Require AccPowArith AccPowTables AccPowLn AccPowExp AccPow.
 From Inari Require FastDdSqrt FastLogDd AsinhTaylor FastAhypOdd FastAhypNear1 FastAhypAsinh FastAhypAcosh
   FastAhypAtanh FastAhyp.
 From Inari Require FastAtanTables FastAtanPoly FastAtanCore FastAtan AsinSeries FastAsinTable
@@ -507,6 +508,15 @@ Print Assumptions FastPowi.pown_small_near_correct.
 Print Assumptions FastPowi.pown_small_fma.
 Print Assumptions FastPowi.pown_small_dir_fma.
 Print Assumptions FastPowi.pown_small_near_fma.
+Print Assumptions AccPowTables.acc_ln_correct.
+Print Assumptions AccPowTables.exp_hi_correct.
+Print Assumptions AccPowTables.exp_lo_correct.
+Print Assumptions AccPowTables.ln2_acc_bounds.
+Print Assumptions AccPowLn.acc_t_correct.
+Print Assumptions AccPowExp.acc_exp_correct.
+Print Assumptions AccPow.acc_pow_correct.
+Print Assumptions AccPow.acc_pow_dir_correct.
+Print Assumptions AccPow.acc_pow_near_correct.
 Print Assumptions FastDdSqrt.dd_sqrt_correct.
 Print Assumptions FastDdSqrt.dd_sqrt_fma.
 Print Assumptions FastLogDd.fast_ln_dd_correct.

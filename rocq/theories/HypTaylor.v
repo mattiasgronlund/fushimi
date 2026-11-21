@@ -30,7 +30,7 @@ Local Ltac zfact_lit :=
 (** [exp y] is at most its Taylor polynomial of degree [n] plus twice the
     next term on [[0, 1]], as each later term is at most half the one
     before it. *)
-Local Lemma exp_le_taylor :
+Lemma exp_le_taylor :
   forall n y, 0 <= y <= 1 ->
   exp y <= sum_f_R0 (fun i => / INR (fact i) * y ^ i) n + 2 * (/ INR (fact (S n)) * y ^ S n).
 Proof.
