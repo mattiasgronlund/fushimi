@@ -11,7 +11,8 @@
 // zero exponents, x = 1 for x^y, and, from bounds on the exponents of the arguments, some of
 // the arguments whose results overflow, are below 2^-1074 or, for x^y, are within an ulp of 1,
 // all as MPFR gives them. The others of these go on to `ziv`. x^y for a finite x < 0, or for
-// x = -∞, is NaN here, where MPFR gives (-1)^y |x|^y at an integer y: `Interval::pow` passes
+// x = -∞, is NaN here at every y but ±0, where MPFR gives NaN only at a NaN y and, for a finite
+// x, at a finite non-integer y (`src/cr.rs` gives MPFR's values there): `Interval::pow` passes
 // x >= 0 or x = -0 only. Ziv's strategy cannot settle an argument whose result is an `f64`
 // unless an enclosure has that `f64` as its bound in the direction of the rounding (the header
 // of `src/dyadic/exp.rs` says why). x^y is an `f64` at many arguments, and `exact` finds each
@@ -142,7 +143,8 @@ mod tests;
 const POW_START_BITS: i64 = 10;
 const POWN_START_BITS: u32 = 9;
 
-// (m, e) for a finite nonzero x, with |x| = m 2^e and an odd m, from the bits of x.
+// (m, e) for a finite nonzero x, with |x| = m 2^e and an odd m, from the bits of x, and
+// (1, 1024) for ±∞, whose bits read as those of 2^1024.
 pub(super) fn odd_parts(x: f64) -> (u64, i64) {
     let bits = x.to_bits();
     let be = ((bits >> 52) & 0x7ff) as i64;
@@ -191,7 +193,8 @@ fn ln_expo(x: f64) -> i64 {
     }
 }
 
-// Whether the finite y is an odd integer: its odd part is at 2^0.
+// Whether y is an odd integer, for a finite y or ±∞: its odd part is at 2^0. `odd_parts` reads
+// ±∞ as 2^1024, so that ±∞ is not one.
 pub(crate) fn is_odd_integer(y: f64) -> bool {
     y != 0.0 && odd_parts(y).1 == 0
 }
@@ -447,7 +450,8 @@ fn fast_pow_wide_near<const FMA: bool>(th: f64, tl: f64) -> Option<f64> {
 
 // `fast_pow_dir` and `fast_pow_near` out of line, for `pow` and `pow_near`, while `pown_pos`
 // and `pown_pos_near` inline them, with the wide functions, which are always inlined too
-// (counted with cachegrind, in instructions per call, on sets of x^y and x^n). Left to the
+// (counted with cachegrind, in instructions per call, on sets of x^y and x^n, in a test build
+// of this crate, not in a crate that links `cr`). Left to the
 // compiler, `pown_pos` called `fast_pow_dir` out of line, and most of the sets of x^n and of
 // x^y at an integer y took about 4 to 10 more than before the wide functions. With those two
 // inlined and the wide functions not, the `Option` that the call of a wide function returns

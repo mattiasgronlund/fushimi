@@ -162,11 +162,11 @@ fn signed_pown_wide_edges() {
     even.print("signed wide edges of pown, even n");
 }
 
-// The (r, a, n) of an x = r 2^-a with r in {1, 3, 5, 7} and n >= 2 at which x^n = r^n 2^(-a n)
-// is in [2^-1075, 2^-1022) and r^n < 2^53: for an r^n of b bits, x^n is in
-// [2^(b - 1 - a n), 2^(b - a n)), so that 1022 + b <= a n <= 1075. x^n is then a subnormal
-// `f64` for a n <= 1074, and for a n = 1075 the midpoint between the two subnormals
-// (r^n - 1) / 2 2^-1074 and (r^n + 1) / 2 2^-1074, at r = 1 between 0 and 2^-1074.
+// The (r, a, n) of an x = r 2^-a with r in {1, 3, 5, 7}, n >= 2, r^n < 2^53 and
+// 1022 + b <= a n <= 1075, for an r^n of b bits. x^n = r^n 2^(-a n) is then in
+// [2^(b - 1 - a n), 2^(b - a n)), below 2^-1022, and is a subnormal `f64` for a n <= 1074, and
+// for a n = 1075 the midpoint between the two subnormals (r^n - 1) / 2 2^-1074 and
+// (r^n + 1) / 2 2^-1074, at r = 1 between 0 and 2^-1074.
 fn subnormal_powers() -> Vec<(u64, i64, i32)> {
     let mut v = Vec::new();
     for r in [1u64, 3, 5, 7] {
