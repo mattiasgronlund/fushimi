@@ -478,10 +478,10 @@ fn exact_div<const FMA: bool>(y: f64, x: f64) -> Option<f64> {
 // `exact_div`, `tiny_quotient` and `midpoint_quotient` are always inlined, and
 // `tiny_quotient_dyadic` and `midpoint_quotient_dyadic` never: the `f64` checks then run in
 // `atan2` and `atan2_near` without a stack frame of their own, which LLVM by itself builds for
-// the `Dyadic`s in every call, so that atan2 takes 2.02 (rn) and 2.10 (rd, ru) times the
-// instructions of CORE-MATH in the same rounding on uniform angles (cachegrind, 4,096 arguments,
-// log-uniform radii in [2^-4, 2^4)), against 2.11 to 2.17 without the attributes, 10 to 14 more
-// instructions per call. The attributes keep that layout if the `Dyadic` parts change.
+// the `Dyadic`s in every call, so that atan2 takes 10 to 14 fewer instructions per call than
+// without the attributes (cachegrind at b626bcf, 4,096 arguments on uniform angles with
+// log-uniform radii in [2^-4, 2^4)). The attributes keep that layout if the `Dyadic` parts
+// change.
 #[inline(always)]
 fn tiny_quotient<const FMA: bool>(y: f64, x: f64) -> Option<f64> {
     if y.abs() * TWO_25 >= x {
@@ -996,11 +996,13 @@ fn fast_atan_pos1<const FMA: bool>(t: f64) -> Option<(f64, f64, i64, f64)> {
 // as `Some(Some(..))`. The results below 2^-1021 are `Some(None)`: the second stage would send
 // them to the kernel too. `None` is where `fast_atan1` returns `None`.
 // Always inlined: LLVM by itself keeps it out of line, with a stack frame of its own and its
-// result through memory, at which atan2 takes 24 to 27 more instructions per call, 247.9 (rn),
-// 260.2 (rd) and 259.7 (ru) against 221.2, 235.5 and 235.5 on y and x uniform in [-10, 10), and
-// 248.9, 262.8 and 262.8 against 221.7, 238.1 and 238.1 on uniform angles with log-uniform
-// radii in [2^-4, 2^4) (cachegrind, 4,096 arguments per set, in a test build for haswell
-// without the tests module of this file).
+// result through memory, at which atan2 takes 26.75 (rn) and 23.75 (rd, ru) more instructions
+// per call, 255.9, 262.1 and 262.1 against 229.2, 238.4 and 238.4, on y and x uniform in
+// [-10, 10), 26.74 and 23.77 more, 256.4, 264.6 and 264.6 against 229.6, 240.9 and 240.9, on
+// uniform angles with log-uniform radii in [2^-4, 2^4), up to 28.65 more on the other random
+// sets and 20.85 to 22.28 more on CORE-MATH's hard cases, with about 2 more conditional
+// branches per call, in a crate that links `cr`, built for haswell, cachegrind chase=no, 4,096
+// arguments per set (2026-11-21, against 53fa1fe).
 #[inline(always)]
 fn fast_atan2_pos1<const FMA: bool>(
     a: f64,
@@ -1096,8 +1098,8 @@ fn fast_asin_pos0<const FMA: bool>(t: f64) -> (f64, f64, i64, f64) {
 
 // Always inlined, as the first stage that acos had before stage 0 was: LLVM by itself kept that
 // out of line, with its result through memory and, where it took atan of a quotient, a stack
-// frame of its own, at which acos took 15 to 23 more instructions per call (cachegrind). This
-// stage is not counted without the attribute.
+// frame of its own, at which acos took 15 to 23 more instructions per call (cachegrind in the
+// lib's test binary, before rule M5). This stage is not counted without the attribute.
 #[inline(always)]
 fn fast_acos_val0<const FMA: bool>(x: f64) -> Option<(f64, f64, i64, f64)> {
     if x == 1.0 {
@@ -1338,18 +1340,25 @@ fn fast_atan2_near1<const FMA: bool>(y: f64, x: f64) -> Option<Option<f64>> {
     Some(Some(if y < 0.0 { -r } else { r }))
 }
 
-// The second stages. LLVM inlines them into the dir and near functions, which then call
-// `fast_atan_pos`, `fast_asin_atan`, `fast_acos_val` and `fast_atan2_pos` out of line. The
-// exception is `fast_atan2_dir2`, which is never inlined: inlined, it costs atan2 1.8 to 2.3
-// more instructions per call in rd and ru. Never inlined, the others would cost more too: atan
-// 3.5 to 8.8 per call on x uniform in [-10, 10) and [-1, 1) and |x| log-uniform in
-// [2^-30, 2^30), and asin 3.4 to 4.1 on x uniform in [-1, 1) and |x| log-uniform in
-// [2^-30, 1) and [2^-26, 2^-8). acos would cost 2.9 to 4.9 more, on x uniform in [-1, 1), on
-// 1 - 2^-8 < |x| <= 1 and on 2^-60 <= |x| < 2^-27, and atan2 3.0 more in rn, on the arguments
-// in the comment of `fast_atan2_pos1`. All these counts are made as there, before stage 0 of
-// asin and acos, with the first stages that it replaced. Either way, the first stage of atan
-// and atan2 runs in a stack frame, which its call of `fast_atan1` needs, as its result comes
-// back through memory.
+// The second stages. Built for haswell, LLVM inlines them into the dir and near functions,
+// which then call `fast_atan_pos`, `fast_asin_atan`, `fast_acos_val` and `fast_atan2_pos` out
+// of line, and these hold `fast_atan_core` inline, but for `fast_acos_val`, which calls
+// `fast_asin_atan`. Under `cfg(inari_kernel_dispatch)` they and those four are always inlined.
+// The exception is `fast_atan2_dir2`, which is never inlined: inlined, it makes atan2 take 0.88
+// more instructions per call in rd and ru on y and x of random signs, log-uniform over every
+// exponent, 0.55 more on x > 0 with |y / x| about 2^-1030 to 2^-1010 and at most 0.35 more on
+// the other random sets, but 4.46 fewer on CORE-MATH's hard cases, in a crate that links `cr`,
+// built for haswell, cachegrind chase=no, 4,096 arguments per set (2026-11-21, against
+// 53fa1fe). Never inlined, the others would cost more too: atan 3.5 to 8.8 per call on x
+// uniform in [-10, 10) and [-1, 1) and |x| log-uniform in [2^-30, 2^30), and asin 3.4 to 4.1
+// on x uniform in [-1, 1) and |x| log-uniform in [2^-30, 1) and [2^-26, 2^-8). acos would cost
+// 2.9 to 4.9 more, on x uniform in [-1, 1), on 1 - 2^-8 < |x| <= 1 and on 2^-60 <= |x| < 2^-27,
+// and atan2 3.0 more in rn, on y and x uniform in [-10, 10) and on uniform angles with
+// log-uniform radii in [2^-4, 2^4). These counts of the others were made in the lib's test
+// binary, before rule M5, built for haswell without the tests module of this file, and before
+// stage 0 of asin and acos, with the first stages that it replaced. Either way, built for
+// haswell, the first stage of atan and atan2 runs in a stack frame, which its call of
+// `fast_atan1` needs, as its result comes back through memory.
 #[cfg_attr(inari_kernel_dispatch, inline(always))]
 fn fast_atan_dir2<const FMA: bool>(x: f64, up: bool) -> Option<f64> {
     let (h, l, e, err) = fast_atan_pos::<FMA>(x.abs())?;
