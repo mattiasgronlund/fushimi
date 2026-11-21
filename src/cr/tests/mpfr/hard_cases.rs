@@ -97,17 +97,27 @@ fn parse_hex(s: &str) -> Option<f64> {
         }
         m = m.checked_mul(16)?.checked_add(c.to_digit(16)? as u128)?;
         if after_point {
-            e -= 4;
+            // Saturating: at `i64::MIN`, m 2^e and the exact value are both below 2^(128 + e),
+            // far below 2^-1075, so that both round to 0.
+            e = e.saturating_sub(4);
         }
     }
     if m == 0 {
         return Some(0.0);
     }
     // Rounds away the `drop` low bits of m that an `f64` cannot hold, as it has 53 bits and
-    // none below 2^-1074. Then m <= 2^53 and m 2^e is an `f64` unless it overflows.
-    let drop = (128 - m.leading_zeros() as i64 - 53).max(-1074 - e).max(0);
-    if drop >= 128 {
-        return None;
+    // none below 2^-1074. Then m <= 2^53 and m 2^e is an `f64` unless it overflows. -1074 - e
+    // overflows only at an e above `i64::MAX` - 1073, where m 2^e overflows too.
+    let drop = (128 - m.leading_zeros() as i64 - 53)
+        .max((-1074i64).checked_sub(e)?)
+        .max(0);
+    if drop > 128 {
+        // m < 2^128, so that m 2^e < 2^-1075, below the tie between 0 and 2^-1074.
+        return Some(0.0);
+    } else if drop == 128 {
+        // m 2^e = (m / 2^128) 2^-1074, as drop = -1074 - e: to 2^-1074 above the tie m = 2^127,
+        // and to 0 at it and below.
+        return Some(if m > 1 << 127 { f64::from_bits(1) } else { 0.0 });
     } else if drop > 0 {
         let (q, rem, half) = (m >> drop, m & ((1 << drop) - 1), 1 << (drop - 1));
         m = q + (rem > half || (rem == half && q & 1 == 1)) as u128;
@@ -134,6 +144,30 @@ fn parse_hex(s: &str) -> Option<f64> {
     } else {
         None
     }
+}
+
+// `parse` of tiny hexadecimal floats, as `strtod` reads them, and `parse_hex` at exponents at
+// the ends of `i64`: `parse` panicked ("cannot parse") where the e of `parse_hex` is below
+// -1201, so that the rounding drops 128 bits or more.
+#[test]
+fn parse_tiny_hex() {
+    for (s, bits) in [
+        // Below 2^-1075, to 0, with the sign.
+        ("0x1p-1300", 0),
+        ("-0x1p-1300", (-0.0f64).to_bits()),
+        // At the tie between 0 and 2^-1074, to even, and above it.
+        ("0x1p-1075", 0),
+        ("0x1.8p-1075", 1),
+        // 128 bits dropped, m 2^e = (m / 2^128) 2^-1074: above the tie m = 2^127, and at it.
+        ("0x80000000000000000000000000000001p-1202", 1),
+        ("0x80000000000000000000000000000000p-1202", 0),
+        // An exponent that the digit after the point takes below `i64::MIN`.
+        ("0x0.1p-9223372036854775808", 0),
+    ] {
+        assert_eq!(parse(s).to_bits(), bits, "{s}");
+    }
+    // At e = `i64::MAX`, where -1074 - e overflows, m 2^e overflows too.
+    assert_eq!(parse_hex("1p9223372036854775807"), None);
 }
 
 // The arguments of a line of the sample or of a CORE-MATH file, if it has any. Each argument
