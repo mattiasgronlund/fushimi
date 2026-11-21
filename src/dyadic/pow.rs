@@ -460,10 +460,10 @@ fn fast_pow_wide_near<const FMA: bool>(th: f64, tl: f64) -> Option<f64> {
 // and 2.5 and 5 more instructions. With all four inlined, those sets take at most as many as
 // before the wide functions, and two of them about 16 fewer. Inlined into `pow` and `pow_near`
 // as well, the fast path took 10 to 16 more than left to the compiler on four sets of x^y at
-// other y; behind these calls, the sets of x^y take at most half an instruction more. These two,
-// `pown_pos` and `pown_pos_near`, are the entries of this file (`level_entry!`): each picks its
-// copy with or without an FMA, so that `pow`, `pow_near`, `pown` and `pown_near` do not copy
-// their rules for each value of `FMA`.
+// other y; behind these calls, the sets of x^y take at most half an instruction more. These two
+// calls, `pown_pos` (through `pown_pos_dir`) and `pown_pos_near` are the entries of this file
+// (`level_entry!`): each picks its copy with or without an FMA, so that `pow`, `pow_near`,
+// `pown` and `pown_near` do not copy their rules for each value of `FMA`.
 // A copy of `fast_pow_dir_call` per direction, where `UP` is a constant: as one function, with
 // `up` in a register, it made x^y rounded toward -∞ or +∞ take 3.6 to 6.3 more instructions per
 // call on random x and y and on the hard cases of x^y, other than the x^y that are `f64`s,
@@ -691,19 +691,38 @@ impl Eval for Pown {
     }
 }
 
-level_entry! {
-    // x^n rounded toward +∞ if `up` and toward -∞ otherwise, for a finite x > 0 and n != 0. For
-    // x in [2^g, 2^(g + 1)), x^n is in [2^(g n), 2^((g + 1) n)) for n > 0, and in
-    // (2^((g + 1) n), 2^(g n)] for n < 0. |g n| < 2^42, so that the exponents of the kernel stay
-    // in range.
-    // Inlined into `pown`, and with it into `cr::powi_rd` and `cr::powi_ru` and into `pown_rd`
-    // and `pown_ru` of `src/mpfr_calls/kernel.rs`, where `up` is a constant, also in a build
-    // without the dispatch.
-    #[inline(always)]
-    fn pown_pos(x: f64, n: i32, up: bool) -> f64 = pown_pos_with;
+// x^n rounded toward +∞ if `up` and toward -∞ otherwise, for a finite x > 0 and n != 0. For
+// x in [2^g, 2^(g + 1)), x^n is in [2^(g n), 2^((g + 1) n)) for n > 0, and in
+// (2^((g + 1) n), 2^(g n)] for n < 0. |g n| < 2^42, so that the exponents of the kernel stay
+// in range.
+// Inlined into `pown`, and with it into `cr::powi_rd` and `cr::powi_ru` and into `pown_rd`
+// and `pown_ru` of `src/mpfr_calls/kernel.rs`, where `up` is a constant, also in a build
+// without the dispatch.
+#[inline(always)]
+fn pown_pos(x: f64, n: i32, up: bool) -> f64 {
+    // A copy per direction, where `up` is a constant.
+    if up {
+        pown_pos_dir::<true>(x, n)
+    } else {
+        pown_pos_dir::<false>(x, n)
+    }
 }
 
-// The body of `pown_pos`, with `FMA` for the products (`level_entry!`).
+// `pown_pos` toward +∞ if `UP` and toward -∞ otherwise, so that in a build with the dispatch
+// the copy without an FMA and the one that detects the CPU also take the direction as a
+// constant (`level_entry!`).
+level_entry! {
+    #[inline(always)]
+    fn pown_pos_dir<const UP: bool>(x: f64, n: i32) -> f64 = pown_pos_dir_with;
+}
+
+// The body of `pown_pos_dir` (`level_entry!`).
+#[inline(always)]
+fn pown_pos_dir_with<const FMA: bool, const UP: bool>(x: f64, n: i32) -> f64 {
+    pown_pos_with::<FMA>(x, n, UP)
+}
+
+// The body of `pown_pos`, with `FMA` for the products.
 #[inline(always)]
 fn pown_pos_with<const FMA: bool>(x: f64, n: i32, up: bool) -> f64 {
     let (g, n64) = (expo(x), i64::from(n));
@@ -817,8 +836,8 @@ fn pown_pos_near_ziv(x: f64, n: i32) -> f64 {
 // `pown_pos` always inlined into `pown` and no attribute on `pown`, the compiler kept `pown` out
 // of line, and `cr::powi_rd` and `cr::powi_ru` passed it `up` in a register again. Built for
 // `x86-64`, where they called `pown` out of line, they took 4.0 to 5.0 more on a CPU with FMA,
-// and 2.0 to 2.5 more on one without, where `pown_pos` still takes `up` at run time
-// (`level_entry!`).
+// and 2.0 to 2.5 more on one without, where the copy of `pown_pos` without an FMA then took
+// `up` at run time (`pown_pos_dir` takes it as a constant now).
 #[inline(always)]
 pub(crate) fn pown(x: f64, n: i32, up: bool) -> f64 {
     if n == 0 {

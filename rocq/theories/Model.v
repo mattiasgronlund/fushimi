@@ -5973,9 +5973,9 @@ Definition fast_pow_near_call (fma : bool) (x y : f64) : option f64 :=
     without the fast path, and any other [y] to [ziv]. Their forms rounded
     to nearest do the same before [ziv_near], with [exact_near] after the
     fast path. The fast path takes [FMA] as an argument. The entries of
-    the file, [fast_pow_dir_call], [fast_pow_near_call], [pown_pos] and
-    [pown_pos_near], pick it as in [DyadicExp] (the section [Driver]), and
-    the functions below pass [false]:
+    the file, [fast_pow_dir_call], [fast_pow_near_call], [pown_pos_dir]
+    and [pown_pos_near], pick it as in [DyadicExp] (the section
+    [Driver]), and the functions below pass [false]:
     [FastPow.fast_pow_dir_fma] and [FastPow.fast_pow_near_fma] show that
     [true] gives the same result at every argument that reaches it. *)
 Section Driver.
@@ -6004,9 +6004,12 @@ Definition ev_pown (x : f64) (k : Z) (n : nat) : option Dyadic.encl :=
     Dyadic.encl_div n one_e p
   else Some p.
 
-(** [fn pown_pos(x: f64, n: i32, up: bool) -> f64] for [k = n], where
-    the products and sums of [i64]s, which stay below 2 ^ 42, are
-    computed without a check. *)
+(** [fn pown_pos(x: f64, n: i32, up: bool) -> f64] for [k = n], which
+    calls [fn pown_pos_dir<const UP: bool>(x: f64, n: i32) -> f64] with
+    [up] for [UP], an entry that [level_entry!] defines from the body
+    [pown_pos_dir_with], which is [pown_pos_with(x, n, UP)] (see the
+    section [Driver]), and where the products and sums of [i64]s, which
+    stay below 2 ^ 42, are computed without a check. *)
 Definition pown_pos_with (x : f64) (k : Z) (up : bool) : option f64 :=
   let g := expo x in
   let '(lo, hi) := if 0 <? k then (g * k, (g + 1) * k) else ((g + 1) * k, g * k) in
