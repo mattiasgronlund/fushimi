@@ -13,10 +13,10 @@
     [|y ln x| >= 2^-57] there by the rules), in the order that
     [maybe_exact] picks, as the proofs cover both orders, and with
     [exact] after the fast path only at a subnormal [x]; then
-    [pown_pos_ziv_post] of [DyPown.v] for an integer
-    [y] from [-2^31] to [2^31 - 1], which [pow] passes to
-    [pown_pos_ziv], [pown_pos] without the fast path that [pow] has
-    already tried; and otherwise the driver with the enclosure of
+    [pown_pos_ziv_post] of [DyPown.v] for an integer [y] from [-2^31] to
+    [2^31 - 1], which [pow] passes to [pown_pos_ziv], [pown_pos] without
+    [pown_small_dir] and without the fast path that [pow] has already
+    tried; and otherwise the driver with the enclosure of
     [ev_pow_correct] of [DyPowCore.v]. So,
     for such [x] and [y]: with [ziv_strict], the kernel rounds [Rpow] in
     the direction [up] where it returns

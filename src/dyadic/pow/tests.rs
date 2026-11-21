@@ -1052,10 +1052,12 @@ fn assert_copies_agree(what: &str, copies: [[Option<f64>; 3]; 3]) {
 // `fast_path_agrees_with_kernel`, from another seed) and on `regressions()`, where they pass the
 // rules before the fast path (`calls_fast_pow`) or before `pown_pos` and `pown_pos_near`, which
 // take them at |x| (`calls_pown_pos`). `rocq/theories/FastPow.v` proves it of the fast path
-// (`fast_pow_dir_fma` and `fast_pow_near_fma`), the only part of `pown_pos_with` and
-// `pown_pos_near_with` that takes their `FMA`; this test checks the code as compiled, where the
-// entries call the copy built with the target feature `fma` in a build with the dispatch, on a
-// CPU that has it.
+// (`fast_pow_dir_fma` and `fast_pow_near_fma`), and `rocq/theories/FastPowi.v` of
+// `pown_small_dir` and `pown_small_near` (`pown_small_dir_fma` and `pown_small_near_fma`), the
+// two parts of `pown_pos_with` and `pown_pos_near_with` that take their `FMA`, and
+// `small_copies_agree` checks `pown_small` alone; this test checks the code as compiled, where
+// the entries call the copy built with the target feature `fma` in a build with the dispatch, on
+// a CPU that has it.
 #[test]
 fn copies_agree() {
     let mut rng = Rng(894);
@@ -1094,6 +1096,43 @@ fn copies_agree() {
             if calls_pown_pos(x, n) {
                 let x = x.abs();
                 assert_copies_agree(&format!("pown({x:e}, {n})"), pown_copies(x, n));
+            }
+        }
+    }
+}
+
+// `pown_small` gives the same (h, l, e) with an FMA as without one, bit for bit, or `None` for
+// both (`pown_small_fma` in `rocq/theories/FastPowi.v`), at every n from -9 to 9 and 80000 random
+// x > 0: log-uniform over the normal and the subnormal range, near 1, powers of 2 and the
+// `f64`s next to them. At n = 0, which `pown_pos` never passes, both give the same (h, l, e),
+// which is not x^0, and at |n| = 9 and at a subnormal x, both give `None`.
+#[test]
+fn small_copies_agree() {
+    let mut rng = Rng(895);
+    let bits = |v: Option<(f64, f64, i64)>| v.map(|(h, l, e)| (h.to_bits(), l.to_bits(), e));
+    for i in 0..80_000 {
+        let x = match i % 4 {
+            0 => log_uniform(&mut rng, -1074, 1023),
+            1 => near_one(&mut rng),
+            2 => pow2(rng.below(2098) as i64 - 1074),
+            _ => {
+                let x = pow2(rng.below(2097) as i64 - 1073);
+                if rng.below(2) == 0 {
+                    f64::next_down(x)
+                } else {
+                    f64::next_up(x)
+                }
+            }
+        };
+        let g = expo(x);
+        for n in -9..=9 {
+            let (fma, dekker) = (pown_small::<true>(x, n, g), pown_small::<false>(x, n, g));
+            assert!(
+                bits(fma) == bits(dekker),
+                "pown_small({x:e}, {n}, {g}): {fma:?} with an FMA, {dekker:?} without"
+            );
+            if n.abs() == 9 || x < f64::MIN_POSITIVE {
+                assert!(fma.is_none(), "pown_small({x:e}, {n}, {g}): {fma:?}");
             }
         }
     }
@@ -1508,5 +1547,6 @@ mod levels;
 mod near;
 mod near_floats;
 mod rules;
+mod small;
 mod wide_random;
 mod wide_signs;

@@ -22,9 +22,9 @@
 // leave is computed as x^n for n = y, as binary powering took fewer instructions than the
 // logarithm and the exponential of `Pow` on each set of such y counted (cachegrind);
 // `mpfr_pow` also passes an integer y below 2^256 in magnitude to `mpfr_pow_z`, which computes
-// x^y by multiplications. `pown_pos_ziv` computes x^n there without trying the fast path
-// again. `ziv` computes the rest from an `Eval`, at a first level that grows with the bits
-// that the evaluation loses.
+// x^y by multiplications. `pown_pos_ziv` computes x^n there without `pown_small` (below) and
+// without trying the fast path again. `ziv` computes the rest from an `Eval`, at a first level
+// that grows with the bits that the evaluation loses.
 //
 // The functions rounded to nearest have the same rules, with the bounds at which the results
 // overflow, are less than half an ulp from 1 or are at most 2^-1075, whose tie goes to +0, and
@@ -50,10 +50,10 @@
 // `fast_pow_near`): `pow_near` before `exact_near`, `pow` before `exact` but where `maybe_exact`
 // says that x^y may be an `f64`, and both before the integer y that they pass to x^n, through
 // the out-of-line `fast_pow_dir_call` and `fast_pow_near_call`, and `pown_pos` and
-// `pown_pos_near` after their two rules, at y = n, inlined (the comment on `fast_pow_dir_call`
-// says why). It computes ln x as lh + ll within 17/16 2^-79 |ln x|
-// (`ln_acc` of `src/dyadic/log.rs`) and t = y ln x as th + tl, with th = RN(y lh) and the error
-// of that product, which is exact there (`pow_t`). For th in [-707, 709], the range of
+// `pown_pos_near` after their two rules and `pown_small` (below), at y = n, inlined (the
+// comment on `fast_pow_dir_call` says why). It computes ln x as lh + ll within 17/16 2^-79
+// |ln x| (`ln_acc` of `src/dyadic/log.rs`) and t = y ln x as th + tl, with th = RN(y lh) and the
+// error of that product, which is exact there (`pow_t`). For th in [-707, 709], the range of
 // `fast_exp` of `src/dyadic/exp.rs`, th + tl is within 3/4 2^-69 of t, and `fast_exp` gives
 // e^(th + tl) as h + l with x^y 2^-e within 2^-67 of it, which the tests of
 // `src/dyadic/fast.rs` round at 2^-67 (`round_dir_err` and `round_near_err`). Beyond that
@@ -66,36 +66,59 @@
 // round that once at 2^-67, the subnormal results and those below 2^-1074 included. They
 // return `None` where the exponent of `fast_exp_edge` is 1024, at y ln x in about
 // (709.78263, `T_OVER`), where x^y is 2^1024 or more, or less than 2^-13 below it, relative.
-// Where the fast path returns `None`, `pown_pos` and `pown_pos_near` call `ziv` and `ziv_near`,
-// and `pow` and `pow_near` go on to `exact`, at a subnormal x where `maybe_exact` did not send
-// x^y there first (at a normal x, `exact` would return no `f64` there, as the comment on
-// `maybe_exact` says), and to `exact_near`, then to x^n at an integer y, and then to `ziv` and
-// `ziv_near`. At an x^y or x^n that is an `f64`, the directed test fails, as it passes only
-// where the scaled result lies strictly between two adjacent `f64`s, which is why `pow` tries
-// `exact` first where `maybe_exact` says that x^y may be one. `exact` then settles x^y, and the
-// loop settles x^n at its first level as above. The test to nearest fails at a midpoint, as it
-// passes only where the scaled result is less than half a gap from an `f64`, and `exact_near`
-// settles those x^y. Where the fast path returns, it returns the correct rounding, at these
-// arguments too.
+// Before the fast path, `pown_pos` and `pown_pos_near` try `pown_small`, which returns `None`
+// at a subnormal x and for |n| > `SMALL_MAX`: binary powering of the significand of x in
+// double-double, as h + l with x^n 2^-e within 2^-67 of it, which `round_dir_wide_err` and
+// `round_near_wide_err` round at 2^-67 (`pown_small_dir` and `pown_small_near`). Against the
+// fast path alone, that took 42 to 249 fewer instructions and 6 to 11 more conditional
+// branches per call on sets of x^n at n = 2, 3, 5, 7, 8, -2, -7 and -8 (42 to 114 fewer built
+// for Haswell, 51 to 103 built for `x86-64` and `x86-64-v2` on a CPU with FMA, and 114 to 249
+// on one without), 4 to 6 more instructions and one more branch at n = 17, 2^20 and
+// 2^31 - 1, where `pown_small` returns `None`, and on random n of mixed magnitude, |n| from 1
+// to 40 and log-uniform below 2^31, 1.4 more to 33 fewer instructions, 1.5 to 2.5 more
+// branches and about 0.24 to 0.64 more mispredicted ones (cachegrind, in a crate that links
+// `cr`). `pow` and `pow_near` do not try `pown_small`: tried before their fast path at an
+// integer y with |y| <= `SMALL_MAX`, it made each set of x^y counted, those of integer y
+// included, take 0.7 to 5.0 more branches per call in each rounding, and most of them 6 to 25
+// more instructions, at each of those builds, other than the x^y that are `f64`s rounded
+// toward -∞ and +∞, which `exact` returns before that test. A try after the fast path, as in
+// `pown_pos_ziv`, was not counted.
+// Where `pown_small_dir` or `pown_small_near` and then the fast path return `None`, `pown_pos`
+// and `pown_pos_near` call `ziv` and `ziv_near`. Where the fast path does, `pow` and `pow_near`
+// go on to `exact`, at a subnormal x where `maybe_exact` did not send x^y there first (at a
+// normal x, `exact` would return no `f64` there, as the comment on `maybe_exact` says), and to
+// `exact_near`, then to x^n at an integer y, and then to `ziv` and `ziv_near`. At an x^y or
+// x^n that is an `f64`, the directed tests of the fast path and of `pown_small_dir` fail, as
+// they pass only where the scaled result lies strictly between two adjacent `f64`s, which is
+// why `pow` tries `exact` first where `maybe_exact` says that x^y may be one. `exact` then
+// settles x^y, and the loop settles x^n at its first level as above. The tests to nearest fail
+// at a midpoint, as they pass only where the scaled result is less than half a gap from an
+// `f64`, and `exact_near` settles those x^y. Where `pown_small_dir`, `pown_small_near` or the
+// fast path returns, it returns the correct rounding, at these arguments too.
 //
 // `rocq/theories/Model.v` transcribes each function of this file except the tests, so it has
 // to be updated along with them. `rocq/theories/DyPow.v` and `rocq/theories/DyPown.v` prove
 // that `pow` and `pown`, at finite arguments in their domains (`pow_dom` and `pown_dom` of
 // `rocq/theories/Elementary.v`) and where they do not panic, return values on the side of
-// x^y and x^n that the rounding is on, and, where a rule or `exact` settles the arguments, the
-// fast path returns or a rounding test of `ziv` passes, x^y and x^n rounded as `mpfr_round` in
-// `rocq/theories/Mpfr.v` says, `pow` in both of the orders of `exact` and the fast path that
-// `maybe_exact` picks from. `DyPow.v` builds on `rocq/theories/DyPowRules.v` for the rules,
-// `rocq/theories/DyPowCore.v` for `Pow`, `rocq/theories/DyPowExact.v` and
-// `rocq/theories/DyPowArith.v` for `exact`, `rocq/theories/DyPowMaybe.v` for `maybe_exact` at
-// a normal x, `DyPown.v` for the integer y that `pow` passes to x^n through `pown_pos_ziv`,
-// and `rocq/theories/FastPow.v` for the fast path. `DyPown.v` proves the rules of x^n and
-// binary powering. `FastPow.v` proves that the fast path returns x^y rounded, with and without
-// an FMA, from `rocq/theories/FastPowLn.v` for `ln_acc`,
-// `rocq/theories/FastPowMul.v` for t, `rocq/theories/FastExpCore.v` for `fast_exp`,
+// x^y and x^n that the rounding is on, and, where a rule or `exact` settles the arguments,
+// `pown_small_dir` or the fast path returns or a rounding test of `ziv` passes, x^y and x^n
+// rounded as `mpfr_round` in `rocq/theories/Mpfr.v` says, `pow` in both of the orders of
+// `exact` and the fast path that `maybe_exact` picks from. `DyPow.v` builds on
+// `rocq/theories/DyPowRules.v` for the rules, `rocq/theories/DyPowCore.v` for `Pow`,
+// `rocq/theories/DyPowExact.v` and `rocq/theories/DyPowArith.v` for `exact`,
+// `rocq/theories/DyPowMaybe.v` for `maybe_exact` at a normal x, `DyPown.v` for the integer y that
+// `pow` passes to x^n through `pown_pos_ziv`, and `rocq/theories/FastPow.v` for the fast path.
+// `DyPown.v` proves the rules of x^n and binary powering, and builds on `FastPow.v` for the fast
+// path at y = n and on `rocq/theories/FastPowi.v` for `pown_small_dir`. `FastPow.v` proves that the
+// fast path returns x^y rounded, with and without an FMA, from `rocq/theories/FastPowLn.v` for
+// `ln_acc`, `rocq/theories/FastPowMul.v` for t, `rocq/theories/FastExpCore.v` for `fast_exp`,
 // `rocq/theories/FastPowRules.v` for the rules on th, `rocq/theories/FastExpEdge.v` for
 // `fast_exp_edge` and `rocq/theories/FastRoundWideErr.v` for `round_dir_wide_err` and
-// `round_near_wide_err`.
+// `round_near_wide_err`. `FastPowi.v` proves that `pown_small_dir` and `pown_small_near`
+// return x^n rounded where they return, with and without an FMA, at the x and n that the rules
+// of `pown_pos` leave, from `rocq/theories/FastPowiLoop.v` for the loop of `pown_small`,
+// `rocq/theories/FastRoundErr.v` for `normalize`, `rocq/theories/FastDiv.v` for `dd_div` and
+// `FastRoundWideErr.v` for the roundings.
 // `DyPow.v` and `DyPowNear.v` take the fast path of `pow` and `pow_near` through the models
 // of `fast_pow_dir_call` and `fast_pow_near_call`. These files also show that
 // `exact` finds every argument that reaches it whose exact result is an `f64`, and that both
@@ -103,23 +126,26 @@
 // for x^y and x other than 0 for x^n, `pow` from `exact` or from the fast path where that
 // comes first and returns. `rocq/theories/DyPowNear.v` proves that `pow_near` and
 // `pown_near`, at finite arguments in their domains, where a rule or `exact_near` settles the
-// arguments, the fast path returns or a rounding test of `ziv_near` passes, return x^y and x^n
-// rounded to nearest as `near_round` in `rocq/theories/NearF64.v` says, from the same
-// enclosures and bounds, the cells of `rocq/theories/NearCells.v` and
-// `rocq/theories/DyPowNearExact.v` for `exact_near`. `DyPowNearExact.v` also shows that
-// `exact_near` finds every argument that reaches it whose x^y is an `f64` or a midpoint, and
-// `DyPowNear.v` that `pow_near` returns the rounding to nearest at every finite x > 0 whose x^y
-// is one. That x^n at a midpoint is settled at the first level is not proved: the tests check
-// its value, which the step of `ziv_near` at the cap would also give. That a test passes by the
-// cap of `ziv` or of `ziv_near` at the other arguments is not proved, nor that the evaluations
-// do not panic.
+// arguments, `pown_small_near` or the fast path returns or a rounding test of `ziv_near`
+// passes, return x^y and x^n rounded to nearest as `near_round` in `rocq/theories/NearF64.v`
+// says, from the same enclosures and bounds, `FastPowi.v` for `pown_small_near`, the cells of
+// `rocq/theories/NearCells.v` and `rocq/theories/DyPowNearExact.v` for `exact_near`.
+// `DyPowNearExact.v` also shows that `exact_near` finds every argument that reaches it whose x^y is
+// an `f64` or a midpoint, and `DyPowNear.v` that `pow_near` returns the rounding to nearest at
+// every finite x > 0 whose x^y is one. That x^n at a midpoint is settled at the first level is not
+// proved: the tests check its value, which the step of `ziv_near` at the cap would also give. That
+// a test passes by the cap of `ziv` or of `ziv_near` at the other arguments is not proved, nor that
+// the evaluations do not panic.
 
 use super::{
     consts::ln2,
     exp::{
         fast_exp, fast_exp_edge, mul_f64, mul_int, near_one, overflow, scaled, underflow, ERR67,
     },
-    fast::{round_dir_err, round_dir_wide_err, round_near_err, round_near_wide_err},
+    fast::{
+        dd_div, fast_two_sum, normalize, round_dir_err, round_dir_wide_err, round_near_err,
+        round_near_wide_err,
+    },
     level::level_entry,
     log::{ln_acc, reduce},
     round, ziv, ziv_near, Dyadic, Encl, Eval,
@@ -691,6 +717,77 @@ impl Eval for Pown {
     }
 }
 
+// The largest |n| for which `pown_pos` and `pown_pos_near` try `pown_small` before the fast
+// path. `rocq/theories/FastPowi.v` uses that it is 8, as `rocq/theories/FastPowiLoop.v` bounds
+// the loop of `pown_small` for |n| from 1 to 8 only.
+const SMALL_MAX: i64 = 8;
+
+// x^n as (h, l, e), with 1 <= h < 2, h = RN(h + l) and x^n 2^-e within 2^-67 of h + l, for a
+// finite normal x > 0 in [2^g, 2^(g + 1)) and 1 <= |n| <= `SMALL_MAX` that the underflow rule
+// of `pown_pos` leaves, where the bound 2^((g + 1) n) of x^n for n > 0, and 2^(g n) for n < 0,
+// is above 2^-1075, and `None` for a subnormal x or a larger |n|. x = m 2^(g + 1) with m in
+// [1/2, 1), whose bits are those of x under the exponent of 1/2. m^|n| is binary powering of m
+// in double-double from the top bit of |n|, as h + l: a square takes h^2 as s = RN(h h) plus
+// its error, which is exact, and 2 h l, and drops l^2, and a product by m takes h m as
+// p = RN(h m) plus its error and l m. Every h stays in [2^-8, 1], so that the products h h and
+// h m do not underflow, and the errors of the at most three squares and two products of
+// |n| <= 8 sum to far less than 2^-67 (`rocq/theories/FastPowiLoop.v`). `fast_two_sum` then
+// makes h = RN(h + l), which `normalize` scales to [1, 2). For n < 0, x^n is a power of 2 times
+// the quotient of 1 by that scaled h + l (`dd_div`), in [1/2, 1], which `normalize` scales
+// again, as the rounding tests take 1/2 < h < 2 and a quotient can be 1/2 itself
+// (`rocq/theories/FastPowi.v`). The products and the quotient are the same with and without an
+// FMA, where their errors are exact.
+#[inline(always)]
+fn pown_small<const FMA: bool>(x: f64, n: i32, g: i64) -> Option<(f64, f64, i64)> {
+    let a = i64::from(n).abs();
+    if a > SMALL_MAX || g < -1022 {
+        return None;
+    }
+    let m = f64::from_bits((x.to_bits() & ((1 << 52) - 1)) | 0x3fe0_0000_0000_0000);
+    let (mut h, mut l) = (m, 0.0);
+    let mut i = ilog2(a);
+    while i > 0 {
+        i -= 1;
+        let s = h * h;
+        l = two_prod_err::<FMA>(h, h, s) + (h + h) * l;
+        h = s;
+        if (a >> i) & 1 == 1 {
+            let p = h * m;
+            l = two_prod_err::<FMA>(h, m, p) + l * m;
+            h = p;
+        }
+    }
+    let (h, l) = fast_two_sum(h, l);
+    let (h, l, k) = normalize(h, l);
+    let e = (g + 1) * a + k;
+    if n > 0 {
+        Some((h, l, e))
+    } else {
+        let (qh, ql) = dd_div::<FMA>(1.0, 0.0, h, l);
+        let (qh, ql, k) = normalize(qh, ql);
+        Some((qh, ql, k - e))
+    }
+}
+
+// x^n rounded toward +∞ if `up` and toward -∞ otherwise from `pown_small`, subnormal results
+// included, or `None` where `pown_small` or the test of `round_dir_wide_err` fails.
+// `rocq/theories/FastPowi.v` proves that it returns that rounding (`pown_small_dir_correct`) at
+// the x and n that the rules of `pown_pos` leave, and the same with and without an FMA
+// (`pown_small_dir_fma`).
+#[inline(always)]
+fn pown_small_dir<const FMA: bool>(x: f64, n: i32, g: i64, up: bool) -> Option<f64> {
+    let (h, l, e) = pown_small::<FMA>(x, n, g)?;
+    round_dir_wide_err(h, l, e, ERR67, up)
+}
+
+// x^n rounded to nearest, ties to even, as `pown_small_dir`. `rocq/theories/FastPowi.v` proves
+// the same of it (`pown_small_near_correct` and `pown_small_near_fma`).
+#[inline(always)]
+fn pown_small_near<const FMA: bool>(x: f64, n: i32, g: i64) -> Option<f64> {
+    let (h, l, e) = pown_small::<FMA>(x, n, g)?;
+    round_near_wide_err(h, l, e, ERR67)
+}
+
 // x^n rounded toward +∞ if `up` and toward -∞ otherwise, for a finite x > 0 and n != 0. For
 // x in [2^g, 2^(g + 1)), x^n is in [2^(g n), 2^((g + 1) n)) for n > 0, and in
 // (2^((g + 1) n), 2^(g n)] for n < 0. |g n| < 2^42, so that the exponents of the kernel stay
@@ -735,6 +832,8 @@ fn pown_pos_with<const FMA: bool>(x: f64, n: i32, up: bool) -> f64 {
         overflow(up)
     } else if hi <= -1075 {
         underflow(up)
+    } else if let Some(v) = pown_small_dir::<FMA>(x, n, g, up) {
+        v
     } else if let Some(v) = fast_pow_dir::<FMA>(x, f64::from(n), up) {
         v
     } else {
@@ -768,6 +867,8 @@ fn pown_pos_near_with<const FMA: bool>(x: f64, n: i32) -> f64 {
     } else if hi <= -1075 {
         // x^n <= 2^-1075, whose tie goes to +0.
         0.0
+    } else if let Some(v) = pown_small_near::<FMA>(x, n, g) {
+        v
     } else if let Some(v) = fast_pow_near::<FMA>(x, f64::from(n)) {
         v
     } else {
@@ -780,8 +881,9 @@ fn pown_pos_near_with<const FMA: bool>(x: f64, n: i32) -> f64 {
     }
 }
 
-// x^n as `pown_pos` takes it, without its fast path, for `pow` at an integer y = n whose fast
-// try failed: the fast path at `f64::from(n)` = y would repeat that computation.
+// x^n as `pown_pos` takes it, without `pown_small` and its fast path, for `pow` at an integer
+// y = n whose fast try failed: the fast path at `f64::from(n)` = y would repeat that
+// computation.
 fn pown_pos_ziv(x: f64, n: i32, up: bool) -> f64 {
     let (g, n64) = (expo(x), i64::from(n));
     let (lo, hi) = if n > 0 {
@@ -803,8 +905,8 @@ fn pown_pos_ziv(x: f64, n: i32, up: bool) -> f64 {
     }
 }
 
-// x^n as `pown_pos_near` takes it, without its fast path, for `pow_near` at an integer y = n
-// whose fast try failed, as `pown_pos_ziv`.
+// x^n as `pown_pos_near` takes it, without `pown_small` and its fast path, for `pow_near` at an
+// integer y = n whose fast try failed, as `pown_pos_ziv`.
 fn pown_pos_near_ziv(x: f64, n: i32) -> f64 {
     let (g, n64) = (expo(x), i64::from(n));
     let (lo, hi) = if n > 0 {
@@ -830,14 +932,15 @@ fn pown_pos_near_ziv(x: f64, n: i32) -> f64 {
 /// x^n rounded toward +∞ if `up` and toward -∞ otherwise.
 // Inlined into `cr::powi_rd` and `cr::powi_ru`, and into `pown_rd` and `pown_ru` of
 // `src/mpfr_calls/kernel.rs`, where `up` is a constant, with both calls of `pown_pos`. Built
-// for Haswell, that makes each of `cr::powi_rd` and `cr::powi_ru` about 2.3 KB, and when they
-// called one `pown_pos` out of line, with `up` in a register, they took 4.0 to 6.5 more
-// instructions per call on random x and n, in a crate that links `cr` (cachegrind). With
-// `pown_pos` always inlined into `pown` and no attribute on `pown`, the compiler kept `pown` out
-// of line, and `cr::powi_rd` and `cr::powi_ru` passed it `up` in a register again. Built for
-// `x86-64`, where they called `pown` out of line, they took 4.0 to 5.0 more on a CPU with FMA,
-// and 2.0 to 2.5 more on one without, where the copy of `pown_pos` without an FMA then took
-// `up` at run time (`pown_pos_dir` takes it as a constant now).
+// for Haswell, that makes each of `cr::powi_rd` and `cr::powi_ru` about 3.1 KB. Before
+// `pown_small`, when that made them about 2.3 KB, they took 4.0 to 6.5 more instructions per
+// call on random x and n where they called one `pown_pos` out of line, with `up` in a
+// register, in a crate that links `cr` (cachegrind). With `pown_pos` always inlined into
+// `pown` and no attribute on `pown`, the compiler kept `pown` out of line, and `cr::powi_rd`
+// and `cr::powi_ru` passed it `up` in a register again. Built for `x86-64`, where they called
+// `pown` out of line, they took 4.0 to 5.0 more on a CPU with FMA, and 2.0 to 2.5 more on one
+// without, where the copy of `pown_pos` without an FMA then took `up` at run time
+// (`pown_pos_dir` takes it as a constant now).
 #[inline(always)]
 pub(crate) fn pown(x: f64, n: i32, up: bool) -> f64 {
     if n == 0 {

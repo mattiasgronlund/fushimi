@@ -260,6 +260,8 @@ theories/FastPowLn.v
 theories/FastPowMul.v
 theories/FastPowRules.v
 theories/FastPow.v
+theories/FastPowiLoop.v
+theories/FastPowi.v
 theories/FastDdSqrt.v
 theories/FastLogDd.v
 theories/AsinhTaylor.v

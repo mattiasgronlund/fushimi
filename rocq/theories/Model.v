@@ -5961,23 +5961,86 @@ Definition fast_pow_dir_call (fma : bool) (x y : f64) (up : bool) : option f64 :
 Definition fast_pow_near_call (fma : bool) (x y : f64) : option f64 :=
   fast_pow_near fma x y.
 
+(** [const SMALL_MAX: i64 = 8]. [FastPowi.v] uses that it is 8, as
+    [FastPowiLoop.v] bounds the loop of [pown_small] for [|n|] from 1 to
+    8 only. *)
+Definition small_max : Z := 8.
+
+(** The loop of [fn pown_small<const FMA: bool>(x: f64, n: i32, g: i64) ->
+    Option<(f64, f64, i64)>] on [a = |n|] and [m], run [j] times from
+    [i = j], where [j] counts down with [i], so that the [i] after [i -=
+    1] is [Z.of_nat j'], and [(a >> i) & 1] is [Z.land (Z.shiftr a i) 1].
+    [FastPowiLoop.v] bounds it. *)
+Fixpoint small_loop (fma : bool) (a : Z) (m : f64) (j : nat) (h l : f64) : f64 * f64 :=
+  match j with
+  | O => (h, l)
+  | S j' =>
+      let s := mul h h in
+      let l := add (Generic.two_prod_err fma h h s) (mul (add h h) l) in
+      if Z.land (Z.shiftr a (Z.of_nat j')) 1 =? 1 then
+        let p := mul s m in
+        small_loop fma a m j' p (add (Generic.two_prod_err fma s m p) (mul l m))
+      else small_loop fma a m j' s l
+  end.
+
+(** [fn pown_small<const FMA: bool>(x: f64, n: i32, g: i64) -> Option<(f64,
+    f64, i64)>] for [k = n], where [fma] is [FMA], [i64::from(n).abs()]
+    is [Z.abs k], [(1 << 52) - 1] is [DyadicLog.frac], the [while] loop
+    is [small_loop] run [Z.to_nat (ilog2 a)] times, [1.0] and [0.0] are
+    [Fast.one] and [zero], and the products, sums and differences of
+    [i64]s, which stay below 2 ^ 14, are computed without a check.
+    [FastPowi.v] proves it. *)
+Definition pown_small (fma : bool) (x : f64) (k g : Z) : option (f64 * f64 * Z) :=
+  let a := Z.abs k in
+  if (small_max <? a) || (g <? -1022) then None
+  else
+    let m := from_bits (Z.lor (Z.land (to_bits x) DyadicLog.frac) 0x3fe0000000000000) in
+    let '(h, l) := small_loop fma a m (Z.to_nat (ilog2 a)) m zero in
+    let '(h, l) := Fast.fast_two_sum h l in
+    let '(h, l, j) := Fast.normalize h l in
+    let e := (g + 1) * a + j in
+    if 0 <? k then Some (h, l, e)
+    else
+      let '(qh, ql) := Fast.dd_div fma Fast.one zero h l in
+      let '(qh, ql, j) := Fast.normalize qh ql in
+      Some (qh, ql, j - e).
+
+(** [fn pown_small_dir<const FMA: bool>(x: f64, n: i32, g: i64, up:
+    bool) -> Option<f64>] and [fn pown_small_near<const FMA: bool>(x:
+    f64, n: i32, g: i64) -> Option<f64>] for [k = n], where [?] is a
+    [match]. [FastPowi.v] proves them. *)
+Definition pown_small_dir (fma : bool) (x : f64) (k g : Z) (up : bool) : option f64 :=
+  match pown_small fma x k g with
+  | Some (h, l, e) => Fast.round_dir_wide_err h l e DyadicExp.err67 up
+  | None => None
+  end.
+
+Definition pown_small_near (fma : bool) (x : f64) (k g : Z) : option f64 :=
+  match pown_small fma x k g with
+  | Some (h, l, e) => Fast.round_near_wide_err h l e DyadicExp.err67
+  | None => None
+  end.
+
 (** The functions of the file with [ziv] a parameter: [pow_dir_with ziv] is
     [pow] with [ziv] for [Dyadic.ziv], and [pow_dir] after the section is
     [pow_dir_with Dyadic.ziv]. The proofs also apply them to a [ziv] that
     returns only where a rounding test passes ([DyDriver.ziv_strict]).
 
-    [pown_pos] tries the fast path after its two rules and before [ziv],
-    with [y = f64::from(n)]. [pow] tries [exact] before the fast path where
-    [maybe_exact] says so, and otherwise after it at a subnormal [x] only,
-    and then passes an integer [y] to [pown_pos_ziv], which is [pown_pos]
-    without the fast path, and any other [y] to [ziv]. Their forms rounded
-    to nearest do the same before [ziv_near], with [exact_near] after the
-    fast path. The fast path takes [FMA] as an argument. The entries of
-    the file, [fast_pow_dir_call], [fast_pow_near_call], [pown_pos_dir]
-    and [pown_pos_near], pick it as in [DyadicExp] (the section
-    [Driver]), and the functions below pass [false]:
-    [FastPow.fast_pow_dir_fma] and [FastPow.fast_pow_near_fma] show that
-    [true] gives the same result at every argument that reaches it. *)
+    [pown_pos] tries [pown_small_dir] after its two rules, then the fast
+    path, with [y = f64::from(n)], and then [ziv]. [pow] tries [exact]
+    before the fast path where [maybe_exact] says so, and otherwise after
+    it at a subnormal [x] only, and then passes an integer [y] to
+    [pown_pos_ziv], which is [pown_pos] without [pown_small_dir] and the
+    fast path, and any other [y] to [ziv]. Their forms rounded to nearest
+    do the same before [ziv_near], with [pown_small_near] for
+    [pown_small_dir] and [exact_near] after the fast path. The fast path
+    and [pown_small] take [FMA] as an argument. The entries of the file,
+    [fast_pow_dir_call], [fast_pow_near_call], [pown_pos_dir] and
+    [pown_pos_near], pick it as in [DyadicExp] (the section [Driver]),
+    and the functions below pass [false]: [FastPow.fast_pow_dir_fma],
+    [FastPow.fast_pow_near_fma], [FastPowi.pown_small_dir_fma] and
+    [FastPowi.pown_small_near_fma] show that [true] gives the same result
+    at every argument that reaches it. *)
 Section Driver.
 Variable ziv : (nat -> option Dyadic.encl) -> bool -> nat -> option f64.
 
@@ -6016,13 +6079,17 @@ Definition pown_pos_with (x : f64) (k : Z) (up : bool) : option f64 :=
   if 1024 <=? lo then Some (DyadicExp.overflow up)
   else if hi <=? -1075 then Some (DyadicExp.underflow up)
   else
-    match fast_pow_dir false x (of_i64 k) up with
+    match pown_small_dir false x k g up with
     | Some r => Some r
-    | None => ziv (ev_pown x k) up (if 2 ^ pown_start_bits <=? Z.abs k then 2%nat else 1%nat)
+    | None =>
+        match fast_pow_dir false x (of_i64 k) up with
+        | Some r => Some r
+        | None => ziv (ev_pown x k) up (if 2 ^ pown_start_bits <=? Z.abs k then 2%nat else 1%nat)
+        end
     end.
 
 (** [fn pown_pos_ziv(x: f64, n: i32, up: bool) -> f64] for [k = n], as
-    [pown_pos_with] without the fast path. *)
+    [pown_pos_with] without [pown_small_dir] and the fast path. *)
 Definition pown_pos_ziv_with (x : f64) (k : Z) (up : bool) : option f64 :=
   let g := expo x in
   let '(lo, hi) := if 0 <? k then (g * k, (g + 1) * k) else ((g + 1) * k, g * k) in
@@ -6118,13 +6185,17 @@ Definition pown_pos_near_with (x : f64) (k : Z) : option f64 :=
   if 1024 <=? lo then Some infinity
   else if hi <=? -1075 then Some zero
   else
-    match fast_pow_near false x (of_i64 k) with
+    match pown_small_near false x k g with
     | Some r => Some r
-    | None => ziv_near (ev_pown x k) (if 2 ^ pown_start_bits <=? Z.abs k then 2%nat else 1%nat)
+    | None =>
+        match fast_pow_near false x (of_i64 k) with
+        | Some r => Some r
+        | None => ziv_near (ev_pown x k) (if 2 ^ pown_start_bits <=? Z.abs k then 2%nat else 1%nat)
+        end
     end.
 
 (** [fn pown_pos_near_ziv(x: f64, n: i32) -> f64] for [k = n], as
-    [pown_pos_near_with] without the fast path. *)
+    [pown_pos_near_with] without [pown_small_near] and the fast path. *)
 Definition pown_pos_near_ziv_with (x : f64) (k : Z) : option f64 :=
   let g := expo x in
   let '(lo, hi) := if 0 <? k then (g * k, (g + 1) * k) else ((g + 1) * k, g * k) in

@@ -8,7 +8,12 @@
     [NearCells.v] and the bounds of [DyPowRules.v], the fast path, which
     [pow_near] tries right after its rules, by [fast_pow_near_correct] of
     [FastPow.v], and [exact_near], which comes after the fast path, by
-    [exact_near_sound] of [DyPowNearExact.v]. As the fast path, where it
+    [exact_near_sound] of [DyPowNearExact.v]. [pown_pos_near_with], which
+    [pown_near_with] calls, tries [pown_small_near] after its rules and
+    before the fast path. [pown_small_near] returns [None] at a subnormal
+    [x], for [|n|] above 8 and where its [round_near_wide_err] does. Where
+    it returns after the rules, it returns the rounding to nearest by
+    [pown_small_near_correct] of [FastPowi.v]. As the fast path, where it
     returns, returns the rounding to nearest, [exact_near] returns at
     every finite [x > 0] other than 1 and finite [y <> 0] at which x^y
     is q 2^e for an integer [0 < q < 2^54] and [e >= -1075], below
@@ -29,7 +34,7 @@ From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
 From Inari Require Import Model Mpfr MpfrRound Limbs Elementary DyRound DyConv DyOps DyDriver
   DyGrow DyConst DyExpCore DyExpRules DyExp DyLogRules DyLogCore DyPowArith DyPowRules
   DyPowExact DyPowCore NearF64 NearCells DyDriverNear DyPowNearExact.
-From Inari Require DyPown DyPow FastPow.
+From Inari Require DyPown DyPow FastPow FastPowi.
 
 Open Scope Z_scope.
 
@@ -126,13 +131,21 @@ assert (Hl : forall start, ziv_near_strict (DyadicPow.ev_pown x k) start = Some 
              near_round (powerRZ (B2R x) k) v).
 { intros start H. refine (ziv_near_strict_correct _ _ _ _ _ H).
   intros n a Hn Ea. exact (DyPown.ev_pown_correct x k n a Hn Fx Hx Hk Hi Ea). }
-(* The fast path, then the driver. *)
+(* The small powers, the fast path, then the driver. *)
 assert (Hm : forall start,
-  match DyadicPow.fast_pow_near false x (DyadicPow.of_i64 k) with
+  (-1075 < if 0 <? k then (DyadicPow.expo x + 1) * k else DyadicPow.expo x * k) ->
+  match DyadicPow.pown_small_near false x k (DyadicPow.expo x) with
   | Some r => Some r
-  | None => ziv_near_strict (DyadicPow.ev_pown x k) start
+  | None =>
+      match DyadicPow.fast_pow_near false x (DyadicPow.of_i64 k) with
+      | Some r => Some r
+      | None => ziv_near_strict (DyadicPow.ev_pown x k) start
+      end
   end = Some v -> near_round (powerRZ (B2R x) k) v).
-{ intros start. destruct (DyadicPow.fast_pow_near false x (DyadicPow.of_i64 k)) eqn:F.
+{ intros start Hu. destruct (DyadicPow.pown_small_near false x k (DyadicPow.expo x)) eqn:S.
+  { intros H. injection H as <-.
+    exact (FastPowi.pown_small_near_correct false x k _ Fx Hx Hk Hu S). }
+  destruct (DyadicPow.fast_pow_near false x (DyadicPow.of_i64 k)) eqn:F.
   - intros H. injection H as <-.
     destruct (DyPown.pown_fast_hyp x k Fx Hx Hk Hi) as (Fk & Vk & H).
     rewrite (powerRZ_Rpower _ _ Hx), <- Vk.
@@ -146,14 +159,14 @@ destruct (0 <? k) eqn:K; cbv beta iota in E.
   + destruct ((DyadicPow.expo x + 1) * k <=? -1075) eqn:U.
     * injection E as <-. apply pown_zero_near; [exact Fx | exact Hx |].
       rewrite K. apply Z.leb_le. exact U.
-    * exact (Hm _ E).
+    * refine (Hm _ _ E). rewrite ?K. cbv beta iota. apply Z.leb_gt. exact U.
 - destruct (1024 <=? (DyadicPow.expo x + 1) * k) eqn:O.
   + injection E as <-. apply pown_inf_near; [exact Fx | exact Hx |].
     rewrite K. apply Z.leb_le. exact O.
   + destruct (DyadicPow.expo x * k <=? -1075) eqn:U.
     * injection E as <-. apply pown_zero_near; [exact Fx | exact Hx |].
       rewrite K. apply Z.leb_le. exact U.
-    * exact (Hm _ E).
+    * refine (Hm _ _ E). rewrite ?K. cbv beta iota. apply Z.leb_gt. exact U.
 Qed.
 
 (** Where [pown_pos_near_with ziv_near_strict] returns, [pown_pos_near]
@@ -167,16 +180,19 @@ intros x k v. unfold DyadicPow.pown_pos_near_with. cbv zeta.
 destruct (0 <? k); cbv beta iota.
 - destruct (1024 <=? DyadicPow.expo x * k); [exact (fun h => h) |].
   destruct ((DyadicPow.expo x + 1) * k <=? -1075); [exact (fun h => h) |].
+  destruct (DyadicPow.pown_small_near false x k (DyadicPow.expo x)); [exact (fun h => h) |].
   destruct (DyadicPow.fast_pow_near false x (DyadicPow.of_i64 k));
     [exact (fun h => h) | apply ziv_near_strict_ziv].
 - destruct (1024 <=? (DyadicPow.expo x + 1) * k); [exact (fun h => h) |].
   destruct (DyadicPow.expo x * k <=? -1075); [exact (fun h => h) |].
+  destruct (DyadicPow.pown_small_near false x k (DyadicPow.expo x)); [exact (fun h => h) |].
   destruct (DyadicPow.fast_pow_near false x (DyadicPow.of_i64 k));
     [exact (fun h => h) | apply ziv_near_strict_ziv].
 Qed.
 
 (** [pown_pos_near_ziv], which [pow_near] calls at an integer [y] after
-    its fast try, is [pown_pos_near] without the fast path. *)
+    its fast try, is [pown_pos_near] without [pown_small_near] and the fast
+    path. *)
 Local Lemma pown_pos_near_ziv :
   forall x k v,
   is_finite x = true -> (0 < B2R x)%R -> k <> 0 -> is_i32 k ->
