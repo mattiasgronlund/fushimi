@@ -27,8 +27,8 @@
 // gets ±2^1100 or ±2^-1200 instead. The estimate is off by far less than the 76 and 125 to
 // spare.
 //
-// The number of random cases per generator can be set with `INARI_PARSE_N`, and the cases
-// changed with the seed `INARI_PARSE_SEED`. Run with `--nocapture` to see the numbers of
+// The number of random cases per generator can be set with `FUSHIMI_PARSE_N`, and the cases
+// changed with the seed `FUSHIMI_PARSE_SEED`. Run with `--nocapture` to see the numbers of
 // cases.
 
 use super::{number, parse_number, rational_to_f64, InfSup, Nat, Number, Rat};
@@ -358,9 +358,9 @@ impl Rng {
     }
 }
 
-// The number of random cases per generator, which can be set with `INARI_PARSE_N`.
+// The number of random cases per generator, which can be set with `FUSHIMI_PARSE_N`.
 fn n_cases() -> u64 {
-    std::env::var("INARI_PARSE_N")
+    std::env::var("FUSHIMI_PARSE_N")
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(if cfg!(debug_assertions) {
@@ -370,9 +370,9 @@ fn n_cases() -> u64 {
         })
 }
 
-// The random numbers of the generator numbered `gen`, which `INARI_PARSE_SEED` changes.
+// The random numbers of the generator numbered `gen`, which `FUSHIMI_PARSE_SEED` changes.
 fn rng(gen: u64) -> Rng {
-    let seed = std::env::var("INARI_PARSE_SEED")
+    let seed = std::env::var("FUSHIMI_PARSE_SEED")
         .ok()
         .and_then(|s| s.parse::<u64>().ok())
         .unwrap_or(0);

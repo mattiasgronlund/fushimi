@@ -82,7 +82,7 @@ pub(crate) fn add_rn(x: F64X2, y: F64X2) -> F64X2 {
 // Rust's ABI, which passed its vectors by pointer in Cargo's default release profile (see
 // `Baseline` in `src/simd/token.rs`).
 #[cfg_attr(
-    all(inari_generic_backend, not(target_arch = "aarch64")),
+    all(fushimi_generic_backend, not(target_arch = "aarch64")),
     inline(never)
 )]
 pub(crate) fn add_ru(x: F64X2, y: F64X2) -> F64X2 {
@@ -176,9 +176,9 @@ pub(crate) fn constant(x: f64, y: f64) -> F64X2 {
 // `src/__bench.rs` then ran 14 more instructions per call (counted under QEMU). There it takes
 // Rust's ABI, which passed its vectors by pointer in Cargo's default release profile (see
 // `Baseline` in `src/simd/token.rs`).
-#[cfg(not(all(inari_generic_backend, target_arch = "x86_64")))]
+#[cfg(not(all(fushimi_generic_backend, target_arch = "x86_64")))]
 #[cfg_attr(
-    all(inari_generic_backend, not(target_arch = "aarch64")),
+    all(fushimi_generic_backend, not(target_arch = "aarch64")),
     inline(never)
 )]
 pub(crate) fn div_ru(x: F64X2, y: F64X2) -> F64X2 {
@@ -193,7 +193,7 @@ pub(crate) fn div_ru(x: F64X2, y: F64X2) -> F64X2 {
 // As the build's backend on x86-64, it is out of line, and takes the ABI `sysv64`, which passes
 // its vectors in registers, where Rust's ABI passed them by pointer in Cargo's default release
 // profile (see `Baseline` in `src/simd/token.rs`).
-#[cfg(all(inari_generic_backend, target_arch = "x86_64"))]
+#[cfg(all(fushimi_generic_backend, target_arch = "x86_64"))]
 #[allow(improper_ctypes_definitions)] // `[f64; 2]`, but only Rust code calls it.
 #[inline(never)]
 pub(crate) extern "sysv64-unwind" fn div_ru(x: F64X2, y: F64X2) -> F64X2 {
@@ -208,7 +208,7 @@ pub(crate) extern "sysv64-unwind" fn div_ru(x: F64X2, y: F64X2) -> F64X2 {
 // The copy of `div_ru` with Rust's ABI, which `Baseline::div_ru` calls: that method is
 // `#[inline(always)]`, so a user's crate calls this copy, which the crate exports, whereas
 // `CrateBaseline` calls the `sysv64` `div_ru` (see `CrateBaseline` in `src/simd/token.rs`).
-#[cfg(all(inari_generic_backend, target_arch = "x86_64"))]
+#[cfg(all(fushimi_generic_backend, target_arch = "x86_64"))]
 #[allow(clippy::redundant_closure)] // The closure gives this copy its own `lanewise2` (see below).
 #[inline(never)]
 pub(crate) fn div_ru_rust_abi(x: F64X2, y: F64X2) -> F64X2 {
@@ -380,7 +380,7 @@ pub(crate) fn mul_add_ru(x: F64X2, y: F64X2, z: F64X2) -> F64X2 {
 // count has compared it with one as a user's crate calls it: a `sysv64` `mul_add_ru` that was
 // `#[inline(never)]` was counted only as the callee of `Interval::mul_add` (see `mul_add_ru` of
 // `CrateBaseline` there).
-#[cfg(all(inari_generic_backend, target_arch = "x86_64"))]
+#[cfg(all(fushimi_generic_backend, target_arch = "x86_64"))]
 #[allow(improper_ctypes_definitions)] // `[f64; 2]`, but only Rust code calls it.
 pub(crate) extern "sysv64-unwind" fn mul_add_ru_sysv64(x: F64X2, y: F64X2, z: F64X2) -> F64X2 {
     // Proved correct in `rocq/theories/MulAddRu.v`. `rocq/theories/Model.v` transcribes
@@ -395,9 +395,9 @@ pub(crate) extern "sysv64-unwind" fn mul_add_ru_sysv64(x: F64X2, y: F64X2, z: F6
 // `src/__bench.rs` then ran 22 more instructions per call (counted under QEMU). There it takes
 // Rust's ABI, which passed its vectors by pointer in Cargo's default release profile (see
 // `Baseline` in `src/simd/token.rs`).
-#[cfg(not(all(inari_generic_backend, target_arch = "x86_64")))]
+#[cfg(not(all(fushimi_generic_backend, target_arch = "x86_64")))]
 #[cfg_attr(
-    all(inari_generic_backend, not(target_arch = "aarch64")),
+    all(fushimi_generic_backend, not(target_arch = "aarch64")),
     inline(never)
 )]
 pub(crate) fn mul_ru(x: F64X2, y: F64X2) -> F64X2 {
@@ -411,7 +411,7 @@ pub(crate) fn mul_ru(x: F64X2, y: F64X2) -> F64X2 {
 // As the build's backend on x86-64, it is out of line, and takes the ABI `sysv64`, which passes
 // its vectors in registers, where Rust's ABI passed them by pointer in Cargo's default release
 // profile (see `Baseline` in `src/simd/token.rs`).
-#[cfg(all(inari_generic_backend, target_arch = "x86_64"))]
+#[cfg(all(fushimi_generic_backend, target_arch = "x86_64"))]
 #[allow(improper_ctypes_definitions)] // `[f64; 2]`, but only Rust code calls it.
 #[inline(never)]
 pub(crate) extern "sysv64-unwind" fn mul_ru(x: F64X2, y: F64X2) -> F64X2 {
@@ -425,7 +425,7 @@ pub(crate) extern "sysv64-unwind" fn mul_ru(x: F64X2, y: F64X2) -> F64X2 {
 // The copy of `mul_ru` with Rust's ABI, which `Baseline::mul_ru` calls: that method is
 // `#[inline(always)]`, so a user's crate calls this copy, which the crate exports, whereas
 // `CrateBaseline` calls the `sysv64` `mul_ru` (see `CrateBaseline` in `src/simd/token.rs`).
-#[cfg(all(inari_generic_backend, target_arch = "x86_64"))]
+#[cfg(all(fushimi_generic_backend, target_arch = "x86_64"))]
 #[allow(clippy::redundant_closure)] // The closure gives this copy its own `lanewise2` (see below).
 #[inline(never)]
 pub(crate) fn mul_ru_rust_abi(x: F64X2, y: F64X2) -> F64X2 {
@@ -533,7 +533,7 @@ pub(crate) fn splat(x: f64) -> F64X2 {
 /// `sqrt_rd_ru([x0, x1]) = [√x0, √x1]`, the first rounded toward -∞ and the
 /// second toward +∞.
 // Inlined into its one caller as the build's backend (see `Baseline` in `src/simd/token.rs`).
-#[cfg_attr(inari_generic_backend, inline(always))]
+#[cfg_attr(fushimi_generic_backend, inline(always))]
 pub(crate) fn sqrt_rd_ru(x: F64X2) -> F64X2 {
     [sqrt1_rd(x[0]), sqrt1_ru(x[1])]
 }
@@ -866,10 +866,10 @@ fn split(x: f64) -> (f64, f64) {
 /// the proofs of those fast paths in `rocq/theories/FastExpCore.v` and `rocq/theories/FastExp.v`,
 /// among others, so it has to be updated along with it.
 ///
-/// Under `cfg(inari_kernel_dispatch)` (`build.rs`), `FMA` is true in the copies of the kernel's
+/// Under `cfg(fushimi_kernel_dispatch)` (`build.rs`), `FMA` is true in the copies of the kernel's
 /// entries that are compiled with the target feature `fma`, and `f64::mul_add` is one instruction
 /// only where this function is inlined into them.
-#[cfg_attr(inari_kernel_dispatch, inline(always))]
+#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 pub(crate) fn two_prod_err<const FMA: bool>(x: f64, y: f64, p: f64) -> f64 {
     if FMA {
         x.mul_add(y, -p)

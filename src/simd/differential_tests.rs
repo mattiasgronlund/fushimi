@@ -18,7 +18,7 @@
 // NaNs compare equal regardless of their sign and payload, which inari does not
 // depend on (x86 returns a negative default NaN, the generic backend does not).
 //
-// The number of random cases per generator can be set with `INARI_DIFF_N`.
+// The number of random cases per generator can be set with `FUSHIMI_DIFF_N`.
 // Run with `--nocapture` to see the number of cases and mismatches.
 
 use super::generic;
@@ -444,7 +444,7 @@ fn ternary_ops() -> Vec<(&'static str, HwTernary, Ternary)> {
 }
 
 // As `binary_exported_ops`, for the forwarder to `mul_add_ru` of `sse42`.
-#[cfg(inari_sse42_backend)]
+#[cfg(fushimi_sse42_backend)]
 fn ternary_exported_ops() -> Vec<(&'static str, HwTernary, Ternary)> {
     let mul_add_ru: HwTernary = |x, y, z| super::mul_add_ru_exported(x, y, z);
     vec![
@@ -463,7 +463,7 @@ fn ternary_exported_ops() -> Vec<(&'static str, HwTernary, Ternary)> {
 
 // Only `sse42` has a forwarder to `mul_add_ru` that the crate exports.
 #[cfg(all(
-    not(inari_sse42_backend),
+    not(fushimi_sse42_backend),
     any(
         target_arch = "aarch64",
         target_arch = "wasm32",
@@ -584,7 +584,7 @@ fn check_ternary(
 }
 
 fn random_cases() -> u64 {
-    std::env::var("INARI_DIFF_N")
+    std::env::var("FUSHIMI_DIFF_N")
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(if cfg!(debug_assertions) {
@@ -1232,7 +1232,7 @@ fn binary_slow_paths() -> Vec<(&'static str, Binary, Slow)> {
     // `mul_ru` with the ABI `sysv64` and their twins with Rust's ABI, named as in `abi_copies`
     // (and in `ternary_slow_paths` the copy of `mul_add_ru` with the ABI `sysv64`). The closures
     // call the `sysv64` copies, whose pointers are not of the type `Binary` (`Ternary` there).
-    #[cfg(all(inari_generic_backend, target_arch = "x86_64"))]
+    #[cfg(all(fushimi_generic_backend, target_arch = "x86_64"))]
     {
         ops.push((
             "div_ru/sysv64",
@@ -1281,7 +1281,7 @@ fn ternary_slow_paths() -> Vec<(&'static str, Ternary, Slow3)> {
             generic::mul_add1_ru_slow,
         ),
     ];
-    #[cfg(all(inari_generic_backend, target_arch = "x86_64"))]
+    #[cfg(all(fushimi_generic_backend, target_arch = "x86_64"))]
     {
         ops.push((
             "mul_add_ru/sysv64",
@@ -1388,7 +1388,7 @@ fn regressions_generic() {
 // and on random ones, with another case in the other lane, so that a mistake in passing the vectors
 // (a lane swapped, or one vector passed for another) would show. `regressions_generic` checks them
 // only on the cases of `regressions`, which have none for `div_ru`.
-#[cfg(all(inari_generic_backend, target_arch = "x86_64"))]
+#[cfg(all(fushimi_generic_backend, target_arch = "x86_64"))]
 #[test]
 fn abi_copies() {
     use generic::{div_ru_impl, mul_add_ru_impl, mul_ru_impl, HAS_FMA};

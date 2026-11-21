@@ -897,17 +897,17 @@ fn index(name: &str) -> usize {
     UNARY.iter().position(|(n, _, _)| *n == name).unwrap()
 }
 
-// The number of random cases per function, which can be set with `INARI_SEAM_N`.
+// The number of random cases per function, which can be set with `FUSHIMI_SEAM_N`.
 fn n_cases() -> u64 {
-    std::env::var("INARI_SEAM_N")
+    std::env::var("FUSHIMI_SEAM_N")
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(if cfg!(debug_assertions) { 200 } else { 5_000 })
 }
 
-// The random numbers of the generator numbered `gen`, which `INARI_SEAM_SEED` changes.
+// The random numbers of the generator numbered `gen`, which `FUSHIMI_SEAM_SEED` changes.
 fn rng(gen: u64) -> Rng {
-    let seed = std::env::var("INARI_SEAM_SEED")
+    let seed = std::env::var("FUSHIMI_SEAM_SEED")
         .ok()
         .and_then(|s| s.parse::<u64>().ok())
         .unwrap_or(0);
@@ -1206,8 +1206,8 @@ fn ziv_levels_recorded() {
     assert_eq!(levels(&|| mpfr::exp_rd(1.276253168049783e2)), (0, 0));
 }
 
-// The random cases of `seam_random_unary` and `seam_random_binary`, `INARI_SOAK_COUNT` of each
-// (default 1,000,000), from the seed `INARI_SOAK_SEED` (default: from the clock, and printed),
+// The random cases of `seam_random_unary` and `seam_random_binary`, `FUSHIMI_SOAK_COUNT` of each
+// (default 1,000,000), from the seed `FUSHIMI_SOAK_SEED` (default: from the clock, and printed),
 // with each function on a thread of its own, which prints the levels at which the kernel
 // returned, as the header says. Run it with
 // `cargo test --release --lib mpfr_calls::tests::soak -- --ignored --nocapture`.
@@ -1215,12 +1215,12 @@ fn ziv_levels_recorded() {
 #[ignore]
 fn soak() {
     let env = |name: &str| std::env::var(name).ok().and_then(|s| s.parse::<u64>().ok());
-    let n = env("INARI_SOAK_COUNT").unwrap_or(1_000_000);
-    let seed = env("INARI_SOAK_SEED").unwrap_or_else(|| {
+    let n = env("FUSHIMI_SOAK_COUNT").unwrap_or(1_000_000);
+    let seed = env("FUSHIMI_SOAK_SEED").unwrap_or_else(|| {
         let t = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
         t.as_secs() ^ u64::from(t.subsec_nanos())
     });
-    println!("soak: INARI_SOAK_SEED={} INARI_SOAK_COUNT={}", seed, n);
+    println!("soak: FUSHIMI_SOAK_SEED={} FUSHIMI_SOAK_COUNT={}", seed, n);
     let v = structured();
     let rng = |gen: u64| Rng(seed.wrapping_add(gen << 32));
     let lines: Vec<String> = thread::scope(|s| {
@@ -1259,7 +1259,7 @@ fn soak() {
     });
     assert!(
         lines.is_empty(),
-        "soak (INARI_SOAK_SEED={}): {} mismatches:\n{}",
+        "soak (FUSHIMI_SOAK_SEED={}): {} mismatches:\n{}",
         seed,
         lines.len(),
         lines.join("\n")

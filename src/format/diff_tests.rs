@@ -18,8 +18,8 @@
 // macOS, by the `cfg` on each. `parse_back` and `exact_digit_at_precision_0` need no MPFR, so
 // they also run where the tests have none, such as on wasm32 and i686.
 //
-// The number of random cases per generator can be set with `INARI_FORMAT_N`, and the cases
-// changed with the seed `INARI_FORMAT_SEED`. Run with `--nocapture` to see the numbers of
+// The number of random cases per generator can be set with `FUSHIMI_FORMAT_N`, and the cases
+// changed with the seed `FUSHIMI_FORMAT_SEED`. Run with `--nocapture` to see the numbers of
 // cases.
 
 use super::bound;
@@ -247,17 +247,17 @@ impl Rng {
     }
 }
 
-// The number of random cases per generator, which can be set with `INARI_FORMAT_N`.
+// The number of random cases per generator, which can be set with `FUSHIMI_FORMAT_N`.
 fn n_cases() -> u64 {
-    std::env::var("INARI_FORMAT_N")
+    std::env::var("FUSHIMI_FORMAT_N")
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(if cfg!(debug_assertions) { 100 } else { 1_000 })
 }
 
-// The random numbers of the generator numbered `gen`, which `INARI_FORMAT_SEED` changes.
+// The random numbers of the generator numbered `gen`, which `FUSHIMI_FORMAT_SEED` changes.
 fn rng(gen: u64) -> Rng {
-    let seed = std::env::var("INARI_FORMAT_SEED")
+    let seed = std::env::var("FUSHIMI_FORMAT_SEED")
         .ok()
         .and_then(|s| s.parse::<u64>().ok())
         .unwrap_or(0);

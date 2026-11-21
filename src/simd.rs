@@ -64,11 +64,11 @@ cfg_if::cfg_if! {
         // The generic backend provides `round_up_exact`, which `src/parse.rs` and
         // `src/dyadic.rs` call, and `two_prod_err` and `HAS_FMA`, which the fast paths of
         // `src/dyadic` use. The entries of the kernel use `HAS_FMA` only in a build without
-        // `cfg(inari_kernel_dispatch)` (`src/dyadic/level.rs`), and its tests in every build.
+        // `cfg(fushimi_kernel_dispatch)` (`src/dyadic/level.rs`), and its tests in every build.
         #[allow(dead_code)] // Only these and the functions that they call are used.
         mod generic;
         pub(crate) use generic::{round_up_exact, two_prod_err};
-        #[cfg(any(test, not(inari_kernel_dispatch)))]
+        #[cfg(any(test, not(fushimi_kernel_dispatch)))]
         pub(crate) use generic::HAS_FMA;
     } else if #[cfg(feature = "force-generic")] {
         mod generic;
@@ -102,7 +102,7 @@ cfg_if::cfg_if! {
         // `fma` and `sse42`, and is tested against whichever backend the target
         // selects. `src/parse.rs` and `src/dyadic.rs` call its `round_up_exact`, and the fast
         // paths of `src/dyadic` its `two_prod_err` and `HAS_FMA`, the latter only in a build
-        // without `cfg(inari_kernel_dispatch)` (`src/dyadic/level.rs`) or in the tests.
+        // without `cfg(fushimi_kernel_dispatch)` (`src/dyadic/level.rs`) or in the tests.
         //
         // Only part of it is used. Under `fma` and `sse42`: the functions that they call
         // (`add_ru`, `div_ru`, `mul_add_ru`, `mul_ru`, `sqrt_rd_ru`, `sqrt1_rd`, `sqrt1_ru`
@@ -114,7 +114,7 @@ cfg_if::cfg_if! {
         #[allow(dead_code)]
         mod generic;
         pub(crate) use generic::{round_up_exact, two_prod_err};
-        #[cfg(any(test, not(inari_kernel_dispatch)))]
+        #[cfg(any(test, not(fushimi_kernel_dispatch)))]
         pub(crate) use generic::HAS_FMA;
         #[cfg(test)]
         mod differential_tests;

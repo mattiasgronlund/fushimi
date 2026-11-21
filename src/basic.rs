@@ -813,7 +813,7 @@ impl Interval {
 // `$rhs` and `$addend` is NaI, and `$set_dec` for the function that decorates it. `mul_add_with`
 // expands it with `self.x().mul_add_with(s, rhs.x(), addend.x())` and with
 // `Self::set_dec_impl`, which is `#[inline]`. `DecInterval::mul_add` expands it with
-// `Self::set_dec`, which is not, and on the portable backend (`inari_generic_backend`) with
+// `Self::set_dec`, which is not, and on the portable backend (`fushimi_generic_backend`) with
 // `self.x().mul_add(rhs.x(), addend.x())`, a call of `Interval::mul_add`, rather than with
 // `self.x().mul_add_with(CrateBaseline, rhs.x(), addend.x())`, which inlines the body of
 // `Interval::mul_add_with` into it. There the inlined form took 3 to 47 more instructions per
@@ -963,7 +963,7 @@ impl DecInterval {
         // `rocq/theories/Model.v` transcribes the arm of the portable backend, so it has to be
         // updated along with it. The other arm inlines that call of `Interval::mul_add`.
         cfg_if::cfg_if! {
-            if #[cfg(inari_generic_backend)] {
+            if #[cfg(fushimi_generic_backend)] {
                 dec_mul_add_with_body!(
                     self,
                     rhs,

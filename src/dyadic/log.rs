@@ -376,7 +376,7 @@ pub(super) fn ln_split(x: f64) -> (i64, f64, usize) {
 // exact as sh + sl (`two_prod_err`) and Fast2Sum is exact as |sh / 2| < |z1| [Dekker], the
 // terms of degree 3 to 8 by Horner's scheme in `f64`, and z2 (1 - z1), the term of ln(1 + z) of
 // first order in z2. `rocq/theories/FastLogPoly.v` proves the bound (`log1p_poly_correct`).
-#[cfg_attr(inari_kernel_dispatch, inline(always))]
+#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 fn log1p_poly<const FMA: bool>(z1: f64, z2: f64) -> (f64, f64) {
     let sh = z1 * z1;
     let sl = two_prod_err::<FMA>(z1, z1, sh);
@@ -403,7 +403,7 @@ fn log1p_poly<const FMA: bool>(z1: f64, z2: f64) -> (f64, f64) {
 //
 // [CORE-MATH] P. Zimmermann et al., the CORE-MATH project, `src/binary64/log/log.c` (MIT
 // license); no constant or table is copied from it.
-#[cfg_attr(inari_kernel_dispatch, inline(always))]
+#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 fn ln_core<const FMA: bool>(x: f64) -> (i64, f64, f64) {
     let (e, m, i) = ln_split(x);
     let [r, th, tl] = LOG_TABLE[i];
@@ -438,7 +438,7 @@ fn normalize(h: f64, l: f64) -> Option<(f64, f64, i64)> {
 // finite x > 0, or `None` for x = 1, where ln x = 0. e LN2H is exact, and |e LN2H| > 1/2 > |a_h|
 // unless e = 0. `rocq/theories/FastLogLn.v` proves it, with 1/2 < |h| < 2, which the rounding
 // tests take (`fast_ln_correct`).
-#[cfg_attr(inari_kernel_dispatch, inline(always))]
+#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 fn fast_ln<const FMA: bool>(x: f64) -> Option<(f64, f64, i64)> {
     let (e, a_h, a_l) = ln_core::<FMA>(x);
     let ef = e as f64;
@@ -452,7 +452,7 @@ fn fast_ln<const FMA: bool>(x: f64) -> Option<(f64, f64, i64)> {
 // and d = log10(2) (`LG2`). a_h ch is exact as ph + `two_prod_err`, e dh is exact, and
 // |e dh| > |ph| unless e = 0, as |a_h| < 0.35. `rocq/theories/FastLogBy.v` proves it for log2
 // and log10, with 1/2 < |h| < 2 as for ln (`fast_log2_correct`, `fast_log10_correct`).
-#[cfg_attr(inari_kernel_dispatch, inline(always))]
+#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 fn fast_log_by<const FMA: bool>(x: f64, c: [u64; 2], d: [u64; 2]) -> Option<(f64, f64, i64)> {
     let (e, a_h, a_l) = ln_core::<FMA>(x);
     let ef = e as f64;
@@ -474,7 +474,7 @@ fn fast_log_by<const FMA: bool>(x: f64, c: [u64; 2], d: [u64; 2]) -> Option<(f64
 // is dh + dl up to the roundings of cl Q3, ch Q3L and the two sums in dl, with Q3 + Q3L within
 // 2^-109 of 1/3. The two Fast2Sums are exact, as |sh / 2| < |z1| and |dh| < |ah| [Dekker].
 // `rocq/theories/FastPowPoly.v` proves the bound (`log1p_poly_acc_correct`).
-#[cfg_attr(inari_kernel_dispatch, inline(always))]
+#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 fn log1p_poly_acc<const FMA: bool>(z1: f64, z2: f64) -> (f64, f64) {
     let sh = z1 * z1;
     let sl = two_prod_err::<FMA>(z1, z1, sh);
@@ -501,7 +501,7 @@ fn log1p_poly_acc<const FMA: bool>(z1: f64, z2: f64) -> (f64, f64) {
 // ln x = e ln 2 + a_h + a_l up to 2^-79 |ln m|, for a finite x > 0, as (e, a_h, a_l), with
 // m = x / 2^e and a_h = RN(a_h + a_l): `ln_core` with `log1p_poly_acc`.
 // `rocq/theories/FastPowCore.v` proves the bound (`ln_core_acc_correct`).
-#[cfg_attr(inari_kernel_dispatch, inline(always))]
+#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 fn ln_core_acc<const FMA: bool>(x: f64) -> (i64, f64, f64) {
     let (e, m, i) = ln_split(x);
     let [r, th, tl] = LOG_TABLE[i];
@@ -519,7 +519,7 @@ fn ln_core_acc<const FMA: bool>(x: f64) -> (i64, f64, f64) {
 // ln x as lh + ll, with lh = RN(lh + ll) and |ln x - (lh + ll)| <= 17/16 2^-79 |ln x|, for a
 // finite x > 0, for x^y in `src/dyadic/pow.rs`: e ln 2 + a_h + a_l as in `fast_ln`, without its
 // normalization. `rocq/theories/FastPowLn.v` proves it (`ln_acc_correct`).
-#[cfg_attr(inari_kernel_dispatch, inline(always))]
+#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 pub(super) fn ln_acc<const FMA: bool>(x: f64) -> (f64, f64) {
     let (e, a_h, a_l) = ln_core_acc::<FMA>(x);
     let ef = e as f64;
@@ -529,7 +529,7 @@ pub(super) fn ln_acc<const FMA: bool>(x: f64) -> (f64, f64) {
 
 // ln x, log2 x and log10 x rounded toward +∞ if `up` and toward -∞ otherwise, and to nearest,
 // by the fast path, or `None` where its rounding test fails or x = 1.
-#[cfg_attr(inari_kernel_dispatch, inline(always))]
+#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 fn fast_ln_dir<const FMA: bool>(x: f64, up: bool) -> Option<f64> {
     let (h, l, k) = fast_ln::<FMA>(x)?;
     round_dir_signed(h, l, k, up)
@@ -551,19 +551,19 @@ fn fast_log10_dir<const FMA: bool>(x: f64, up: bool) -> Option<f64> {
     round_dir_signed(h, l, k, up)
 }
 
-#[cfg_attr(inari_kernel_dispatch, inline(always))]
+#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 fn fast_ln_near<const FMA: bool>(x: f64) -> Option<f64> {
     let (h, l, k) = fast_ln::<FMA>(x)?;
     round_near_signed(h, l, k)
 }
 
-#[cfg_attr(inari_kernel_dispatch, inline(always))]
+#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 fn fast_log2_near<const FMA: bool>(x: f64) -> Option<f64> {
     let (h, l, k) = fast_log_by::<FMA>(x, C2, ONE)?;
     round_near_signed(h, l, k)
 }
 
-#[cfg_attr(inari_kernel_dispatch, inline(always))]
+#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 fn fast_log10_near<const FMA: bool>(x: f64) -> Option<f64> {
     let (h, l, k) = fast_log_by::<FMA>(x, C10, LG2)?;
     round_near_signed(h, l, k)
@@ -615,7 +615,7 @@ fn odd_series(t: f64, c: [u64; 4]) -> (f64, f64, i64) {
 // sh - sh mh + (sl - sl mh + sh wl) up to sl wl, below 2^-74 sh, with sh mh = ph + pe exactly,
 // and the factor 2 is k + 1. `rocq/theories/FastAhypNear1.v` proves it (`acosh_near1_correct`),
 // within 2^-67 of the result scaled by 2^-k.
-#[cfg_attr(inari_kernel_dispatch, inline(always))]
+#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 fn fast_acosh_near1<const FMA: bool>(x: f64) -> Option<(f64, f64, i64)> {
     if x <= 1.0 {
         return None;
@@ -646,7 +646,7 @@ fn fast_acosh_near1<const FMA: bool>(x: f64) -> Option<(f64, f64, i64)> {
 // is d within d^2 / (2 (1 - |d|)), below 2^-102 for |d| <= 2^-51, so that `ln_core` of xh
 // serves unchanged and xl / xh joins the low sum. `rocq/theories/FastLogDd.v` proves it where
 // the result is at least 2^-20 (`fast_ln_dd_correct`).
-#[cfg_attr(inari_kernel_dispatch, inline(always))]
+#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 fn fast_ln_dd<const FMA: bool>(xh: f64, xl: f64, e0: i64) -> Option<(f64, f64, i64)> {
     let (e, a_h, a_l) = ln_core::<FMA>(xh);
     let ef = (e + e0) as f64;
@@ -658,7 +658,7 @@ fn fast_ln_dd<const FMA: bool>(xh: f64, xl: f64, e0: i64) -> Option<(f64, f64, i
 // asinh t as (h, l, k) as for `fast_ln`, for a finite t >= 2^-8: ln(t + c) with c = √(1 + t^2)
 // by `dd_sqrt`, and as ln 2 + ln(t + 1/(4t)) from 2^26 on, where 2 (t + 1/(4t)) is t + c within
 // 1/(8 t^3), 2^-108 of it. `rocq/theories/FastAhypAsinh.v` proves it (`fast_asinh_pos_correct`).
-#[cfg_attr(inari_kernel_dispatch, inline(always))]
+#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 fn fast_asinh_pos<const FMA: bool>(t: f64) -> Option<(f64, f64, i64)> {
     if t >= AHYP_LARGE {
         return fast_ln_dd::<FMA>(t, 0.25 / t, 1);
@@ -674,7 +674,7 @@ fn fast_asinh_pos<const FMA: bool>(t: f64) -> Option<(f64, f64, i64)> {
 }
 
 // asinh x as (h, l, k) as for `fast_ln`, for a finite x with |x| >= 2^-8: asinh is odd.
-#[cfg_attr(inari_kernel_dispatch, inline(always))]
+#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 fn fast_asinh<const FMA: bool>(x: f64) -> Option<(f64, f64, i64)> {
     let (h, l, k) = fast_asinh_pos::<FMA>(x.abs())?;
     Some(if x < 0.0 { (-h, -l, k) } else { (h, l, k) })
@@ -683,7 +683,7 @@ fn fast_asinh<const FMA: bool>(x: f64) -> Option<(f64, f64, i64)> {
 // acosh x as (h, l, k) as for `fast_ln`, for a finite x >= 1 + 2^-8: ln(x + r) with
 // r = √(x^2 - 1) by `dd_sqrt`, and as ln 2 + ln(x - 1/(4x)) from 2^26 on, where 2 (x - 1/(4x)) is
 // x + r within 1/(4 x^3). `rocq/theories/FastAhypAcosh.v` proves it (`fast_acosh_correct`).
-#[cfg_attr(inari_kernel_dispatch, inline(always))]
+#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 fn fast_acosh<const FMA: bool>(x: f64) -> Option<(f64, f64, i64)> {
     if x >= AHYP_LARGE {
         return fast_ln_dd::<FMA>(x, -0.25 / x, 1);
@@ -702,7 +702,7 @@ fn fast_acosh<const FMA: bool>(x: f64) -> Option<(f64, f64, i64)> {
 // 2 atanh t = ln((1 + t) / (1 - t)) as (h, l, k + 1): as -j ln 2 + ln q for the quotient
 // q = (1 + t) / ((1 - t) 2^-j) by `dd_div`, where `normalize` scales 1 - t into [1, 2) by 2^-j.
 // `rocq/theories/FastAhypAtanh.v` proves it (`fast_atanh_pos_correct`).
-#[cfg_attr(inari_kernel_dispatch, inline(always))]
+#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 fn fast_atanh_pos<const FMA: bool>(t: f64) -> Option<(f64, f64, i64)> {
     // 1 - t and 1 + t are exact as double-doubles (Fast2Sum [Dekker]).
     let (dh, dl) = fast_two_sum(1.0, -t);
@@ -714,7 +714,7 @@ fn fast_atanh_pos<const FMA: bool>(t: f64) -> Option<(f64, f64, i64)> {
 }
 
 // atanh x as (h, l, k) as for `fast_ln`, for a finite x with 2^-8 <= |x| < 1: atanh is odd.
-#[cfg_attr(inari_kernel_dispatch, inline(always))]
+#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 fn fast_atanh<const FMA: bool>(x: f64) -> Option<(f64, f64, i64)> {
     let (h, l, k) = fast_atanh_pos::<FMA>(x.abs())?;
     Some(if x < 0.0 { (-h, -l, k) } else { (h, l, k) })

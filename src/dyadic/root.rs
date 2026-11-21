@@ -195,7 +195,7 @@ const ERR_CBRT: f64 = f64::EPSILON / 8192.0;
 // (1 - 2 eps^2 - 4 eps^3/3 - eps^4/3) cbrt zz. [CORE-MATH] `rocq/theories/FastCbrtStep.v`
 // proves the bound (`cbrt_step_correct`), from `rocq/theories/FastCbrtNewton.v` for the step on
 // real numbers and its roundings.
-#[cfg_attr(inari_kernel_dispatch, inline(always))]
+#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 fn cbrt_step<const FMA: bool>(y: f64, zz: f64, rr: f64) -> Option<(f64, f64)> {
     let y2 = y * y;
     let y3 = y * y2;
@@ -217,7 +217,7 @@ fn cbrt_step<const FMA: bool>(y: f64, zz: f64, rr: f64) -> Option<(f64, f64)> {
 // finite nonzero x, or `None` where `cbrt_step` returns it. [CORE-MATH]
 // `rocq/theories/FastCbrt.v` proves the bound (`fast_cbrt_correct`), from
 // `rocq/theories/FastCbrtReduce.v` for the reduction. Always inlined: without it, the builds
-// without `cfg(inari_kernel_dispatch)` that were checked (for Haswell, AArch64, wasm32, and
+// without `cfg(fushimi_kernel_dispatch)` that were checked (for Haswell, AArch64, wasm32, and
 // x86-64 with `force-generic`) kept it out of line, and on x86-64 each call returned the
 // `Option` through memory, which the caller then tested.
 #[inline(always)]
@@ -286,7 +286,7 @@ fn cbrt_exact(x: f64, h: f64, e: i64) -> Option<f64> {
 // down. `rocq/theories/FastCbrt.v` proves that what both return is cbrt x rounded
 // (`fast_cbrt_dir_correct`, `fast_cbrt_near_correct`), and that an FMA changes neither
 // (`fast_cbrt_dir_fma`, `fast_cbrt_near_fma`).
-#[cfg_attr(inari_kernel_dispatch, inline(always))]
+#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 fn fast_cbrt_dir<const FMA: bool>(x: f64, up: bool) -> Option<f64> {
     let (h, l, e) = fast_cbrt::<FMA>(x)?;
     let r = round_dir_err(h, l, e, ERR_CBRT, up != (x < 0.0)).or_else(|| cbrt_exact(x, h, e))?;
@@ -305,8 +305,8 @@ fn fast_cbrt_dir<const FMA: bool>(x: f64, up: bool) -> Option<f64> {
 // `fast_hypot_near` alone left the thunks: neither pair alone was enough. In the builds with the
 // dispatch that were checked (x86-64 and x86-64-v2), where these four attributes do not apply,
 // `cbrt_exact` and `hypot_exact` left those counts as they were.
-#[cfg_attr(inari_kernel_dispatch, inline(always))]
-#[cfg_attr(not(inari_kernel_dispatch), inline)]
+#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
+#[cfg_attr(not(fushimi_kernel_dispatch), inline)]
 fn fast_cbrt_near<const FMA: bool>(x: f64) -> Option<f64> {
     let (h, l, e) = fast_cbrt::<FMA>(x)?;
     let r = round_near_err(h, l, e, ERR_CBRT)?;
@@ -316,7 +316,7 @@ fn fast_cbrt_near<const FMA: bool>(x: f64) -> Option<f64> {
 level_entry! {
     /// cbrt x rounded toward +∞ if `up` and toward -∞ otherwise, with ±0, ±∞ and NaN at ±0, ±∞
     /// and NaN, as MPFR's `mpfr_cbrt` gives them.
-    #[cfg_attr(inari_kernel_dispatch, inline(always))]
+    #[cfg_attr(fushimi_kernel_dispatch, inline(always))]
     pub(crate) fn cbrt(x: f64, up: bool) -> f64 = cbrt_with;
 }
 
@@ -336,7 +336,7 @@ level_entry! {
     /// cbrt x rounded to nearest, ties to even, with ±0, ±∞ and NaN at ±0, ±∞ and NaN, as MPFR's
     /// `mpfr_cbrt` gives them.
     // `inline` in the builds without the dispatch, for the reason at `fast_cbrt_near`.
-    #[cfg_attr(not(inari_kernel_dispatch), inline)]
+    #[cfg_attr(not(fushimi_kernel_dispatch), inline)]
     pub(crate) fn cbrt_near(x: f64) -> f64 = cbrt_near_with;
 }
 
@@ -400,7 +400,7 @@ const ERR_HYPOT: f64 = f64::EPSILON / 70_368_744_177_664.0;
 // x^2 + y^2 = r2 + e2 + dx2 + dy2 exactly. [CORE-MATH] `rocq/theories/FastHypotDd.v` proves
 // the bound (`hypot_dd_correct`), from `rocq/theories/FastHypotSum.v` for the sum of the
 // squares and `rocq/theories/FastDdSqrt.v` for `dd_sqrt`.
-#[cfg_attr(inari_kernel_dispatch, inline(always))]
+#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 fn hypot_dd<const FMA: bool>(big: f64, small: f64) -> Option<(f64, f64, i64)> {
     let eb = (big.to_bits() >> 52) as i64;
     if eb == 0 || eb > 2044 {
@@ -497,8 +497,8 @@ fn fast_hypot<const FMA: bool>(x: f64, y: f64, up: bool) -> Option<f64> {
 }
 
 // `inline` in the builds without the dispatch too, for the reason at `fast_cbrt_near`.
-#[cfg_attr(inari_kernel_dispatch, inline(always))]
-#[cfg_attr(not(inari_kernel_dispatch), inline)]
+#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
+#[cfg_attr(not(fushimi_kernel_dispatch), inline)]
 fn fast_hypot_near<const FMA: bool>(x: f64, y: f64) -> Option<f64> {
     #[cfg(test)]
     if !super::fast::fast_enabled() {
@@ -532,7 +532,7 @@ pub(crate) fn hypot(x: f64, y: f64, up: bool) -> f64 {
 level_entry! {
     // `hypot` toward +∞ if `UP` and toward -∞ otherwise. Never inlined in the build without the
     // dispatch, which keeps that build as it was: LLVM inlines the one-call wrapper otherwise.
-    #[cfg_attr(not(inari_kernel_dispatch), inline(never))]
+    #[cfg_attr(not(fushimi_kernel_dispatch), inline(never))]
     fn hypot_dir<const UP: bool>(x: f64, y: f64) -> f64 = hypot_dir_with;
 }
 
@@ -558,7 +558,7 @@ level_entry! {
     /// hypot(x, y) = √(x^2 + y^2) rounded to nearest, ties to even, with the values of `hypot` at
     /// the zeros, the infinities and NaN.
     // `inline` in the builds without the dispatch, for the reason at `fast_cbrt_near`.
-    #[cfg_attr(not(inari_kernel_dispatch), inline)]
+    #[cfg_attr(not(fushimi_kernel_dispatch), inline)]
     pub(crate) fn hypot_near(x: f64, y: f64) -> f64 = hypot_near_with;
 }
 

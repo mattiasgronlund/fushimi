@@ -461,10 +461,10 @@ pub fn dispatch<W: WithLevel>(w: W) -> W::Output {
 // `mul_with` and `add_with`, whose loop LLVM did not rotate there (cachegrind, row 164).
 impl sealed::Backend for Baseline {
     #[cfg(not(any(
-        all(target_arch = "aarch64", not(inari_generic_backend), not(docsrs)),
+        all(target_arch = "aarch64", not(fushimi_generic_backend), not(docsrs)),
         all(
             target_arch = "x86_64",
-            not(inari_generic_backend),
+            not(fushimi_generic_backend),
             not(target_feature = "avx512f"),
             not(docsrs)
         )
@@ -478,7 +478,7 @@ impl sealed::Backend for Baseline {
     // between (see above).
     #[cfg(all(
         target_arch = "x86_64",
-        not(inari_generic_backend),
+        not(fushimi_generic_backend),
         not(target_feature = "avx512f"),
         not(docsrs)
     ))]
@@ -489,7 +489,7 @@ impl sealed::Backend for Baseline {
 
     // Where the `aarch64` backend is the build's, `#[inline(always)]`, so that a user's crate calls
     // the copy of `add_ru` with the ABI `C` without this method in between (see above).
-    #[cfg(all(target_arch = "aarch64", not(inari_generic_backend), not(docsrs)))]
+    #[cfg(all(target_arch = "aarch64", not(fushimi_generic_backend), not(docsrs)))]
     #[inline(always)]
     fn add_ru(self, x: F64X2, y: F64X2) -> F64X2 {
         crate::simd::add_ru_c_abi(x, y)
@@ -503,11 +503,11 @@ impl sealed::Backend for Baseline {
 
     // Where the build's backend is one of `src/simd/x86_64.rs` (`sse42`, `fma` or `avx512f`), the
     // `classify_bits` of that file, which the copies of `V2`, `V3` and `V4` below call too. These
-    // are the x86-64 builds without `inari_generic_backend` and `docsrs`: `build.rs` does not look
+    // are the x86-64 builds without `fushimi_generic_backend` and `docsrs`: `build.rs` does not look
     // at `docsrs`, with which `src/simd.rs` takes `unimplemented.rs`. Where `fma` or `avx512f` is
     // the backend, the classification then puts no `vzeroupper` into the operations that classify
     // (see that function).
-    #[cfg(all(target_arch = "x86_64", not(inari_generic_backend), not(docsrs)))]
+    #[cfg(all(target_arch = "x86_64", not(fushimi_generic_backend), not(docsrs)))]
     #[inline(always)]
     fn classify_bits(self, x: &F64X2) -> u8 {
         super::x86_64::classify_bits(*x)
@@ -523,13 +523,13 @@ impl sealed::Backend for Baseline {
     // one of `Interval::mul`, `Interval::div`, `Interval::mul_add` or
     // `Interval::mul_rev_to_pair` 11 to 16 fewer, in the classes counted (cachegrind, row 152).
     //
-    // `build.rs` sets `inari_generic_backend` on x86-64 exactly where `sse4.2` is missing or
+    // `build.rs` sets `fushimi_generic_backend` on x86-64 exactly where `sse4.2` is missing or
     // `force-generic` is on, so the `cfg`s of this arm and the one above, which are disjoint,
     // together hold in exactly the x86-64 builds without `force-generic` and `docsrs`, and that
     // of the first arm is their complement: each build compiles one of the three.
     #[cfg(all(
         target_arch = "x86_64",
-        inari_generic_backend,
+        fushimi_generic_backend,
         not(feature = "force-generic"),
         not(docsrs)
     ))]
@@ -539,11 +539,11 @@ impl sealed::Backend for Baseline {
     }
 
     #[cfg(not(any(
-        all(inari_generic_backend, target_arch = "x86_64"),
-        all(target_arch = "aarch64", not(inari_generic_backend), not(docsrs)),
+        all(fushimi_generic_backend, target_arch = "x86_64"),
+        all(target_arch = "aarch64", not(fushimi_generic_backend), not(docsrs)),
         all(
             target_arch = "x86_64",
-            not(inari_generic_backend),
+            not(fushimi_generic_backend),
             not(target_feature = "avx512f"),
             not(docsrs)
         )
@@ -555,7 +555,7 @@ impl sealed::Backend for Baseline {
     // As `add_ru` above.
     #[cfg(all(
         target_arch = "x86_64",
-        not(inari_generic_backend),
+        not(fushimi_generic_backend),
         not(target_feature = "avx512f"),
         not(docsrs)
     ))]
@@ -565,7 +565,7 @@ impl sealed::Backend for Baseline {
     }
 
     // As `add_ru` above.
-    #[cfg(all(target_arch = "aarch64", not(inari_generic_backend), not(docsrs)))]
+    #[cfg(all(target_arch = "aarch64", not(fushimi_generic_backend), not(docsrs)))]
     #[inline(always)]
     fn div_ru(self, x: F64X2, y: F64X2) -> F64X2 {
         crate::simd::div_ru_c_abi(x, y)
@@ -577,7 +577,7 @@ impl sealed::Backend for Baseline {
     // attribute, where it shared this method's codegen unit (with one codegen unit, and with
     // rustc 1.98 in Cargo's default release profile in a build for `x86-64`), LLVM changed its
     // ABI and made this method an adapter of 10 instructions in place of a jump (row 146).
-    #[cfg(all(inari_generic_backend, target_arch = "x86_64"))]
+    #[cfg(all(fushimi_generic_backend, target_arch = "x86_64"))]
     #[inline(always)]
     fn div_ru(self, x: F64X2, y: F64X2) -> F64X2 {
         crate::simd::generic::div_ru_rust_abi(x, y)
@@ -589,8 +589,8 @@ impl sealed::Backend for Baseline {
     }
 
     #[cfg(not(any(
-        all(inari_generic_backend, target_arch = "x86_64"),
-        all(inari_sse42_backend, not(docsrs))
+        all(fushimi_generic_backend, target_arch = "x86_64"),
+        all(fushimi_sse42_backend, not(docsrs))
     )))]
     #[inline(always)]
     fn mul_add_ru(self, x: F64X2, y: F64X2, z: F64X2) -> F64X2 {
@@ -598,9 +598,9 @@ impl sealed::Backend for Baseline {
     }
 
     // Where the `sse42` backend is the build's, whose `mul_add_ru` is out of line, as `add_ru`
-    // above. `build.rs` sets `inari_sse42_backend` where it is the backend, but does not look at
+    // above. `build.rs` sets `fushimi_sse42_backend` where it is the backend, but does not look at
     // `docsrs`.
-    #[cfg(all(inari_sse42_backend, not(docsrs)))]
+    #[cfg(all(fushimi_sse42_backend, not(docsrs)))]
     #[inline(always)]
     fn mul_add_ru(self, x: F64X2, y: F64X2, z: F64X2) -> F64X2 {
         crate::simd::mul_add_ru_exported(x, y, z)
@@ -610,18 +610,18 @@ impl sealed::Backend for Baseline {
     // `mul_add_ru_sysv64` without this method in between, and passes it the vectors in registers.
     // The crate's own `Interval::mul_add` passes `CrateBaseline`, which calls `mul_add_ru` (see
     // `mul_add_ru` of `CrateBaseline`).
-    #[cfg(all(inari_generic_backend, target_arch = "x86_64"))]
+    #[cfg(all(fushimi_generic_backend, target_arch = "x86_64"))]
     #[inline(always)]
     fn mul_add_ru(self, x: F64X2, y: F64X2, z: F64X2) -> F64X2 {
         crate::simd::generic::mul_add_ru_sysv64(x, y, z)
     }
 
     #[cfg(not(any(
-        all(inari_generic_backend, target_arch = "x86_64"),
-        all(target_arch = "aarch64", not(inari_generic_backend), not(docsrs)),
+        all(fushimi_generic_backend, target_arch = "x86_64"),
+        all(target_arch = "aarch64", not(fushimi_generic_backend), not(docsrs)),
         all(
             target_arch = "x86_64",
-            not(inari_generic_backend),
+            not(fushimi_generic_backend),
             not(target_feature = "avx512f"),
             not(docsrs)
         )
@@ -633,7 +633,7 @@ impl sealed::Backend for Baseline {
     // As `add_ru` above.
     #[cfg(all(
         target_arch = "x86_64",
-        not(inari_generic_backend),
+        not(fushimi_generic_backend),
         not(target_feature = "avx512f"),
         not(docsrs)
     ))]
@@ -643,14 +643,14 @@ impl sealed::Backend for Baseline {
     }
 
     // As `add_ru` above.
-    #[cfg(all(target_arch = "aarch64", not(inari_generic_backend), not(docsrs)))]
+    #[cfg(all(target_arch = "aarch64", not(fushimi_generic_backend), not(docsrs)))]
     #[inline(always)]
     fn mul_ru(self, x: F64X2, y: F64X2) -> F64X2 {
         crate::simd::mul_ru_c_abi(x, y)
     }
 
     // `#[inline(always)]`: see `div_ru`.
-    #[cfg(all(inari_generic_backend, target_arch = "x86_64"))]
+    #[cfg(all(fushimi_generic_backend, target_arch = "x86_64"))]
     #[inline(always)]
     fn mul_ru(self, x: F64X2, y: F64X2) -> F64X2 {
         crate::simd::generic::mul_ru_rust_abi(x, y)
@@ -715,11 +715,11 @@ impl sealed::Backend for Baseline {
 // that where `fma` is, `Baseline` calls `mul_add_ru` itself, which is `#[inline(always)]` there.
 // Where `sse42` is, `mul_add_ru` is out of line, as before.
 #[cfg(any(
-    all(inari_generic_backend, target_arch = "x86_64"),
-    all(target_arch = "aarch64", not(inari_generic_backend), not(docsrs)),
+    all(fushimi_generic_backend, target_arch = "x86_64"),
+    all(target_arch = "aarch64", not(fushimi_generic_backend), not(docsrs)),
     all(
         target_arch = "x86_64",
-        not(inari_generic_backend),
+        not(fushimi_generic_backend),
         not(target_feature = "avx512f"),
         not(docsrs)
     )
@@ -728,11 +728,11 @@ impl sealed::Backend for Baseline {
 pub(crate) struct CrateBaseline;
 
 #[cfg(not(any(
-    all(inari_generic_backend, target_arch = "x86_64"),
-    all(target_arch = "aarch64", not(inari_generic_backend), not(docsrs)),
+    all(fushimi_generic_backend, target_arch = "x86_64"),
+    all(target_arch = "aarch64", not(fushimi_generic_backend), not(docsrs)),
     all(
         target_arch = "x86_64",
-        not(inari_generic_backend),
+        not(fushimi_generic_backend),
         not(target_feature = "avx512f"),
         not(docsrs)
     )
@@ -740,11 +740,11 @@ pub(crate) struct CrateBaseline;
 pub(crate) use Baseline as CrateBaseline;
 
 #[cfg(any(
-    all(inari_generic_backend, target_arch = "x86_64"),
-    all(target_arch = "aarch64", not(inari_generic_backend), not(docsrs)),
+    all(fushimi_generic_backend, target_arch = "x86_64"),
+    all(target_arch = "aarch64", not(fushimi_generic_backend), not(docsrs)),
     all(
         target_arch = "x86_64",
-        not(inari_generic_backend),
+        not(fushimi_generic_backend),
         not(target_feature = "avx512f"),
         not(docsrs)
     )
@@ -757,18 +757,18 @@ impl Simd for CrateBaseline {
 }
 
 #[cfg(any(
-    all(inari_generic_backend, target_arch = "x86_64"),
-    all(target_arch = "aarch64", not(inari_generic_backend), not(docsrs)),
+    all(fushimi_generic_backend, target_arch = "x86_64"),
+    all(target_arch = "aarch64", not(fushimi_generic_backend), not(docsrs)),
     all(
         target_arch = "x86_64",
-        not(inari_generic_backend),
+        not(fushimi_generic_backend),
         not(target_feature = "avx512f"),
         not(docsrs)
     )
 ))]
 impl sealed::Backend for CrateBaseline {
     // The method of `Baseline` where the portable or the `aarch64` backend is the build's.
-    #[cfg(not(all(target_arch = "x86_64", not(inari_generic_backend))))]
+    #[cfg(not(all(target_arch = "x86_64", not(fushimi_generic_backend))))]
     #[inline(always)]
     fn add_ru(self, x: F64X2, y: F64X2) -> F64X2 {
         sealed::Backend::add_ru(Baseline, x, y)
@@ -776,7 +776,7 @@ impl sealed::Backend for CrateBaseline {
 
     // No inline attribute, as for `div_ru`: the body of an `#[inline]` method would make the crate
     // export `add_ru`. Where the `fma` or `sse42` backend is the build's.
-    #[cfg(all(target_arch = "x86_64", not(inari_generic_backend)))]
+    #[cfg(all(target_arch = "x86_64", not(fushimi_generic_backend)))]
     fn add_ru(self, x: F64X2, y: F64X2) -> F64X2 {
         crate::simd::add_ru(x, y)
     }
@@ -790,15 +790,15 @@ impl sealed::Backend for CrateBaseline {
     // so the body of an `#[inline]` one would make the crate export the `sysv64` `div_ru`, and its
     // own operations would call it through the global offset table. Without the attribute, LLVM
     // still inlines this method into the crate's operations. This type exists where the portable
-    // backend is the build's only on x86-64, so `inari_generic_backend` selects that build here.
-    #[cfg(inari_generic_backend)]
+    // backend is the build's only on x86-64, so `fushimi_generic_backend` selects that build here.
+    #[cfg(fushimi_generic_backend)]
     fn div_ru(self, x: F64X2, y: F64X2) -> F64X2 {
         crate::simd::generic::div_ru(x, y)
     }
 
     // No inline attribute here either: the body of an `#[inline]` method would make the crate
     // export `div_ru`. Where the `aarch64`, `fma` or `sse42` backend is the build's.
-    #[cfg(not(inari_generic_backend))]
+    #[cfg(not(fushimi_generic_backend))]
     fn div_ru(self, x: F64X2, y: F64X2) -> F64X2 {
         crate::simd::div_ru(x, y)
     }
@@ -816,7 +816,7 @@ impl sealed::Backend for CrateBaseline {
     // `sysv64` `mul_add_ru`, it ran 1 more instruction per call for some classes of arguments and
     // 1 fewer for others in Cargo's default release profile, and had the same code as with
     // `mul_add_ru` with one codegen unit (cachegrind, row 154).
-    #[cfg(inari_generic_backend)]
+    #[cfg(fushimi_generic_backend)]
     #[inline(always)]
     fn mul_add_ru(self, x: F64X2, y: F64X2, z: F64X2) -> F64X2 {
         crate::simd::generic::mul_add_ru(x, y, z)
@@ -827,8 +827,8 @@ impl sealed::Backend for CrateBaseline {
     // `div_ru`, and the crate's operations call `mul_add_ru` out of line, as they did before
     // `Baseline` called the forwarder. Where `fma` is, `mul_add_ru` is `#[inline(always)]`, and so
     // is this method.
-    #[cfg(all(target_arch = "x86_64", not(inari_generic_backend)))]
-    #[cfg_attr(not(inari_sse42_backend), inline(always))]
+    #[cfg(all(target_arch = "x86_64", not(fushimi_generic_backend)))]
+    #[cfg_attr(not(fushimi_sse42_backend), inline(always))]
     fn mul_add_ru(self, x: F64X2, y: F64X2, z: F64X2) -> F64X2 {
         crate::simd::mul_add_ru(x, y, z)
     }
@@ -841,13 +841,13 @@ impl sealed::Backend for CrateBaseline {
     }
 
     // No inline attribute, as for `div_ru`.
-    #[cfg(inari_generic_backend)]
+    #[cfg(fushimi_generic_backend)]
     fn mul_ru(self, x: F64X2, y: F64X2) -> F64X2 {
         crate::simd::generic::mul_ru(x, y)
     }
 
     // No inline attribute, as for `div_ru`.
-    #[cfg(not(inari_generic_backend))]
+    #[cfg(not(fushimi_generic_backend))]
     fn mul_ru(self, x: F64X2, y: F64X2) -> F64X2 {
         crate::simd::mul_ru(x, y)
     }

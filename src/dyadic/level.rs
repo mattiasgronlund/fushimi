@@ -1,6 +1,6 @@
 // The run-time choice of the copy of the kernel's entries that uses an FMA.
 //
-// Under `cfg(inari_kernel_dispatch)`, which `build.rs` sets for x86-64 targets without `fma`
+// Under `cfg(fushimi_kernel_dispatch)`, which `build.rs` sets for x86-64 targets without `fma`
 // and without the feature `force-generic`, `HAS_FMA` is false, and each entry that
 // `level_entry!` defines calls one of two copies of its body `<f>_with::<FMA>`: on a CPU that has
 // `fma`, `fma_copy`, compiled with that target feature, in which `two_prod_err::<true>` is one
@@ -22,7 +22,7 @@
 // run time.
 
 cfg_if::cfg_if! {
-    if #[cfg(inari_kernel_dispatch)] {
+    if #[cfg(fushimi_kernel_dispatch)] {
         use std::sync::atomic::{AtomicU8, Ordering};
 
         // 0: not detected yet, 1: the CPU has no `fma`, 2: it has. Only `detect` stores, and it
@@ -49,9 +49,9 @@ cfg_if::cfg_if! {
         #[cold]
         #[inline(never)]
         fn detect() -> bool {
-            // `--cfg inari_force_no_fma` in RUSTFLAGS answers "no" on any CPU, to test and count
+            // `--cfg fushimi_force_no_fma` in RUSTFLAGS answers "no" on any CPU, to test and count
             // the Dekker copies on a CPU that has `fma`.
-            let yes = !cfg!(inari_force_no_fma) && std::is_x86_feature_detected!("fma");
+            let yes = !cfg!(fushimi_force_no_fma) && std::is_x86_feature_detected!("fma");
             LEVEL.store(if yes { 2 } else { 1 }, Ordering::Relaxed);
             yes
         }
@@ -79,7 +79,7 @@ cfg_if::cfg_if! {
 // call of `slow` into a loop around the call of `detect`, and then set up the frame of that call
 // at the start of `slow`, which a CPU without `fma` runs on every call. For an entry with a
 // run-time `up`, `fma_copy` takes `UP` as a constant, so that a caller with a constant direction,
-// inlining the entry (`#[cfg_attr(inari_kernel_dispatch, inline(always))]` on it), calls its own
+// inlining the entry (`#[cfg_attr(fushimi_kernel_dispatch, inline(always))]` on it), calls its own
 // copy.
 macro_rules! level_entry {
     // The direction is a constant `UP`.
@@ -87,13 +87,13 @@ macro_rules! level_entry {
         $(#[$attr:meta])*
         $vis:vis fn $name:ident<const UP: bool>($($arg:ident: $ty:ty),*) -> $ret:ty = $with:ident;
     ) => {
-        #[cfg(not(inari_kernel_dispatch))]
+        #[cfg(not(fushimi_kernel_dispatch))]
         $(#[$attr])*
         $vis fn $name<const UP: bool>($($arg: $ty),*) -> $ret {
             $with::<{ $crate::simd::HAS_FMA }, UP>($($arg),*)
         }
 
-        #[cfg(inari_kernel_dispatch)]
+        #[cfg(fushimi_kernel_dispatch)]
         $(#[$attr])*
         $vis fn $name<const UP: bool>($($arg: $ty),*) -> $ret {
             #[target_feature(enable = "fma")]
@@ -146,13 +146,13 @@ macro_rules! level_entry {
         @up $(#[$attr:meta])*
         $vis:vis fn $name:ident[$($arg:ident: $ty:ty),*] -> $ret:ty = $with:ident;
     ) => {
-        #[cfg(not(inari_kernel_dispatch))]
+        #[cfg(not(fushimi_kernel_dispatch))]
         $(#[$attr])*
         $vis fn $name($($arg: $ty,)* up: bool) -> $ret {
             $with::<{ $crate::simd::HAS_FMA }>($($arg,)* up)
         }
 
-        #[cfg(inari_kernel_dispatch)]
+        #[cfg(fushimi_kernel_dispatch)]
         $(#[$attr])*
         $vis fn $name($($arg: $ty,)* up: bool) -> $ret {
             #[target_feature(enable = "fma")]
@@ -200,13 +200,13 @@ macro_rules! level_entry {
         $(#[$attr:meta])*
         $vis:vis fn $name:ident($($arg:ident: $ty:ty),*) -> $ret:ty = $with:ident;
     ) => {
-        #[cfg(not(inari_kernel_dispatch))]
+        #[cfg(not(fushimi_kernel_dispatch))]
         $(#[$attr])*
         $vis fn $name($($arg: $ty),*) -> $ret {
             $with::<{ $crate::simd::HAS_FMA }>($($arg),*)
         }
 
-        #[cfg(inari_kernel_dispatch)]
+        #[cfg(fushimi_kernel_dispatch)]
         $(#[$attr])*
         $vis fn $name($($arg: $ty),*) -> $ret {
             #[target_feature(enable = "fma")]

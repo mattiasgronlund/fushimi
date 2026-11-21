@@ -28,7 +28,7 @@ use std::mem::transmute;
 //
 // The `cfg` is that of the `classify_bits` of `Baseline` that calls this function: the complement
 // of the union of the `cfg`s of the two that call the one of `src/simd/x86_64.rs`, as `build.rs`
-// sets `inari_generic_backend` wherever `force-generic` is on.
+// sets `fushimi_generic_backend` wherever `force-generic` is on.
 #[cfg(not(all(target_arch = "x86_64", not(feature = "force-generic"), not(docsrs))))]
 #[inline]
 pub(crate) fn classify_bits(x: &F64X2) -> u8 {

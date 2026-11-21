@@ -329,9 +329,9 @@ mod mpfr_tests {
         }
     }
 
-    // The number of random cases, which can be set with `INARI_PARSE_N`.
+    // The number of random cases, which can be set with `FUSHIMI_PARSE_N`.
     fn n_cases() -> u64 {
-        std::env::var("INARI_PARSE_N")
+        std::env::var("FUSHIMI_PARSE_N")
             .ok()
             .and_then(|s| s.parse().ok())
             .unwrap_or(if cfg!(debug_assertions) {
@@ -341,10 +341,10 @@ mod mpfr_tests {
             })
     }
 
-    // The random numbers of the test numbered `test`, which the seed `INARI_PARSE_SEED`
+    // The random numbers of the test numbered `test`, which the seed `FUSHIMI_PARSE_SEED`
     // changes. Without it, they are those of `Rng(test)`.
     fn rng(test: u64) -> Rng {
-        let seed = std::env::var("INARI_PARSE_SEED")
+        let seed = std::env::var("FUSHIMI_PARSE_SEED")
             .ok()
             .and_then(|s| s.parse::<u64>().ok())
             .unwrap_or(0);

@@ -574,7 +574,7 @@ fn fast_reduce(x: f64) -> Option<(i64, f64, f64, f64)> {
 
 // (ah + al) (bh + bl) as p + e, with p = RN(ah bh), from the exact error of that product
 // [Dekker] and the cross products. al bl is left out.
-#[cfg_attr(inari_kernel_dispatch, inline(always))]
+#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 fn fast_mul<const FMA: bool>(ah: f64, al: f64, bh: f64, bl: f64) -> (f64, f64) {
     let p = ah * bh;
     (p, two_prod_err::<FMA>(ah, bh, p) + (ah * bl + al * bh))
@@ -694,7 +694,7 @@ fn fast_reduce_any<const FMA: bool>(x: f64) -> Option<(i64, f64, f64, f64)> {
 // 106 of the 128 bits of R below those of n. The last 13 of those 128 come from the low limb r0
 // of R, which `fast_reduce_big` does not read. `rocq/theories/FastTrigBandBig.v` proves these
 // bounds (`fast_reduce_band_big_correct`).
-#[cfg_attr(inari_kernel_dispatch, inline(always))]
+#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 fn fast_reduce_band_big<const FMA: bool>(x: f64) -> Option<(i64, f64, f64, f64)> {
     let b = x.to_bits() & (u64::MAX >> 1);
     let be = b >> 52;
@@ -779,7 +779,7 @@ fn fast_sc(i: i64) -> (f64, f64, f64, f64) {
 // Taylor polynomials of cos ρ - 1 to degree 4 and of sin ρ - ρ to degree 5 are evaluated in
 // plain `f64` from rr, and C ρ in double-double. `rocq/theories/FastTrigEval.v` bounds the
 // error (`fast_eval_correct`).
-#[cfg_attr(inari_kernel_dispatch, inline(always))]
+#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 fn fast_eval<const FMA: bool>(
     sh: f64,
     sl: f64,
@@ -827,7 +827,7 @@ fn fast_cos0(x: f64) -> (f64, f64) {
 // the two sums of the tail and n (u - U1 - U2 - U3 - U4) are not, less than 2^-143 + 2^-105 |ρ|
 // together.
 // `rocq/theories/FastTrigBandRed.v` proves the bound (`fast_band_reduce_correct`).
-#[cfg_attr(inari_kernel_dispatch, inline(always))]
+#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 fn fast_band_reduce<const FMA: bool>(n: i64, rh: f64, rl: f64) -> (f64, f64, f64) {
     let kf = n as f64;
     let pl = two_prod_err::<FMA>(kf, f64::from_bits(U3), -rl);
@@ -870,10 +870,10 @@ fn fast_band_eval(q: i64, rh: f64, rl: f64, rr: f64) -> (f64, f64) {
 // and `cos_near`, and only these x take it. In a build with the dispatch (`level.rs`), only its
 // copy without an FMA is out of line, as `fast_band_dekker`, and the one with an FMA is inlined,
 // so that `fma_copy` compiles its products with the target feature `fma`.
-#[cfg_attr(not(inari_kernel_dispatch), inline(never))]
-#[cfg_attr(inari_kernel_dispatch, inline(always))]
+#[cfg_attr(not(fushimi_kernel_dispatch), inline(never))]
+#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 fn fast_band<const FMA: bool>(n: i64, s: i64, rh: f64, rl: f64) -> (f64, f64) {
-    #[cfg(inari_kernel_dispatch)]
+    #[cfg(fushimi_kernel_dispatch)]
     if !FMA {
         return fast_band_dekker(n, s, rh, rl);
     }
@@ -881,7 +881,7 @@ fn fast_band<const FMA: bool>(n: i64, s: i64, rh: f64, rl: f64) -> (f64, f64) {
 }
 
 // The copy of `fast_band` without an FMA in a build with the dispatch.
-#[cfg(inari_kernel_dispatch)]
+#[cfg(fushimi_kernel_dispatch)]
 #[inline(never)]
 fn fast_band_dekker(n: i64, s: i64, rh: f64, rl: f64) -> (f64, f64) {
     fast_band_body::<false>(n, s, rh, rl)
@@ -898,10 +898,10 @@ fn fast_band_body<const FMA: bool>(n: i64, s: i64, rh: f64, rl: f64) -> (f64, f6
 // n mod 2048 = 0, from the reduction of `fast_reduce_band_big`, and `None` at any other x, such
 // as those where it declines x as |rh| < 2^-65, NaN and the infinities. Out of line, and inlined
 // in `fma_copy`, as `fast_band`.
-#[cfg_attr(not(inari_kernel_dispatch), inline(never))]
-#[cfg_attr(inari_kernel_dispatch, inline(always))]
+#[cfg_attr(not(fushimi_kernel_dispatch), inline(never))]
+#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 fn fast_band_big<const FMA: bool>(x: f64, s: i64) -> Option<(f64, f64)> {
-    #[cfg(inari_kernel_dispatch)]
+    #[cfg(fushimi_kernel_dispatch)]
     if !FMA {
         return fast_band_big_dekker(x, s);
     }
@@ -909,7 +909,7 @@ fn fast_band_big<const FMA: bool>(x: f64, s: i64) -> Option<(f64, f64)> {
 }
 
 // The copy of `fast_band_big` without an FMA in a build with the dispatch.
-#[cfg(inari_kernel_dispatch)]
+#[cfg(fushimi_kernel_dispatch)]
 #[inline(never)]
 fn fast_band_big_dekker(x: f64, s: i64) -> Option<(f64, f64)> {
     fast_band_big_body::<false>(x, s)
@@ -984,7 +984,7 @@ fn fast_cos<const FMA: bool>(t: f64) -> Option<(f64, f64)> {
 // (nh + nl) / (dh + dl) as h + l, h = RN(h + l): qh = RN(nh / dh), and the remainder
 // nh - qh dh exactly [Dekker], with nl - qh dl, divided by dh. `rocq/theories/FastTrigDiv.v`
 // bounds the error (`fast_div_correct`).
-#[cfg_attr(inari_kernel_dispatch, inline(always))]
+#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 fn fast_div<const FMA: bool>(nh: f64, nl: f64, dh: f64, dl: f64) -> (f64, f64) {
     let qh = nh / dh;
     let p = qh * dh;
@@ -996,7 +996,7 @@ fn fast_div<const FMA: bool>(nh: f64, nl: f64, dh: f64, dl: f64) -> (f64, f64) {
 // h = RN(h + l), for n mod 2048 = 0 and ρ as in `fast_band_sin`: the quotient of sin ρ and
 // cos ρ from `fast_band_sin` and `fast_cos0`. `rocq/theories/FastTrigBandEval.v` bounds the
 // error (`band_tan_correct`).
-#[cfg_attr(inari_kernel_dispatch, inline(always))]
+#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 fn fast_band_tan<const FMA: bool>(n: i64, rh: f64, rl: f64, rr: f64) -> (f64, f64) {
     let ((sh, sl), (ch, cl)) = (fast_band_sin(rh, rl, rr), fast_cos0(rr));
     if n & 2048 == 0 {
@@ -1010,10 +1010,10 @@ fn fast_band_tan<const FMA: bool>(n: i64, rh: f64, rl: f64, rr: f64) -> (f64, f6
 // tan x as h + l, as `fast_band` does sin x, from the reduction (n, rh, rl, rr) of
 // `fast_reduce` at an x with n mod 2048 = 0 and n != 0. Out of line, and inlined in `fma_copy`,
 // as `fast_band`.
-#[cfg_attr(not(inari_kernel_dispatch), inline(never))]
-#[cfg_attr(inari_kernel_dispatch, inline(always))]
+#[cfg_attr(not(fushimi_kernel_dispatch), inline(never))]
+#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 fn fast_tan_band<const FMA: bool>(n: i64, rh: f64, rl: f64) -> (f64, f64) {
-    #[cfg(inari_kernel_dispatch)]
+    #[cfg(fushimi_kernel_dispatch)]
     if !FMA {
         return fast_tan_band_dekker(n, rh, rl);
     }
@@ -1021,7 +1021,7 @@ fn fast_tan_band<const FMA: bool>(n: i64, rh: f64, rl: f64) -> (f64, f64) {
 }
 
 // The copy of `fast_tan_band` without an FMA in a build with the dispatch.
-#[cfg(inari_kernel_dispatch)]
+#[cfg(fushimi_kernel_dispatch)]
 #[inline(never)]
 fn fast_tan_band_dekker(n: i64, rh: f64, rl: f64) -> (f64, f64) {
     fast_tan_band_body::<false>(n, rh, rl)
@@ -1036,10 +1036,10 @@ fn fast_tan_band_body<const FMA: bool>(n: i64, rh: f64, rl: f64) -> (f64, f64) {
 
 // tan x as h + l, as `fast_band_big` does sin x. Out of line, and inlined in `fma_copy`, as
 // `fast_band`.
-#[cfg_attr(not(inari_kernel_dispatch), inline(never))]
-#[cfg_attr(inari_kernel_dispatch, inline(always))]
+#[cfg_attr(not(fushimi_kernel_dispatch), inline(never))]
+#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 fn fast_tan_band_big<const FMA: bool>(x: f64) -> Option<(f64, f64)> {
-    #[cfg(inari_kernel_dispatch)]
+    #[cfg(fushimi_kernel_dispatch)]
     if !FMA {
         return fast_tan_band_big_dekker(x);
     }
@@ -1047,7 +1047,7 @@ fn fast_tan_band_big<const FMA: bool>(x: f64) -> Option<(f64, f64)> {
 }
 
 // The copy of `fast_tan_band_big` without an FMA in a build with the dispatch.
-#[cfg(inari_kernel_dispatch)]
+#[cfg(fushimi_kernel_dispatch)]
 #[inline(never)]
 fn fast_tan_band_big_dekker(x: f64) -> Option<(f64, f64)> {
     fast_tan_band_big_body::<false>(x)
@@ -1064,7 +1064,7 @@ fn fast_tan_band_big_body<const FMA: bool>(x: f64) -> Option<(f64, f64)> {
 // tan x as h + l, as `fast_sin` does sin x: sin and cos from the same reduction and `fast_sc`,
 // and their quotient, tan(i u + ρ) at an even q and -1 / tan(i u + ρ) at an odd one, within
 // 3 2^-71 |tan x| of tan x (`fast_tan_correct` in `rocq/theories/FastTrigCore.v`).
-#[cfg_attr(inari_kernel_dispatch, inline(always))]
+#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 fn fast_tan<const FMA: bool>(x: f64) -> Option<(f64, f64)> {
     let (n, rh, rl, rr) = match fast_reduce_any::<FMA>(x) {
         Some(r) => r,
@@ -1172,19 +1172,19 @@ fn fast_tan_dir<const FMA: bool>(x: f64, up: bool) -> Option<f64> {
     fast_round_dir(h, l, up)
 }
 
-#[cfg_attr(inari_kernel_dispatch, inline(always))]
+#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 fn fast_sin_near<const FMA: bool>(x: f64) -> Option<f64> {
     let (h, l) = fast_sin::<FMA>(x)?;
     fast_round_near(h, l)
 }
 
-#[cfg_attr(inari_kernel_dispatch, inline(always))]
+#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 fn fast_cos_near<const FMA: bool>(t: f64) -> Option<f64> {
     let (h, l) = fast_cos::<FMA>(t)?;
     fast_round_near(h, l)
 }
 
-#[cfg_attr(inari_kernel_dispatch, inline(always))]
+#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 fn fast_tan_near<const FMA: bool>(x: f64) -> Option<f64> {
     let (h, l) = fast_tan::<FMA>(x)?;
     fast_round_near(h, l)
@@ -1220,11 +1220,11 @@ fn sin_dir_with<const FMA: bool, const UP: bool>(x: f64) -> f64 {
         // x - x^3 / 6 <= sin x < x for x in (0, 1], and sin is odd.
         toward_zero(x, UP)
     } else {
-        #[cfg(not(inari_kernel_dispatch))]
+        #[cfg(not(fushimi_kernel_dispatch))]
         let r = sin_small(x, UP)
             .or_else(|| fast_sin_dir::<FMA>(x, UP))
             .unwrap_or_else(|| ziv(&Sin(x), UP, 1));
-        #[cfg(inari_kernel_dispatch)]
+        #[cfg(fushimi_kernel_dispatch)]
         let r = if let Some(r) = sin_small(x, UP) {
             r
         } else if let Some(r) = fast_sin_dir::<FMA>(x, UP) {
@@ -1284,11 +1284,11 @@ fn cos_dir_with<const FMA: bool, const UP: bool>(x: f64) -> f64 {
         // t < 2^-26. cos 0 = 1.
         near_one(-t, UP)
     } else {
-        #[cfg(not(inari_kernel_dispatch))]
+        #[cfg(not(fushimi_kernel_dispatch))]
         let r = cos_small(t, UP)
             .or_else(|| fast_cos_dir::<FMA>(t, UP))
             .unwrap_or_else(|| ziv(&Cos(t), UP, 1));
-        #[cfg(inari_kernel_dispatch)]
+        #[cfg(fushimi_kernel_dispatch)]
         let r = if let Some(r) = cos_small(t, UP) {
             r
         } else if let Some(r) = fast_cos_dir::<FMA>(t, UP) {
@@ -1345,11 +1345,11 @@ fn tan_dir_with<const FMA: bool, const UP: bool>(x: f64) -> f64 {
         // x < tan x < x + x^3 / 2 for x in (0, 2^-26), and tan is odd.
         away(x, UP)
     } else {
-        #[cfg(not(inari_kernel_dispatch))]
+        #[cfg(not(fushimi_kernel_dispatch))]
         let r = tan_small(x, UP)
             .or_else(|| fast_tan_dir::<FMA>(x, UP))
             .unwrap_or_else(|| ziv(&Tan(x), UP, 1));
-        #[cfg(inari_kernel_dispatch)]
+        #[cfg(fushimi_kernel_dispatch)]
         let r = if let Some(r) = tan_small(x, UP) {
             r
         } else if let Some(r) = fast_tan_dir::<FMA>(x, UP) {

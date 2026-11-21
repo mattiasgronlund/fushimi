@@ -191,11 +191,11 @@ jobs:
         run: cargo test --release --no-default-features --lib --tests
 
       # The kernel's copies with Dekker's products, on the runner's CPU:
-      # `--cfg inari_force_no_fma` makes the kernel take them on any CPU.
-      - name: Test the kernel without FMA (--cfg inari_force_no_fma)
+      # `--cfg fushimi_force_no_fma` makes the kernel take them on any CPU.
+      - name: Test the kernel without FMA (--cfg fushimi_force_no_fma)
         run: cargo test --release --lib dyadic
         env:
-          RUSTFLAGS: -Ctarget-cpu=x86-64 --cfg inari_force_no_fma -Dwarnings
+          RUSTFLAGS: -Ctarget-cpu=x86-64 --cfg fushimi_force_no_fma -Dwarnings
 
       # The same tests in QEMU's user mode, emulating a Nehalem, which has neither
       # FMA nor AVX: the kernel detects that and takes the same copies, and an FMA

@@ -921,7 +921,7 @@ fn assert_copies_agree(i: usize, x: f64) {
 // `fast_reduce_big` declines, a few others above `LIMIT`, and `regressions()`. This checks the
 // code as compiled, where the entries call the copy built with the target feature `fma` in a
 // build with the dispatch, on a CPU that has it, and the copy without an FMA with
-// `--cfg inari_force_no_fma`.
+// `--cfg fushimi_force_no_fma`.
 #[test]
 fn copies_agree() {
     let mut rng = Rng(907);

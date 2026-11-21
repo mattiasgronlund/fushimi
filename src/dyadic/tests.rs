@@ -69,10 +69,10 @@ impl Rng {
     }
 }
 
-// The number of random cases, which can be set with `INARI_DYADIC_N`. There are fewer at the
+// The number of random cases, which can be set with `FUSHIMI_DYADIC_N`. There are fewer at the
 // higher precisions, where each costs more.
 pub(super) fn n_cases<const N: usize>() -> u64 {
-    let n = std::env::var("INARI_DYADIC_N")
+    let n = std::env::var("FUSHIMI_DYADIC_N")
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(if cfg!(debug_assertions) { 300 } else { 3_000 });

@@ -170,7 +170,7 @@ pub(crate) fn normalize(h: f64, l: f64) -> (f64, f64, i64) {
 /// The quotient (nh + nl) / (dh + dl) in double-double, as (qh, ql) with qh = RN(qh + ql) and
 /// |qh + ql - q| <= 2^-98 q for the quotient q, for 2^-80 <= nh <= 4, |nl| <= 2^-50 nh,
 /// 1/2 <= dh <= 4 and |dl| <= 2^-52 dh. [Dekker]
-#[cfg_attr(inari_kernel_dispatch, inline(always))]
+#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 pub(crate) fn dd_div<const FMA: bool>(nh: f64, nl: f64, dh: f64, dl: f64) -> (f64, f64) {
     let qh = nh / dh;
     // nh - qh dh exactly: p + pe = qh dh exactly, nh - p is exact by Sterbenz's lemma, and the
@@ -530,7 +530,7 @@ pub(crate) fn round_near_signed(h: f64, l: f64, e: i64) -> Option<f64> {
 /// The square root of ah + al in double-double, as (sh, sl) with sh = RN(sh + sl) and
 /// |sh + sl - √(ah + al)| <= 2^-100 √(ah + al), for 2^-900 <= ah <= 2^900 and |al| <= 2^-52 ah:
 /// s = RN(√ah) and one correction step. [Dekker]
-#[cfg_attr(inari_kernel_dispatch, inline(always))]
+#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 pub(crate) fn dd_sqrt<const FMA: bool>(ah: f64, al: f64) -> (f64, f64) {
     let s = ah.sqrt();
     // ah - s^2 exactly: p + pe = s^2 exactly, ah - p is exact by Sterbenz's lemma, and the

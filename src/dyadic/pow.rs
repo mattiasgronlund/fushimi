@@ -409,7 +409,7 @@ fn to_k(c: f64) -> i64 {
 // RN(y ll). Where 2^-60 <= |y ln x| and |th| <= 752, y lh is exact as th plus that error, and
 // t is within 13/16 2^-69 of y ln x, and within 3/4 2^-69 where |th| <= 709
 // (`rocq/theories/FastPowMul.v`). At x = 1 and |y| <= 2^900, th and tl are zeros.
-#[cfg_attr(inari_kernel_dispatch, inline(always))]
+#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 fn pow_t<const FMA: bool>(x: f64, y: f64) -> (f64, f64) {
     let (lh, ll) = ln_acc::<FMA>(x);
     let th = y * lh;
@@ -859,7 +859,7 @@ fn pown_pos_with<const FMA: bool>(x: f64, n: i32, up: bool) -> f64 {
 level_entry! {
     // x^n rounded to nearest, ties to even, for a finite x > 0 and n != 0, with the bounds of
     // `pown_pos`.
-    #[cfg_attr(inari_kernel_dispatch, inline(always))]
+    #[cfg_attr(fushimi_kernel_dispatch, inline(always))]
     fn pown_pos_near(x: f64, n: i32) -> f64 = pown_pos_near_with;
 }
 

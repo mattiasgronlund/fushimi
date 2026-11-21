@@ -144,7 +144,7 @@ const TINY_EXP10: f64 = f64::EPSILON / 16.0;
 // first one: the caller is compiled without the target features of the body's copies, and there
 // the test would cost every other argument a separate load of its mask and a second jump, and
 // `near_one(x, true)` and `away(x, true)` would branch on the sign of x.
-const TINY_IN_CALLER: bool = !cfg!(inari_kernel_dispatch);
+const TINY_IN_CALLER: bool = !cfg!(fushimi_kernel_dispatch);
 
 // 2^-27: the arguments of smaller magnitude have results within half an ulp of x, or of 1,
 // for the functions rounded to nearest that take it, as x^2 < 2^-54.
@@ -539,7 +539,7 @@ pub(super) fn fast_exp<const FMA: bool>(zh: f64, zl: f64) -> Option<(f64, f64, i
 // e^(x c) for c = ch + cl, given as the bits [ch, cl], from `fast_exp`: z = x ch + x cl, with
 // x ch in double-double. The product is exact for 2^-56 <= |x| <= 1075, which the rules of
 // `exp2` and `exp10` leave.
-#[cfg_attr(inari_kernel_dispatch, inline(always))]
+#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 fn fast_exp_by<const FMA: bool>(x: f64, c: [u64; 2]) -> Option<(f64, f64, i64)> {
     let (ch, cl) = (f64::from_bits(c[0]), f64::from_bits(c[1]));
     let zh = x * ch;
@@ -620,7 +620,7 @@ fn fast_exp10_dir<const FMA: bool>(x: f64, up: bool) -> Option<f64> {
     }
 }
 
-#[cfg_attr(inari_kernel_dispatch, inline(always))]
+#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 fn fast_exp_near<const FMA: bool>(x: f64) -> Option<f64> {
     match fast_exp::<FMA>(x, 0.0) {
         Some((h, l, e)) => round_near(h, l, e),
@@ -631,7 +631,7 @@ fn fast_exp_near<const FMA: bool>(x: f64) -> Option<f64> {
     }
 }
 
-#[cfg_attr(inari_kernel_dispatch, inline(always))]
+#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 fn fast_exp2_near<const FMA: bool>(x: f64) -> Option<f64> {
     match fast_exp_by::<FMA>(x, LN2) {
         Some((h, l, e)) => round_near(h, l, e),
@@ -642,7 +642,7 @@ fn fast_exp2_near<const FMA: bool>(x: f64) -> Option<f64> {
     }
 }
 
-#[cfg_attr(inari_kernel_dispatch, inline(always))]
+#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 fn fast_exp10_near<const FMA: bool>(x: f64) -> Option<f64> {
     match fast_exp_by::<FMA>(x, LN10) {
         Some((h, l, e)) => round_near(h, l, e),
@@ -664,7 +664,7 @@ pub(super) fn two_pow(e: i64) -> f64 {
 // of t ul and of its sum with the error of t uh, by `two_prod_err` [Dekker]; the tail after 1/6
 // is in plain `f64`, and 1/6 + u A in double-double, normalized by [Dekker]'s Fast2Sum as
 // 1/6 > u A.
-#[cfg_attr(inari_kernel_dispatch, inline(always))]
+#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 fn fast_sinh_poly<const FMA: bool>(t: f64) -> (f64, f64) {
     let uh = t * t;
     let ul = two_prod_err::<FMA>(t, t, uh);
@@ -690,7 +690,7 @@ fn fast_sinh_poly<const FMA: bool>(t: f64) -> (f64, f64) {
 // whose truncation is below 2^-78. u / 2 + u^2 A in double-double, then 1 + u / 2 + u^2 A, by
 // Fast2Sum [Dekker] as 1 > u / 2 > u^2 A. ch need not be RN(ch + cl): cl adds m0 + ul / 2 to
 // the error of 1 + mh, which can pass half an ulp of ch. `dd_div` needs only the bound on cl.
-#[cfg_attr(inari_kernel_dispatch, inline(always))]
+#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 fn fast_cosh_poly<const FMA: bool>(t: f64) -> (f64, f64) {
     let uh = t * t;
     let ul = two_prod_err::<FMA>(t, t, uh);
@@ -749,7 +749,7 @@ fn fast_sinh_pos<const FMA: bool>(t: f64) -> Option<(f64, f64, i64, f64)> {
 
 // cosh t for t >= 0 as `fast_sinh_pos` returns sinh t, from (e^t + e^-t) / 2 for every t, as
 // the sum does not cancel, halved where it is 2 or more.
-#[cfg_attr(inari_kernel_dispatch, inline(always))]
+#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 fn fast_cosh_pos<const FMA: bool>(t: f64) -> Option<(f64, f64, i64, f64)> {
     let (h, l, e) = match fast_exp::<FMA>(t, 0.0) {
         Some(r) => r,
@@ -812,14 +812,14 @@ fn fast_tanh_pos<const FMA: bool>(t: f64) -> Option<(f64, f64, i64, f64)> {
 // sinh x, cosh t for t = |x| and tanh x rounded toward +∞ if `up` and toward -∞ otherwise, and
 // to nearest, by the fast paths, or `None` where the rounding test fails or the argument is
 // out of their range. sinh and tanh are odd: for x < 0, f(x) rounded up is -f(-x) rounded down.
-#[cfg_attr(inari_kernel_dispatch, inline(always))]
+#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 fn fast_sinh_dir<const FMA: bool>(x: f64, up: bool) -> Option<f64> {
     let (h, l, e, err) = fast_sinh_pos::<FMA>(x.abs())?;
     let r = round_dir_err(h, l, e, err, up != (x < 0.0))?;
     Some(if x < 0.0 { -r } else { r })
 }
 
-#[cfg_attr(inari_kernel_dispatch, inline(always))]
+#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 fn fast_cosh_dir<const FMA: bool>(t: f64, up: bool) -> Option<f64> {
     let (h, l, e, err) = fast_cosh_pos::<FMA>(t)?;
     round_dir_err(h, l, e, err, up)
@@ -837,20 +837,20 @@ fn fast_tanh_dir<const FMA: bool>(x: f64, up: bool) -> Option<f64> {
     Some(if x < 0.0 { -r } else { r })
 }
 
-#[cfg_attr(inari_kernel_dispatch, inline(always))]
+#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 fn fast_sinh_near<const FMA: bool>(x: f64) -> Option<f64> {
     let (h, l, e, err) = fast_sinh_pos::<FMA>(x.abs())?;
     let r = round_near_err(h, l, e, err)?;
     Some(if x < 0.0 { -r } else { r })
 }
 
-#[cfg_attr(inari_kernel_dispatch, inline(always))]
+#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 fn fast_cosh_near<const FMA: bool>(t: f64) -> Option<f64> {
     let (h, l, e, err) = fast_cosh_pos::<FMA>(t)?;
     round_near_err(h, l, e, err)
 }
 
-#[cfg_attr(inari_kernel_dispatch, inline(always))]
+#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 fn fast_tanh_near<const FMA: bool>(x: f64) -> Option<f64> {
     let (h, l, e, err) = fast_tanh_pos::<FMA>(x.abs())?;
     let r = round_near_err(h, l, e, err)?;
@@ -1285,8 +1285,8 @@ level_entry! {
     // -∞ otherwise, for a t that `cosh` has not returned for: NaN, +∞, or t >= `TINY_HYP`, or any
     // x without `TINY_IN_CALLER`. With the dispatch, it is inlined in `cosh`, as the entry `cosh`
     // with a run-time `up` was, so that `cosh` tests `LEVEL` itself; without it, out of line.
-    #[cfg_attr(inari_kernel_dispatch, inline(always))]
-    #[cfg_attr(not(inari_kernel_dispatch), inline(never))]
+    #[cfg_attr(fushimi_kernel_dispatch, inline(always))]
+    #[cfg_attr(not(fushimi_kernel_dispatch), inline(never))]
     fn cosh_dir<const UP: bool>(t: f64) -> f64 = cosh_dir_with;
 }
 
@@ -1347,7 +1347,7 @@ level_entry! {
     // `cosh_near` of t = |x| (of x without `TINY_IN_CALLER`, `abs_or_x`), for a t that
     // `cosh_near` has not returned for: NaN, +∞, or t >= `TINY_NEAR`, or any x without
     // `TINY_IN_CALLER`. Out of line without the dispatch, as `cosh_dir`.
-    #[cfg_attr(not(inari_kernel_dispatch), inline(never))]
+    #[cfg_attr(not(fushimi_kernel_dispatch), inline(never))]
     fn cosh_near_abs(t: f64) -> f64 = cosh_near_with;
 }
 

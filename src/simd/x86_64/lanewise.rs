@@ -249,13 +249,13 @@ pub(super) fn or_generic_unless(bad: F64X2, r: F64X2, generic: impl FnOnce() -> 
 // `div_ru` 4 instructions (objdump of an `x86-64` build).
 macro_rules! impl_generic_slow_path {
     ($f:ident, $g:ident) => {
-        #[cfg(not(inari_generic_backend))]
+        #[cfg(not(fushimi_generic_backend))]
         #[inline(always)]
         pub(super) fn $f(x: F64X2, y: F64X2) -> [f64; 2] {
             generic::$g(extract(x), extract(y))
         }
 
-        #[cfg(inari_generic_backend)]
+        #[cfg(fushimi_generic_backend)]
         #[allow(improper_ctypes_definitions)] // `__m128d` and `[f64; 2]` (see `generic::$g`).
         #[inline(never)]
         pub(super) extern "sysv64-unwind" fn $f(x: F64X2, y: F64X2) -> [f64; 2] {
