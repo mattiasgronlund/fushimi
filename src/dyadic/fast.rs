@@ -155,8 +155,8 @@ pub(crate) fn two_sum(a: f64, b: f64) -> (f64, f64) {
     (s, (a - a1) + (b - b1))
 }
 
-// r 2^e, for e in [-1021, 1022], which is exact where the result is a normal `f64`.
-fn scale(r: f64, e: i64) -> f64 {
+/// r 2^e, for e in [-1021, 1022], which is exact where the result is a normal `f64`.
+pub(crate) fn scale(r: f64, e: i64) -> f64 {
     r * f64::from_bits(((e + 1023) as u64) << 52)
 }
 

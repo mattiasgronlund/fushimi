@@ -143,7 +143,7 @@ const POW_START_BITS: i64 = 10;
 const POWN_START_BITS: u32 = 9;
 
 // (m, e) for a finite nonzero x, with |x| = m 2^e and an odd m, from the bits of x.
-fn odd_parts(x: f64) -> (u64, i64) {
+pub(super) fn odd_parts(x: f64) -> (u64, i64) {
     let bits = x.to_bits();
     let be = ((bits >> 52) & 0x7ff) as i64;
     let f = bits & ((1 << 52) - 1);

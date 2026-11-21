@@ -18,10 +18,12 @@
 // The fast paths in `f64` (`fast_cbrt_dir`, `fast_cbrt_near`, `fast_hypot` and
 // `fast_hypot_near`) give the same `f64`s as the kernel, which `set_fast_path(false)` leaves
 // alone, on random sets of their own, and most of their rounding tests pass there
-// (`fast_counts`). They leave to the kernel the exact cubes and the exact results of hypot in
-// both directions, the midpoints of hypot to nearest, the arguments whose root rounds to h = 2
-// in `fast_cbrt`, and the pairs that `hypot_dd` does not take. The rule of hypot at a gap of 27
-// in `fast_hypot`, on exponent fields, holds only where the gap of `hypot_odd` is 27 or more.
+// (`fast_counts`). Their directed rounding tests fail at the exact cubes, which `cbrt_exact`
+// then gives, and it declines the `f64`s next to them. The fast paths leave to the kernel the
+// exact results of hypot in both directions, the midpoints of hypot to nearest, the arguments
+// whose root rounds to h = 2 in `fast_cbrt`, and the pairs that `hypot_dd` does not take. The
+// rule of hypot at a gap of 27 in `fast_hypot`, on exponent fields, holds only where the gap of
+// `hypot_odd` is 27 or more.
 
 use super::*;
 use crate::dyadic::fast::{fast_counts, reset_fast_counts, set_fast_path};
@@ -972,15 +974,22 @@ fn copies_agree() {
     }
 }
 
-// The exact cubes x = y^3 of y = r 2^a for small odd r at every a, and for random r as in
-// `cbrt_cubes`, at both signs: the fast path to nearest gives y, and the directed ones decline,
-// as l is within `ERR_CBRT` of 0 there, so that `cbrt_odd` decides them.
-#[test]
-fn fast_cbrt_declines_cubes() {
+// The odd r of the exact cubes (r 2^a)^3 of `fast_cbrt_takes_cubes` and
+// `fast_cbrt_declines_next_to_cubes`: small ones, 208_063, the largest r with r^3 < 2^53, and
+// random odd ones up to it, as in `cbrt_cubes`.
+fn cube_roots() -> Vec<u64> {
     let mut rng = Rng(10601);
     let mut rs = vec![1, 3, 5, 7, 9, 11, 13, 15, 255, 1001, 208_063];
     rs.extend((0..200).map(|_| 2 * rng.below(104_032) + 1));
-    for r in rs {
+    rs
+}
+
+// The exact cubes x = y^3 of y = r 2^a of `cube_roots` at every a, at both signs: the fast paths
+// give y in both directions and to nearest. The directed rounding tests fail there, as l is
+// within `ERR_CBRT` of 0, so `cbrt_exact` gives |y|, whose sign `fast_cbrt_dir` restores.
+#[test]
+fn fast_cbrt_takes_cubes() {
+    for r in cube_roots() {
         let cube = r * r * r;
         let bits = i64::from(64 - cube.leading_zeros());
         // The top bit of x is 2^(bits - 1 + 3 a), at most 2^1023, and x is at least 2^-1074.
@@ -989,18 +998,20 @@ fn fast_cbrt_declines_cubes() {
             for s in [-1.0, 1.0] {
                 let (x, y) = (s * x, s * y);
                 let what = format!("cbrt({:e})", x);
+                reset_fast_counts();
                 assert_eq!(
-                    fast_cbrt_dir::<HAS_FMA>(x, false),
-                    None,
+                    fast_cbrt_dir::<HAS_FMA>(x, false).map(f64::to_bits),
+                    Some(y.to_bits()),
                     "{} toward -∞",
                     what
                 );
                 assert_eq!(
-                    fast_cbrt_dir::<HAS_FMA>(x, true),
-                    None,
+                    fast_cbrt_dir::<HAS_FMA>(x, true).map(f64::to_bits),
+                    Some(y.to_bits()),
                     "{} toward +∞",
                     what
                 );
+                assert_eq!(fast_counts(), (0, 2), "{}", what);
                 assert_eq!(
                     fast_cbrt_near::<HAS_FMA>(x).map(f64::to_bits),
                     Some(y.to_bits()),
@@ -1010,6 +1021,85 @@ fn fast_cbrt_declines_cubes() {
             }
         }
     }
+}
+
+// `cbrt_exact` at a finite nonzero `x`, with the (h, e) that `fast_cbrt` gives there, against the
+// kernel: it gives |cbrt x| where the kernel's roundings toward -∞ and +∞ agree, as cbrt x is
+// then an `f64`, and `None` elsewhere. Where the directed rounding tests fail, `fast_cbrt_dir`
+// gives that value with the sign of `x`. Checks the fast paths at `x` with `check_fast_cbrt`
+// too. Returns whether `cbrt_exact` declined and whether the directed tests failed, or `None`
+// where `fast_cbrt` does.
+fn check_cbrt_exact(x: f64) -> Option<(bool, bool)> {
+    check_fast_cbrt(x);
+    let (h, _, e) = fast_cbrt::<HAS_FMA>(x)?;
+    set_fast_path(false);
+    let (lo, hi) = (cbrt(x, false), cbrt(x, true));
+    set_fast_path(true);
+    let want = (lo == hi).then_some(lo.abs());
+    let what = format!("cbrt({:e})", x);
+    assert_eq!(
+        cbrt_exact(x, h, e).map(f64::to_bits),
+        want.map(f64::to_bits),
+        "cbrt_exact({:e}, {:e}, {}) for {}",
+        x,
+        h,
+        e,
+        what
+    );
+    reset_fast_counts();
+    let dir = [
+        fast_cbrt_dir::<HAS_FMA>(x, false),
+        fast_cbrt_dir::<HAS_FMA>(x, true),
+    ];
+    let (_, failed) = fast_counts();
+    if failed > 0 {
+        let want = want.map(|c| if x < 0.0 { -c } else { c });
+        assert_eq!(dir, [want; 2], "{}", what);
+    }
+    Some((want.is_none(), failed > 0))
+}
+
+// The `f64`s next to the exact cubes x = (r 2^a)^3 of `fast_cbrt_takes_cubes`, at both signs, for
+// a sample of the a there: -358 to -356 and a random a from -358 to -341, where x is subnormal
+// for cubes below 2^(-1022 - 3 a), the two highest a, and eight random ones. `cbrt_exact`
+// declines each of them (`check_cbrt_exact`), and the kernel gives the results. The directed
+// rounding tests fail where h = 2, below a normal x = 2^(3 a) (`fast_cbrt_near_two`): h = 2
+// passes the test of the 35 low bits in `cbrt_exact`, but the odd part of x, 2^53 - 1, is not 1.
+#[test]
+fn fast_cbrt_declines_next_to_cubes() {
+    let mut rng = Rng(10603);
+    let (mut declined, mut failed, mut checked) = (0, 0, 0);
+    for r in cube_roots() {
+        let cube = r * r * r;
+        let bits = i64::from(64 - cube.leading_zeros());
+        let top = (1024 - bits) / 3;
+        let span = |lo: i64, hi: i64| u64::try_from(hi - lo + 1).unwrap();
+        let mut aa = vec![-358, -357, -356, top - 1, top];
+        aa.push(-358 + rng.below(span(-358, -341)) as i64);
+        aa.extend((0..8).map(|_| -358 + rng.below(span(-358, top)) as i64));
+        for a in aa {
+            let x = cube as f64 * pow2(3 * a);
+            for x in [x, -x] {
+                for x in [f64::next_down(x), f64::next_up(x)] {
+                    if x == 0.0 {
+                        continue;
+                    }
+                    if let Some((d, f)) = check_cbrt_exact(x) {
+                        checked += 1;
+                        declined += usize::from(d);
+                        failed += usize::from(f);
+                    }
+                }
+            }
+        }
+    }
+    assert!(
+        declined == checked && failed > 0 && checked > 5_000,
+        "{} declined, {} failed, {} checked",
+        declined,
+        failed,
+        checked
+    );
 }
 
 // Arguments next to 8 2^(3 a), for every a, at both signs: where cbrt x 2^-e is next to 2, the fast
@@ -1171,6 +1261,49 @@ fn fast_hypot_declines_triples() {
         exact,
         midpoints
     );
+}
+
+// `cbrt_exact` on its own: it gives c = h 2^e where c^3 = |x|, for any normal h and e in
+// [-1021, 1022] with that c, and `None` where c is another number. `fast_cbrt` gives h in [1, 2)
+// and e with c = h 2^e, here 27 = (1.5 2^1)^3.
+#[test]
+fn exact_arms() {
+    let hl = |v: Option<(f64, f64, i64)>| v.map(|(h, _, e)| (h, e));
+    let tiny = 27.0 * pow2(-1074);
+    assert_eq!(hl(fast_cbrt::<HAS_FMA>(27.0)), Some((1.5, 1)));
+    assert_eq!(hl(fast_cbrt::<HAS_FMA>(-27.0)), Some((1.5, 1)));
+    assert_eq!(hl(fast_cbrt::<HAS_FMA>(tiny)), Some((1.5, -357)));
+    let (h8, e8) = hl(fast_cbrt::<HAS_FMA>(f64::next_down(8.0))).unwrap();
+    assert_eq!(h8, 2.0);
+    for (x, h, e, want) in [
+        (27.0, 1.5, 1, Some(3.0)),
+        (-27.0, 1.5, 1, Some(3.0)),
+        (8.0, 1.0, 1, Some(2.0)),
+        (1.0, 1.0, 0, Some(1.0)),
+        (0.125, 1.0, -1, Some(0.5)),
+        (tiny, 1.5, -357, Some(3.0 * pow2(-358))),
+        (-tiny, 0.75, -356, Some(3.0 * pow2(-358))),
+        // c = 1.5, whose cube is 27 / 8.
+        (27.0, 1.5, 0, None),
+        // The 35 low bits of the significand of h are not all zeros.
+        (27.0, f64::next_up(1.5), 1, None),
+        (27.0, f64::next_down(1.5), 1, None),
+        // 28 = 7 2^2, whose odd part is not 3^3.
+        (28.0, 1.5, 1, None),
+        // 54 = 27 2, whose odd part is 3^3, but not its exponent 3 (-1 + 1).
+        (54.0, 1.5, 1, None),
+        // h = 2 at the `f64` below 8 (`fast_cbrt_near_two`), whose odd part is 2^53 - 1.
+        (f64::next_down(8.0), h8, e8, None),
+    ] {
+        assert_eq!(
+            cbrt_exact(x, h, e).map(f64::to_bits),
+            want.map(f64::to_bits),
+            "cbrt_exact({:e}, {:e}, {})",
+            x,
+            h,
+            e
+        );
+    }
 }
 
 // `hypot_dd` takes big from 2^-1022 to below 2^1022, and declines big of 2^1022 or more and

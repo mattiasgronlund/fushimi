@@ -1767,8 +1767,9 @@ Definition fast_two_sum (a b : f64) : f64 * f64 :=
   let s := add a b in
   (s, add b (sub a s)).
 
-(** [fn scale(r: f64, e: i64) -> f64], where [(e + 1023) as u64] is
-    [(e + 1023) mod 2^64], and [<< 52] drops the bits above 64. *)
+(** [pub(crate) fn scale(r: f64, e: i64) -> f64], where
+    [(e + 1023) as u64] is [(e + 1023) mod 2^64], and [<< 52] drops the
+    bits above 64. *)
 Definition scale (r : f64) (e : Z) : f64 :=
   mul r (from_bits (Z.shiftl ((e + 1023) mod 2^64) 52 mod 2^64)).
 
@@ -5735,9 +5736,9 @@ Definition to_i32 (c : f64) : Z :=
   | _ => Z.max (- 2 ^ 31) (Z.min (2 ^ 31 - 1) (Btrunc c))
   end.
 
-(** [fn odd_parts(x: f64) -> (u64, i64)], where [m >> z] is [Z.shiftr],
-    as [z < 64] for the nonzero [x] that its callers pass, and [e + z] is
-    computed without a check. *)
+(** [pub(super) fn odd_parts(x: f64) -> (u64, i64)], where [m >> z] is
+    [Z.shiftr], as [z < 64] for the nonzero [x] that its callers pass, and
+    [e + z] is computed without a check. *)
 Definition odd_parts (x : f64) : Z * Z :=
   let bits := to_bits x in
   let be := Z.land (Z.shiftr bits 52) 0x7ff in
@@ -6200,11 +6201,11 @@ End DyadicPow.
     [hypot_odd], with [DyHypotExact.v] for its branch below the cut, and
     [DyHypot.v] [hypot] and [hypot_near]. [FastCbrtReduce.v] proves the
     reduction of [fast_cbrt], [FastCbrtNewton.v] and [FastCbrtStep.v]
-    [cbrt_step], and [FastCbrt.v] [fast_cbrt], [fast_cbrt_dir] and
-    [fast_cbrt_near]. [FastHypotFar.v] proves the rule at a difference of
-    27 of [fast_hypot] and [fast_hypot_near], [FastHypotSum.v] and
-    [FastHypotDd.v] [hypot_dd], and [FastHypot.v] [fast_hypot] and
-    [fast_hypot_near]. *)
+    [cbrt_step], and [FastCbrt.v] [fast_cbrt], [cbrt_exact],
+    [fast_cbrt_dir] and [fast_cbrt_near]. [FastHypotFar.v] proves the
+    rule at a difference of 27 of [fast_hypot] and [fast_hypot_near],
+    [FastHypotSum.v] and [FastHypotDd.v] [hypot_dd], and [FastHypot.v]
+    [fast_hypot] and [fast_hypot_near]. *)
 Module DyadicRoot.
 
 (** [fn odd<N>(neg: bool, s: &[u64], e: i64, inexact: bool) -> Dyadic<N>]
@@ -6332,13 +6333,32 @@ Definition fast_cbrt (fma : bool) (x : f64) : option (f64 * f64 * Z) :=
   | None => None
   end.
 
+(** [fn cbrt_exact(x: f64, h: f64, e: i64) -> Option<f64>], without the
+    statement under [#[cfg(test)]], where [h.to_bits() & ((1 << 35) - 1)]
+    is [Z.land (to_bits h) (2 ^ 35 - 1)], the [u64] product
+    [mh * mh * mh], below 2^54 as [mh < 2^18] where the test of the low
+    bits passes, and the [i64] operations, which cannot overflow, are
+    computed without a check. [FastCbrt.v] proves it. *)
+Definition cbrt_exact (x h : f64) (e : Z) : option f64 :=
+  if Z.land (to_bits h) (2 ^ 35 - 1) =? 0 then
+    let '(mh, eh) := DyadicPow.odd_parts h in
+    let '(mx, ex) := DyadicPow.odd_parts x in
+    if (mh * mh * mh =? mx) && (3 * (eh + e) =? ex) then Some (Fast.scale h e) else None
+  else None.
+
 (** [fn fast_cbrt_dir(x: f64, up: bool) -> Option<f64>] and [fn
     fast_cbrt_near(x: f64) -> Option<f64>], where [up != (x < 0.0)] is
-    [xorb up (lt x zero)]. [FastCbrt.v] proves them. *)
+    [xorb up (lt x zero)], and [o.or_else(|| p)] is [match o with Some v
+    => Some v | None => p end]. [FastCbrt.v] proves them. *)
 Definition fast_cbrt_dir (fma : bool) (x : f64) (up : bool) : option f64 :=
   match fast_cbrt fma x with
   | Some (h, l, e) =>
-    match Fast.round_dir_err h l e err_cbrt (xorb up (lt x zero)) with
+    match
+      match Fast.round_dir_err h l e err_cbrt (xorb up (lt x zero)) with
+      | Some r => Some r
+      | None => cbrt_exact x h e
+      end
+    with
     | Some r => Some (if lt x zero then opp r else r)
     | None => None
     end

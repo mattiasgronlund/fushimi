@@ -948,6 +948,7 @@ Print Assumptions FastCbrtStep.cbrt_step_fma.
 Print Assumptions FastCbrtReduce.cbrt_split_bits.
 Print Assumptions FastCbrtReduce.cbrt_zz_rr.
 Print Assumptions FastCbrt.fast_cbrt_correct.
+Print Assumptions FastCbrt.cbrt_exact_correct.
 Print Assumptions FastCbrt.fast_cbrt_dir_correct.
 Print Assumptions FastCbrt.fast_cbrt_near_correct.
 Print Assumptions FastCbrt.fast_cbrt_dir_fma.

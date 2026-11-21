@@ -34,7 +34,10 @@
 // `None` unless 1/2 < h < 2; only the rule of `fast_hypot` below, at a gap of 27 or more,
 // decides without them. Where a fast path returns `None`, `cbrt_odd` or `hypot_odd` computes
 // the result. An exact result fails the directed tests, and a midpoint of two `f64`s the tests
-// to nearest, which are strict, so those always go to the kernel: the rule meets neither.
+// to nearest, which are strict: the rule meets neither. Where the directed test of
+// `fast_cbrt_dir` fails, `cbrt_exact` returns the result if it is an `f64` (argued there and
+// tested, not proved), so that the exact results of cbrt go to the kernel only where
+// `fast_cbrt` returns `None`, and those of hypot and the midpoints always do.
 //
 // `fast_cbrt` follows CORE-MATH's `cbrt` [CORE-MATH]. It writes |x| = zz 2^(3 (et - 1365))
 // with zz in [1, 8) from the bits of x, the significand of a subnormal x shifted to the top
@@ -53,8 +56,8 @@
 // big is subnormal or at least 2^1022.
 //
 // `rocq/theories/Model.v` transcribes each function of this file except the tests and the
-// test-only switch of `fast_hypot` and `fast_hypot_near` (`fast_enabled`), so it has to be
-// updated along with them. `rocq/theories/RootRound.v` proves that `odd` returns the
+// test-only switch of `cbrt_exact`, `fast_hypot` and `fast_hypot_near` (`fast_enabled`), so it
+// has to be updated along with them. `rocq/theories/RootRound.v` proves that `odd` returns the
 // number above and that it rounds as the result does, `rocq/theories/DyIcbrt.v` that `icbrt`
 // returns floor(cbrt X) and whether it is exact, `rocq/theories/DyHypotOdd.v` that `hypot_odd`
 // returns the number above, with `rocq/theories/DyHypotExact.v` for its branch below the gap
@@ -80,9 +83,10 @@
 // Numer. Math. 18 (1971) (the exact product of two `f64`s without an FMA, and Fast2Sum).
 
 use super::{
-    fast::{dd_sqrt, fast_two_sum, round_dir_err, round_near_err},
+    fast::{dd_sqrt, fast_two_sum, round_dir_err, round_near_err, scale},
     isqrt,
     level::level_entry,
+    pow::odd_parts,
     round, Dyadic,
 };
 use crate::limbs;
@@ -249,19 +253,59 @@ fn fast_cbrt<const FMA: bool>(x: f64) -> Option<(f64, f64, i64)> {
     Some((h, l, et - 1365))
 }
 
+// c = h 2^e where c^3 = |x|, and `None` otherwise, for the (h, l, e) of `fast_cbrt` at a finite
+// nonzero x: h = RN(h + l) with h + l within 2^-65 of cbrt |x| 2^-e, in [1, 2), so h is in
+// [1/2, 2], and e is in [-358, 341], so `scale(h, e)` is h 2^e, a normal `f64`. With
+// |x| = mx 2^ex and h = mh 2^eh for odd mx and mh (`odd_parts`), c^3 = mh^3 2^(3 (eh + e)) with
+// mh^3 odd, so c^3 = |x| where mh^3 = mx and 3 (eh + e) = ex. As mx < 2^53, that needs
+// mh < 2^18, so that the 35 low bits of the significand of h are zeros: that test comes first,
+// which keeps the arguments whose root is not an `f64` cheap, and keeps mh^3 below 2^54, so
+// that the `u64` product does not overflow. Where cbrt |x| is an `f64`, so is cbrt |x| 2^-e, in
+// [1, 2), and h is it, as h + l is within 2^-65 of it: the check then returns cbrt |x| (argued
+// here and tested, not proved). `rocq/theories/FastCbrt.v` proves that what it returns is
+// cbrt |x| (`cbrt_exact_correct`).
+fn cbrt_exact(x: f64, h: f64, e: i64) -> Option<f64> {
+    #[cfg(test)]
+    if !super::fast::fast_enabled() {
+        return None;
+    }
+    if h.to_bits() & ((1 << 35) - 1) == 0 {
+        let (mh, eh) = odd_parts(h);
+        let (mx, ex) = odd_parts(x);
+        if mh * mh * mh == mx && 3 * (eh + e) == ex {
+            return Some(scale(h, e));
+        }
+    }
+    None
+}
+
 // cbrt x rounded toward +∞ if `up` and toward -∞ otherwise, and to nearest, by the fast path, or
-// `None` where the rounding test fails or `fast_cbrt` returns `None`, for a finite nonzero x. cbrt
-// is odd: for x < 0, cbrt x rounded up is -cbrt(-x) rounded down. `rocq/theories/FastCbrt.v`
-// proves both (`fast_cbrt_dir_correct`, `fast_cbrt_near_correct`), and that an FMA changes
-// neither (`fast_cbrt_dir_fma`, `fast_cbrt_near_fma`).
+// `None` where the rounding test fails or `fast_cbrt` returns `None`, for a finite nonzero x.
+// Where the directed test fails, `cbrt_exact` still returns cbrt |x| if it is an `f64` (argued
+// there and tested, not proved). cbrt is odd: for x < 0, cbrt x rounded up is -cbrt(-x) rounded
+// down. `rocq/theories/FastCbrt.v` proves that what both return is cbrt x rounded
+// (`fast_cbrt_dir_correct`, `fast_cbrt_near_correct`), and that an FMA changes neither
+// (`fast_cbrt_dir_fma`, `fast_cbrt_near_fma`).
 #[cfg_attr(inari_kernel_dispatch, inline(always))]
 fn fast_cbrt_dir<const FMA: bool>(x: f64, up: bool) -> Option<f64> {
     let (h, l, e) = fast_cbrt::<FMA>(x)?;
-    let r = round_dir_err(h, l, e, ERR_CBRT, up != (x < 0.0))?;
+    let r = round_dir_err(h, l, e, ERR_CBRT, up != (x < 0.0)).or_else(|| cbrt_exact(x, h, e))?;
     Some(if x < 0.0 { -r } else { r })
 }
 
+// `inline` in the builds without the dispatch too, as are `cbrt_near`, `fast_hypot_near` and
+// `hypot_near`. With `cbrt_exact` but without these four attributes, the builds without the
+// dispatch that were checked (for Haswell, and for x86-64 with `force-generic`) put `cr` and
+// this module in different codegen units, and `cr::cbrt_rn` and `cr::hypot_rn` became thunks of
+// one `jmp` to an out-of-line `cbrt_near` and `hypot_near`: one instruction more per call on
+// every set of arguments rounded to nearest that was counted (cachegrind). With the four, each
+// of those instruction counts is that of the code without `cbrt_exact`. The two on `cbrt_near`
+// and `hypot_near` alone made some counts larger still, by up to 15 instructions per call, and
+// the two on `fast_cbrt_near` and `fast_hypot_near` alone left the thunks: neither pair alone
+// was enough. In the builds with the dispatch that were checked (x86-64 and x86-64-v2), where
+// these four attributes do not apply, `cbrt_exact` left those counts as they were.
 #[cfg_attr(inari_kernel_dispatch, inline(always))]
+#[cfg_attr(not(inari_kernel_dispatch), inline)]
 fn fast_cbrt_near<const FMA: bool>(x: f64) -> Option<f64> {
     let (h, l, e) = fast_cbrt::<FMA>(x)?;
     let r = round_near_err(h, l, e, ERR_CBRT)?;
@@ -290,6 +334,8 @@ fn cbrt_with<const FMA: bool>(x: f64, up: bool) -> f64 {
 level_entry! {
     /// cbrt x rounded to nearest, ties to even, with ±0, ±∞ and NaN at ±0, ±∞ and NaN, as MPFR's
     /// `mpfr_cbrt` gives them.
+    // `inline` in the builds without the dispatch, for the reason at `fast_cbrt_near`.
+    #[cfg_attr(not(inari_kernel_dispatch), inline)]
     pub(crate) fn cbrt_near(x: f64) -> f64 = cbrt_near_with;
 }
 
@@ -403,7 +449,9 @@ fn fast_hypot<const FMA: bool>(x: f64, y: f64, up: bool) -> Option<f64> {
     round_dir_err(h, l, e, ERR_HYPOT, up)
 }
 
+// `inline` in the builds without the dispatch too, for the reason at `fast_cbrt_near`.
 #[cfg_attr(inari_kernel_dispatch, inline(always))]
+#[cfg_attr(not(inari_kernel_dispatch), inline)]
 fn fast_hypot_near<const FMA: bool>(x: f64, y: f64) -> Option<f64> {
     #[cfg(test)]
     if !super::fast::fast_enabled() {
@@ -462,6 +510,8 @@ fn hypot_dir_with<const FMA: bool, const UP: bool>(x: f64, y: f64) -> f64 {
 level_entry! {
     /// hypot(x, y) = √(x^2 + y^2) rounded to nearest, ties to even, with the values of `hypot` at
     /// the zeros, the infinities and NaN.
+    // `inline` in the builds without the dispatch, for the reason at `fast_cbrt_near`.
+    #[cfg_attr(not(inari_kernel_dispatch), inline)]
     pub(crate) fn hypot_near(x: f64, y: f64) -> f64 = hypot_near_with;
 }
 
