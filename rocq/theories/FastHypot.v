@@ -5,13 +5,16 @@
     [FastHypotFar.v] where their biased exponents differ by 27 or more,
     and otherwise round the double-double of [hypot_dd] ([FastHypotDd.v])
     with [Fast.round_dir_err] and [Fast.round_near_err]
-    ([fast_hypot_dir_correct], [fast_hypot_near_correct]). With an FMA
-    they return the same ([fast_hypot_dir_fma], [fast_hypot_near_fma]). *)
+    ([fast_hypot_dir_correct], [fast_hypot_near_correct]). Where the
+    directed test fails, [DyadicRoot.hypot_exact] returns [h 2^e] only
+    where its square is [big^2 + small^2] ([hypot_exact_correct]). With
+    an FMA they return the same ([fast_hypot_dir_fma],
+    [fast_hypot_near_fma]). *)
 
 From Stdlib Require Import ZArith Reals Lra Lia.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
 From Inari Require Import Model DyDriver NearF64 FastHypotFar FastHypotDd.
-From Inari Require FastRoundErr.
+From Inari Require FastRoundErr DyExpRules DyPowRules.
 
 Open Scope R_scope.
 
@@ -77,6 +80,83 @@ Qed.
 
 (** ** The theorems *)
 
+Theorem hypot_exact_correct :
+  forall big small h e c,
+  is_finite big = true -> is_finite small = true -> 0 < B2R small <= B2R big ->
+  DyadicRoot.hypot_exact big small h e = Some c ->
+  is_finite c = true /\ B2R c = sqrt (B2R big * B2R big + B2R small * B2R small).
+Proof.
+intros big small h e c Fb Fs Hbs H.
+unfold DyadicRoot.hypot_exact in H. cbv zeta in H.
+(* Nothing is known of [h 2^e]: the test alone decides. *)
+set (c0 := Fast.scale h e) in H. clearbody c0.
+assert (Hb0 : B2R big <> 0) by lra.
+assert (Hs0 : B2R small <> 0) by lra.
+destruct (DyadicPow.odd_parts small) as [ms es] eqn:Os.
+destruct (DyadicPow.odd_parts big) as [mb eb] eqn:Ob.
+destruct (DyPowRules.odd_parts_spec small ms es Fs Hs0 Os) as (_ & _ & _ & Rs).
+destruct (DyPowRules.odd_parts_spec big mb eb Fb Hb0 Ob) as (_ & Hmb & _ & Rb).
+destruct (is_finite c0) eqn:Fc.
+- (* [ge c0 big] is [big <= c0], so [c0] is positive. *)
+  unfold ge in H. rewrite Bleb_correct in H by assumption.
+  destruct (Rle_bool_spec (B2R big) (B2R c0)) as [Hc | Hc]; [| discriminate H].
+  assert (Hc0 : B2R c0 <> 0) by lra.
+  destruct (DyadicPow.odd_parts c0) as [mc ec] eqn:Oc.
+  destruct (DyPowRules.odd_parts_spec c0 mc ec Fc Hc0 Oc) as (_ & _ & _ & Rc).
+  cbv beta iota in H.
+  destruct (ec <=? es)%Z eqn:Tes; [| discriminate H].
+  destruct (ec <=? eb)%Z eqn:Teb; [| discriminate H].
+  apply Z.leb_le in Tes, Teb.
+  rewrite !Z.shiftl_mul_pow2 in H by lia.
+  destruct (mb * 2 ^ (eb - ec) * (mb * 2 ^ (eb - ec)) +
+    ms * 2 ^ (es - ec) * (ms * 2 ^ (es - ec)) =? mc * mc)%Z eqn:Q; [| discriminate H].
+  injection H as <-. split; [exact Fc |].
+  (* The integer identity, read in the reals. *)
+  apply Z.eqb_eq, (f_equal IZR) in Q.
+  assert (P2 : forall n, (0 <= n)%Z -> IZR (2 ^ n) = bpow radix2 n)
+    by (intros n Hn; exact (IZR_Zpower radix2 n Hn)).
+  rewrite plus_IZR, !mult_IZR, !P2 in Q by lia.
+  (* Each of [big], [small] and [c0] is its odd part times [2^ec]. *)
+  set (P := bpow radix2 ec) in *.
+  assert (Sp : forall m k, (ec <= k)%Z ->
+    IZR m * bpow radix2 k = IZR m * bpow radix2 (k - ec) * P).
+  { intros m k Hk. unfold P. rewrite Rmult_assoc, <- bpow_plus.
+    replace (k - ec + ec)%Z with k by ring. reflexivity. }
+  rewrite Rabs_pos_eq in Rs, Rb, Rc by lra.
+  rewrite (Sp ms es Tes) in Rs. rewrite (Sp mb eb Teb) in Rb.
+  assert (Sum : B2R big * B2R big + B2R small * B2R small = B2R c0 * B2R c0).
+  { rewrite Rb, Rs, Rc.
+    replace (IZR mc * P * (IZR mc * P)) with (IZR mc * IZR mc * (P * P)) by ring.
+    rewrite <- Q. ring. }
+  rewrite Sum. symmetry. apply sqrt_square. lra.
+- (* [c0] is an infinity or NaN. *)
+  destruct c0 as [s | s | | s m ex Hx]; try discriminate Fc.
+  + destruct s.
+    * (* -inf: [ge] is false, as [big] is finite. *)
+      assert (G : ge (B754_infinity true) big = false)
+        by (destruct big; try discriminate Fb; reflexivity).
+      rewrite G in H. discriminate H.
+    * (* +inf: its odd parts are [(1, 1024)], and [eb < 1024] as [big] is
+         finite. *)
+      destruct (ge _ big); [| discriminate H].
+      replace (DyadicPow.odd_parts (B754_infinity false)) with (1, 1024)%Z in H
+        by (vm_compute; reflexivity).
+      cbv beta iota in H.
+      destruct (1024 <=? es)%Z; [| discriminate H].
+      destruct (1024 <=? eb)%Z eqn:Teb; [| discriminate H].
+      apply Z.leb_le in Teb.
+      exfalso.
+      pose proof (abs_B2R_lt_emax _ _ big) as Lb. rewrite Rb in Lb.
+      assert (M1 : 1 <= IZR mb) by (apply IZR_le; lia).
+      assert (E : bpow radix2 1024 <= bpow radix2 eb) by (apply bpow_le; exact Teb).
+      assert (M2 : 0 <= (IZR mb - 1) * bpow radix2 eb)
+        by (apply Rmult_le_pos; [lra | apply bpow_ge_0]).
+      lra.
+  + (* NaN: [ge] is false. *)
+    assert (G : ge B754_nan big = false) by (destruct big; reflexivity).
+    rewrite G in H. discriminate H.
+Qed.
+
 Theorem fast_hypot_dir_correct :
   forall fma x y up v,
   is_finite x = true -> is_finite y = true -> B2R x <> 0 -> B2R y <> 0 ->
@@ -94,9 +174,16 @@ destruct (27 <=? Z.shiftr (to_bits big) 52 - Z.shiftr (to_bits small) 52)%Z eqn:
   destruct (DyadicRoot.hypot_dd fma big small) as [[[h l] e] |] eqn:D; [| discriminate H].
   apply Z.leb_gt in G.
   destruct (hypot_dd_correct fma big small h l e Fb Fs Hbs G D) as (Fh & Fl & Rh & He & Hb).
-  rewrite (scale_back (sqrt (B2R big * B2R big + B2R small * B2R small)) e).
-  exact (FastRoundErr.round_dir_err_correct h l e DyadicRoot.err_hypot 98 up v _
-    Fh Fl Rh He ltac:(lia) lit_err_hypot Hb H).
+  destruct (Fast.round_dir_err h l e DyadicRoot.err_hypot up) as [r |] eqn:R;
+    cbv beta iota in H.
+  + (* The rounding test passes. *)
+    injection H as <-.
+    rewrite (scale_back (sqrt (B2R big * B2R big + B2R small * B2R small)) e).
+    exact (FastRoundErr.round_dir_err_correct h l e DyadicRoot.err_hypot 98 up r _
+      Fh Fl Rh He ltac:(lia) lit_err_hypot Hb R).
+  + (* It fails, and [hypot_exact] finds that [hypot(big, small)] is an [f64]. *)
+    destruct (hypot_exact_correct big small h e v Fb Fs Hbs H) as (Fv & Rv).
+    unfold rounds. exact (DyExpRules.rnd_exact v _ _ Fv Rv).
 Qed.
 
 Theorem fast_hypot_near_correct :

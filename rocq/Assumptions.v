@@ -959,6 +959,7 @@ Print Assumptions FastHypotSum.hypot_sum_sq_correct.
 Print Assumptions FastHypotSum.hypot_sum_sq_fma.
 Print Assumptions FastHypotDd.hypot_dd_correct.
 Print Assumptions FastHypotDd.hypot_dd_fma.
+Print Assumptions FastHypot.hypot_exact_correct.
 Print Assumptions FastHypot.fast_hypot_dir_correct.
 Print Assumptions FastHypot.fast_hypot_near_correct.
 Print Assumptions FastHypot.fast_hypot_dir_fma.

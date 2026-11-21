@@ -34,10 +34,10 @@
 // `None` unless 1/2 < h < 2; only the rule of `fast_hypot` below, at a gap of 27 or more,
 // decides without them. Where a fast path returns `None`, `cbrt_odd` or `hypot_odd` computes
 // the result. An exact result fails the directed tests, and a midpoint of two `f64`s the tests
-// to nearest, which are strict: the rule meets neither. Where the directed test of
-// `fast_cbrt_dir` fails, `cbrt_exact` returns the result if it is an `f64` (argued there and
-// tested, not proved), so that the exact results of cbrt go to the kernel only where
-// `fast_cbrt` returns `None`, and those of hypot and the midpoints always do.
+// to nearest, which are strict: the rule meets neither. Where a directed test fails,
+// `cbrt_exact` and `hypot_exact` return the result if it is an `f64` (argued there and tested,
+// not proved), so that the exact results go to the kernel only where `fast_cbrt` or `hypot_dd`
+// returns `None`. The midpoints, which have no such check, always do.
 //
 // `fast_cbrt` follows CORE-MATH's `cbrt` [CORE-MATH]. It writes |x| = zz 2^(3 (et - 1365))
 // with zz in [1, 8) from the bits of x, the significand of a subnormal x shifted to the top
@@ -294,16 +294,17 @@ fn fast_cbrt_dir<const FMA: bool>(x: f64, up: bool) -> Option<f64> {
 }
 
 // `inline` in the builds without the dispatch too, as are `cbrt_near`, `fast_hypot_near` and
-// `hypot_near`. With `cbrt_exact` but without these four attributes, the builds without the
-// dispatch that were checked (for Haswell, and for x86-64 with `force-generic`) put `cr` and
-// this module in different codegen units, and `cr::cbrt_rn` and `cr::hypot_rn` became thunks of
-// one `jmp` to an out-of-line `cbrt_near` and `hypot_near`: one instruction more per call on
-// every set of arguments rounded to nearest that was counted (cachegrind). With the four, each
-// of those instruction counts is that of the code without `cbrt_exact`. The two on `cbrt_near`
-// and `hypot_near` alone made some counts larger still, by up to 15 instructions per call, and
-// the two on `fast_cbrt_near` and `fast_hypot_near` alone left the thunks: neither pair alone
-// was enough. In the builds with the dispatch that were checked (x86-64 and x86-64-v2), where
-// these four attributes do not apply, `cbrt_exact` left those counts as they were.
+// `hypot_near`. With `cbrt_exact` and `hypot_exact` but without these four attributes, the
+// builds without the dispatch that were checked (for Haswell, and for x86-64 with
+// `force-generic`) put `cr` and this module in different codegen units, and `cr::cbrt_rn` and
+// `cr::hypot_rn` became thunks of one `jmp` to an out-of-line `cbrt_near` and `hypot_near`: one
+// instruction more per call on every set of arguments rounded to nearest that was counted
+// (cachegrind). With the four, each of those instruction counts is that of the code without
+// `cbrt_exact` and `hypot_exact`. The two on `cbrt_near` and `hypot_near` alone made some counts
+// larger still, by up to 15 instructions per call, and the two on `fast_cbrt_near` and
+// `fast_hypot_near` alone left the thunks: neither pair alone was enough. In the builds with the
+// dispatch that were checked (x86-64 and x86-64-v2), where these four attributes do not apply,
+// `cbrt_exact` and `hypot_exact` left those counts as they were.
 #[cfg_attr(inari_kernel_dispatch, inline(always))]
 #[cfg_attr(not(inari_kernel_dispatch), inline)]
 fn fast_cbrt_near<const FMA: bool>(x: f64) -> Option<f64> {
@@ -418,16 +419,56 @@ fn hypot_dd<const FMA: bool>(big: f64, small: f64) -> Option<(f64, f64, i64)> {
     Some((h, l, eb - 1022))
 }
 
+// c = `scale(h, e)` where c^2 = big^2 + small^2, and `None` otherwise, for finite
+// big >= small > 0. For the (h, l, e) of `hypot_dd`, h + l is within 2^-98 of
+// hypot(big, small) 2^-e, in [1/2, √2), so h is in [1/2, 2), and e is in [-1021, 1022], so c is
+// h 2^e, a normal `f64`. With big = mb 2^eb, small = ms 2^es and c = mc 2^ec for odd mb, ms and
+// mc (`odd_parts`), c^2 = big^2 + small^2 where ec <= eb, ec <= es and a^2 + b^2 = mc^2, for
+// a = mb 2^(eb - ec) and b = ms 2^(es - ec). Where c >= big, which a NaN c fails, a and b are at
+// most mc < 2^53, so that the shifts stay within `u64`, and the squares and their sum, below
+// 2^107, within `u128`; a c of +∞ has ec = 1024, above eb. So it returns c only where big <= c
+// and c^2 = big^2 + small^2, and never +∞. Where hypot(big, small) is an `f64` c and `hypot_dd`
+// takes the pair, the check returns c (argued here and tested, not proved): h = c 2^-e there, as
+// h = RN(h + l) with h + l within 2^-98 of it, and ec = min(eb, es), so both tests of the
+// exponents pass. For eb = es, big^2 + small^2 is (mb^2 + ms^2) 2^(2 eb) with
+// mb^2 + ms^2 = 2 mod 4, an odd power of two times an odd number, which is not a square; for
+// eb != es, it is an odd multiple of 2^(2 min(eb, es)), so that ec = min(eb, es) where it is c^2.
+// `rocq/theories/FastHypot.v` proves that what it returns is finite and is hypot(big, small)
+// (`hypot_exact_correct`), for any h and e: the proof needs no bound on them.
+fn hypot_exact(big: f64, small: f64, h: f64, e: i64) -> Option<f64> {
+    let c = scale(h, e);
+    if c >= big {
+        let (mc, ec) = odd_parts(c);
+        let (ms, es) = odd_parts(small);
+        if es >= ec {
+            let (mb, eb) = odd_parts(big);
+            if eb >= ec {
+                let (a, b) = (mb << (eb - ec), ms << (es - ec));
+                let sq = |v: u64| u128::from(v) * u128::from(v);
+                if sq(a) + sq(b) == sq(mc) {
+                    return Some(c);
+                }
+            }
+        }
+    }
+    None
+}
+
 // hypot(x, y) rounded toward +∞ if `up` and toward -∞ otherwise, and to nearest, by the fast
 // path, or `None` where the rounding test fails or `hypot_dd` returns `None`, for finite nonzero
-// x and y. Where the biased exponents of big = max(|x|, |y|) and small = min(|x|, |y|) differ by
-// 27 or more, big is normal and big < hypot(x, y) < big + small^2 / (2 big) < big + ulp(big)/2,
-// so the result is big, or the `f64` after it rounded up (+∞ after the largest `f64`).
+// x and y. Where the directed test fails, `hypot_exact` still returns hypot(x, y) if it is an
+// `f64` (argued there and tested, not proved). Where the biased exponents of
+// big = max(|x|, |y|) and small = min(|x|, |y|) differ by 27 or more, big is normal and
+// big < hypot(x, y) < big + small^2 / (2 big) < big + ulp(big)/2, so the result is big, or the
+// `f64` after it rounded up (+∞ after the largest `f64`).
 // `rocq/theories/FastHypotFar.v` proves that rule (`hypot_far_dir`, `hypot_far_near`), and
-// `rocq/theories/FastHypot.v` both functions (`fast_hypot_dir_correct`,
-// `fast_hypot_near_correct`), and that an FMA changes neither (`fast_hypot_dir_fma`,
-// `fast_hypot_near_fma`).
-#[cfg_attr(inari_kernel_dispatch, inline(always))]
+// `rocq/theories/FastHypot.v` that what both functions return is hypot(x, y) rounded
+// (`fast_hypot_dir_correct`, `fast_hypot_near_correct`), and that an FMA changes neither
+// (`fast_hypot_dir_fma`, `fast_hypot_near_fma`). Always inlined, so that each copy of
+// `hypot_dir` has its own, with `up` a constant: without it, LLVM kept one out of line, shared
+// by both, in the builds without the dispatch that were checked (for Haswell, and for x86-64
+// with `force-generic`).
+#[inline(always)]
 fn fast_hypot<const FMA: bool>(x: f64, y: f64, up: bool) -> Option<f64> {
     #[cfg(test)]
     if !super::fast::fast_enabled() {
@@ -446,7 +487,13 @@ fn fast_hypot<const FMA: bool>(x: f64, y: f64, up: bool) -> Option<f64> {
         });
     }
     let (h, l, e) = hypot_dd::<FMA>(big, small)?;
-    round_dir_err(h, l, e, ERR_HYPOT, up)
+    // A `match`, not `Option::or_else`, which LLVM left out of line in the `fma_copy` of
+    // `hypot_dir` in the builds with the dispatch that were checked (x86-64 and x86-64-v2), and
+    // called after every `round_dir_err`.
+    match round_dir_err(h, l, e, ERR_HYPOT, up) {
+        Some(r) => Some(r),
+        None => hypot_exact(big, small, h, e),
+    }
 }
 
 // `inline` in the builds without the dispatch too, for the reason at `fast_cbrt_near`.

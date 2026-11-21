@@ -18,11 +18,11 @@
 // The fast paths in `f64` (`fast_cbrt_dir`, `fast_cbrt_near`, `fast_hypot` and
 // `fast_hypot_near`) give the same `f64`s as the kernel, which `set_fast_path(false)` leaves
 // alone, on random sets of their own, and most of their rounding tests pass there
-// (`fast_counts`). Their directed rounding tests fail at the exact cubes, which `cbrt_exact`
-// then gives, and it declines the `f64`s next to them. The fast paths leave to the kernel the
-// exact results of hypot in both directions, the midpoints of hypot to nearest, the arguments
-// whose root rounds to h = 2 in `fast_cbrt`, and the pairs that `hypot_dd` does not take. The
-// rule of hypot at a gap of 27 in `fast_hypot`, on exponent fields, holds only where the gap of
+// (`fast_counts`). Their directed rounding tests fail at the exact cubes and the exact results of
+// hypot, which `cbrt_exact` and `hypot_exact` then give, and those decline the `f64`s next to
+// them. The fast paths leave to the kernel the midpoints of hypot to nearest, the arguments whose
+// root rounds to h = 2 in `fast_cbrt`, and the pairs that `hypot_dd` does not take. The rule of
+// hypot at a gap of 27 in `fast_hypot`, on exponent fields, holds only where the gap of
 // `hypot_odd` is 27 or more.
 
 use super::*;
@@ -1142,36 +1142,38 @@ fn fast_cbrt_near_two() {
     assert!(twos > 600, "{}", twos);
 }
 
-// hypot(3 2^k, 4 2^k) = 5 2^k, an exact result, for every k, at all signs and in both orders: the
-// directed fast paths decline it, as l is within `ERR_HYPOT` of 0, and the one to nearest gives
-// 5 2^k where `hypot_dd` takes the pair, for big = 4 2^k from 2^-1022 to 2^1021, and declines it
-// elsewhere.
+// hypot(3 2^k, 4 2^k) = 5 2^k, an exact result, for every k, at all signs and in both orders:
+// where `hypot_dd` takes the pair, for big = 4 2^k from 2^-1022 to 2^1021, the fast paths give
+// 5 2^k in both directions and to nearest, the directed ones by `hypot_exact`, as their rounding
+// tests fail with l within `ERR_HYPOT` of 0, and elsewhere they decline it with no test.
 #[test]
-fn fast_hypot_declines_345() {
+fn fast_hypot_takes_345() {
     for k in -1074..=1021 {
         let (x, y, c) = (3.0 * pow2(k), 4.0 * pow2(k), 5.0 * pow2(k));
-        let near = if (-1024..=1019).contains(&k) {
-            Some(c)
+        let (want, tests) = if (-1024..=1019).contains(&k) {
+            (Some(c), (0, 2))
         } else {
-            None
+            (None, (0, 0))
         };
         for (x, y) in [(x, y), (-y, x), (y, -x), (-x, -y)] {
             let what = format!("hypot({:e}, {:e})", x, y);
+            reset_fast_counts();
             assert_eq!(
                 fast_hypot::<HAS_FMA>(x, y, false),
-                None,
+                want,
                 "{} toward -∞",
                 what
             );
             assert_eq!(
                 fast_hypot::<HAS_FMA>(x, y, true),
-                None,
+                want,
                 "{} toward +∞",
                 what
             );
+            assert_eq!(fast_counts(), tests, "{}", what);
             assert_eq!(
                 fast_hypot_near::<HAS_FMA>(x, y),
-                near,
+                want,
                 "{} to nearest",
                 what
             );
@@ -1179,14 +1181,56 @@ fn fast_hypot_declines_345() {
     }
 }
 
+// The legs a and b of a Pythagorean triple, `f64`s, under a random power of two 2^k at which
+// `hypot_dd` takes the pair, big from 2^-1022 to below 2^1022: k at either end of that range or
+// in it. Returns (x, y, k) with the legs in a random order and with random signs.
+fn dd_scaled(rng: &mut Rng, a: u64, b: u64) -> (f64, f64, i64) {
+    // big = max(a, b) 2^k with 2^(bits - 1) <= max(a, b) < 2^bits, so 2^-1022 <= big < 2^1022
+    // for k in [-1021 - bits, 1022 - bits]. The legs are exact at each k from -1074 on.
+    let bits = i64::from(64 - a.max(b).leading_zeros());
+    let (lo, hi) = ((-1021 - bits).max(-1074), 1022 - bits);
+    let k = match rng.below(4) {
+        0 => lo,
+        1 => hi,
+        _ => lo + rng.below(u64::try_from(hi - lo + 1).unwrap()) as i64,
+    };
+    let (mut x, mut y) = (a as f64 * pow2(k), b as f64 * pow2(k));
+    if rng.below(2) == 0 {
+        std::mem::swap(&mut x, &mut y);
+    }
+    (x * sign(rng), y * sign(rng), k)
+}
+
+// A scaled Pythagorean triple of `fast_hypot_takes_triples`, as (x, y, c, k) with
+// hypot(x, y) = c 2^k by `dd_scaled`, or `None` where the legs are not `f64`s or c is 2^54 or
+// more: legs m^2 - n^2 and 2 m n and c = m^2 + n^2, for m below 2^25 + 2 or m = n + d with d odd
+// below 2^20 and n in [2^26, 2^26.5), half of the draws each.
+fn dd_triple(rng: &mut Rng) -> Option<(f64, f64, u64, i64)> {
+    let (m, n) = if rng.below(2) == 0 {
+        let bits = rng.below(26);
+        let m = 2 + rng.below(1 << bits);
+        (m, 1 + rng.below(m - 1))
+    } else {
+        let (n, bits) = ((1 << 26) + rng.below(27_797_401), rng.below(20));
+        (n + 2 * rng.below(1 << bits) + 1, n)
+    };
+    let (a, b, c) = (m * m - n * n, 2 * m * n, m * m + n * n);
+    if !(c < 1 << 54 && is_f64(a) && is_f64(b)) {
+        return None;
+    }
+    let (x, y, k) = dd_scaled(rng, a, b);
+    Some((x, y, c, k))
+}
+
 // Scaled Pythagorean triples, as in `hypot_triples`, under a power of two 2^k at which `hypot_dd`
-// takes the pair: big from 2^-1022 to below 2^1022. Exact results, from m below 2^25 + 2: the
-// directed fast paths decline them and the one to nearest gives c 2^k. Midpoints, from m = n + d
-// with d odd below 2^20 and n in [2^26, 2^26.5), at gaps up to 26: the one to nearest declines
-// them, as its test is strict, and the directed ones give (c - 1) 2^k and (c + 1) 2^k, as the
-// kernel does. The midpoint of `smoke` first.
+// takes the pair (`dd_triple`). Exact results, from m below 2^25 + 2: the fast paths give c 2^k
+// in both directions and to nearest, the directed ones by `hypot_exact`, as their rounding tests
+// fail with l within `ERR_HYPOT` of 0. Midpoints, from m = n + d with d odd below 2^20 and n in
+// [2^26, 2^26.5), at gaps up to 26: the one to nearest declines them, as its test is strict, and
+// the directed ones give (c - 1) 2^k and (c + 1) 2^k, as the kernel does. The midpoint of `smoke`
+// first.
 #[test]
-fn fast_hypot_declines_triples() {
+fn fast_hypot_takes_triples() {
     let (x, y) = (134_217_729.0, 9_007_199_388_958_720.0);
     assert_eq!(fast_hypot_near::<HAS_FMA>(x, y), None);
     assert_eq!(
@@ -1200,46 +1244,26 @@ fn fast_hypot_declines_triples() {
     let mut rng = Rng(10602);
     let (mut exact, mut midpoints) = (0, 0);
     while exact + midpoints < 4_000 {
-        let (m, n) = if rng.below(2) == 0 {
-            let bits = rng.below(26);
-            let m = 2 + rng.below(1 << bits);
-            (m, 1 + rng.below(m - 1))
-        } else {
-            let (n, bits) = ((1 << 26) + rng.below(27_797_401), rng.below(20));
-            (n + 2 * rng.below(1 << bits) + 1, n)
-        };
-        let (a, b, c) = (m * m - n * n, 2 * m * n, m * m + n * n);
-        if !(c < 1 << 54 && is_f64(a) && is_f64(b)) {
+        let Some((x, y, c, k)) = dd_triple(&mut rng) else {
             continue;
-        }
-        // big = max(a, b) 2^k with 2^(bits - 1) <= max(a, b) < 2^bits, so 2^-1022 <= big < 2^1022
-        // for k in [-1021 - bits, 1022 - bits]. The legs are exact at each k from -1074 on.
-        let bits = i64::from(64 - a.max(b).leading_zeros());
-        let (lo, hi) = ((-1021 - bits).max(-1074), 1022 - bits);
-        let k = match rng.below(4) {
-            0 => lo,
-            1 => hi,
-            _ => lo + rng.below(u64::try_from(hi - lo + 1).unwrap()) as i64,
         };
-        let (mut x, mut y) = (a as f64 * pow2(k), b as f64 * pow2(k));
-        if rng.below(2) == 0 {
-            std::mem::swap(&mut x, &mut y);
-        }
-        let (x, y) = (x * sign(&mut rng), y * sign(&mut rng));
         let what = format!("hypot({:e}, {:e})", x, y);
+        reset_fast_counts();
         let dir = [
             fast_hypot::<HAS_FMA>(x, y, false),
             fast_hypot::<HAS_FMA>(x, y, true),
         ];
+        let tests = fast_counts();
         let near = fast_hypot_near::<HAS_FMA>(x, y);
         if is_f64(c) {
             exact += 1;
             let r = c as f64 * pow2(k);
             assert!(
-                dir == [None; 2] && near == Some(r),
-                "{}: {:?} {:?}",
+                dir == [Some(r); 2] && tests == (0, 2) && near == Some(r),
+                "{}: {:?} {:?} {:?}",
                 what,
                 dir,
+                tests,
                 near
             );
         } else {
@@ -1263,9 +1287,111 @@ fn fast_hypot_declines_triples() {
     );
 }
 
-// `cbrt_exact` on its own: it gives c = h 2^e where c^3 = |x|, for any normal h and e in
-// [-1021, 1022] with that c, and `None` where c is another number. `fast_cbrt` gives h in [1, 2)
-// and e with c = h 2^e, here 27 = (1.5 2^1)^3.
+// `hypot_exact` at finite nonzero `x` and `y`, with the (h, e) that `hypot_dd` gives where
+// `fast_hypot` calls it, against the kernel: it gives hypot(x, y) where the kernel's roundings
+// toward -∞ and +∞ agree, as hypot(x, y) is then an `f64`, and `None` elsewhere. Where the
+// directed rounding tests fail, `fast_hypot` gives that value. Checks the fast paths at (x, y)
+// with `check_fast_hypot` too. Returns whether `hypot_exact` declined and whether the directed
+// tests failed, or `None` where `fast_hypot` takes the pair by its rule for a gap of 27 or more
+// or `hypot_dd` declines it.
+fn check_hypot_exact(x: f64, y: f64) -> Option<(bool, bool)> {
+    check_fast_hypot(x, y);
+    let (big, small, far) = far_pair(x, y);
+    if far || small == 0.0 {
+        return None;
+    }
+    let (h, _, e) = hypot_dd::<HAS_FMA>(big, small)?;
+    set_fast_path(false);
+    let (lo, hi) = (hypot(x, y, false), hypot(x, y, true));
+    set_fast_path(true);
+    let want = (lo == hi).then_some(lo);
+    let what = format!("hypot({:e}, {:e})", x, y);
+    assert_eq!(
+        hypot_exact(big, small, h, e),
+        want,
+        "hypot_exact({:e}, {:e}, {:e}, {}) for {}",
+        big,
+        small,
+        h,
+        e,
+        what
+    );
+    reset_fast_counts();
+    let dir = [
+        fast_hypot::<HAS_FMA>(x, y, false),
+        fast_hypot::<HAS_FMA>(x, y, true),
+    ];
+    let (_, failed) = fast_counts();
+    if failed > 0 {
+        assert_eq!(dir, [want; 2], "{}", what);
+    }
+    Some((want.is_none(), failed > 0))
+}
+
+// The pairs next to the exact results of `fast_hypot_takes_triples`, with one leg moved to the
+// `f64` on either side of it, for 500 of its exact triples from a seed of their own, and for
+// four whose short leg is 24 or 25 binades below the long one, each under 16 powers of two
+// (`dd_scaled`). `hypot_exact` declines each of them (`check_hypot_exact`), and the kernel gives
+// the results. Moving the short leg b of those four by an ulp moves the result c by about
+// b ulp(b) / c, about 2^-100 c or less, so that where b stays normal the directed rounding tests
+// fail, as l is then within `ERR_HYPOT` = 2^-98 of 0, and `hypot_exact`, called with an h that
+// scales to c, declines, as c^2 is the sum of the squares of the old legs.
+#[test]
+fn fast_hypot_declines_next_to_triples() {
+    let mut rng = Rng(10604);
+    let mut triples = vec![];
+    while triples.len() < 500 {
+        if let Some((x, y, c, _)) = dd_triple(&mut rng) {
+            if is_f64(c) {
+                triples.push((x, y));
+            }
+        }
+    }
+    // (m, n) = (2^25 + 1, 1), (2^26 - 1, 1), (2^26 + 1, 1) and (2^26 + 1, 2): legs m^2 - n^2 and
+    // 2 m n, both `f64`s, and c = m^2 + n^2 below 2^53.
+    for (m, n) in [
+        (33_554_433, 1),
+        (67_108_863, 1),
+        (67_108_865, 1),
+        (67_108_865, 2),
+    ] {
+        let (a, b, c): (u64, u64, u64) = (m * m - n * n, 2 * m * n, m * m + n * n);
+        assert!(is_f64(a) && is_f64(b) && c < 1 << 53, "{} {}", m, n);
+        for _ in 0..16 {
+            let (x, y, _) = dd_scaled(&mut rng, a, b);
+            triples.push((x, y));
+        }
+    }
+    let (mut declined, mut failed, mut checked) = (0, 0, 0);
+    for (x, y) in triples {
+        let pairs = [
+            (f64::next_down(x), y),
+            (f64::next_up(x), y),
+            (x, f64::next_down(y)),
+            (x, f64::next_up(y)),
+        ];
+        for (x, y) in pairs {
+            if let Some((d, f)) = check_hypot_exact(x, y) {
+                checked += 1;
+                declined += usize::from(d);
+                failed += usize::from(f);
+            }
+        }
+    }
+    assert!(
+        declined == checked && failed > 100 && checked > 2_000,
+        "{} declined, {} failed, {} checked",
+        declined,
+        failed,
+        checked
+    );
+}
+
+// `cbrt_exact` and `hypot_exact` on their own: they give c = h 2^e where c^3 = |x| and
+// c^2 = big^2 + small^2, for any normal h and e in [-1021, 1022] with that c (`hypot_exact` for
+// any (h, e) that `scale` takes to c), and `None` where c is another number. `fast_cbrt` gives
+// h in [1, 2) and e with c = h 2^e, here 27 = (1.5 2^1)^3, and `hypot_dd` e as the exponent
+// field of big minus 1022, here 5 = 0.625 2^3 at big = 4.
 #[test]
 fn exact_arms() {
     let hl = |v: Option<(f64, f64, i64)>| v.map(|(h, _, e)| (h, e));
@@ -1300,6 +1426,46 @@ fn exact_arms() {
             want.map(f64::to_bits),
             "cbrt_exact({:e}, {:e}, {})",
             x,
+            h,
+            e
+        );
+    }
+    assert_eq!(hl(hypot_dd::<HAS_FMA>(4.0, 3.0)), Some((0.625, 3)));
+    let (h1, e1) = hl(hypot_dd::<HAS_FMA>(1.0, 1.0)).unwrap();
+    let (big, small) = (9_007_199_388_958_720.0, 134_217_729.0);
+    let (hm, em) = hl(hypot_dd::<HAS_FMA>(big, small)).unwrap();
+    for (big, small, h, e, want) in [
+        (4.0, 3.0, 0.625, 3, Some(5.0)),
+        (4.0, 3.0, 1.25, 2, Some(5.0)),
+        (12.0, 5.0, 0.8125, 4, Some(13.0)),
+        // 2^-1022 and 3 2^-1024, which is subnormal.
+        (
+            pow2(-1022),
+            3.0 * pow2(-1024),
+            0.625,
+            -1021,
+            Some(5.0 * pow2(-1024)),
+        ),
+        // c next to 5.
+        (4.0, 3.0, f64::next_up(0.625), 3, None),
+        (4.0, 3.0, f64::next_down(0.625), 3, None),
+        // c = 2, below big.
+        (4.0, 3.0, 0.25, 3, None),
+        // c = 4 and 6, whose lowest bits are above that of 3.
+        (4.0, 3.0, 0.5, 3, None),
+        (4.0, 3.0, 0.75, 3, None),
+        // c = +∞, whose exponent 1024 is above that of big.
+        (f64::MAX, f64::MAX, 1.0, 1024, None),
+        // √2 rounded, and the midpoint of `smoke` rounded to an `f64` by `hypot_dd`.
+        (1.0, 1.0, h1, e1, None),
+        (big, small, hm, em, None),
+    ] {
+        assert_eq!(
+            hypot_exact(big, small, h, e),
+            want,
+            "hypot_exact({:e}, {:e}, {:e}, {})",
+            big,
+            small,
             h,
             e
         );

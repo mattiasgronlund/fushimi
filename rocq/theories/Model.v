@@ -6205,7 +6205,7 @@ End DyadicPow.
     [fast_cbrt_dir] and [fast_cbrt_near]. [FastHypotFar.v] proves the
     rule at a difference of 27 of [fast_hypot] and [fast_hypot_near],
     [FastHypotSum.v] and [FastHypotDd.v] [hypot_dd], and [FastHypot.v]
-    [fast_hypot] and [fast_hypot_near]. *)
+    [hypot_exact], [fast_hypot] and [fast_hypot_near]. *)
 Module DyadicRoot.
 
 (** [fn odd<N>(neg: bool, s: &[u64], e: i64, inexact: bool) -> Dyadic<N>]
@@ -6447,10 +6447,31 @@ Definition hypot_dd (fma : bool) (big small : f64) : option (f64 * f64 * Z) :=
     let '(h, l) := Fast.dd_sqrt fma ah al in
     Some (h, l, eb - 1022).
 
+(** [fn hypot_exact(big: f64, small: f64, h: f64, e: i64) ->
+    Option<f64>], where the shifts [<<], whose amounts are in [0, 52] and
+    whose results are at most [mc < 2^53] where they run, are [Z.shiftl],
+    the [u128] squares [sq(v)] and their sum, below 2^107, are computed
+    in [Z], and the [i64] subtractions, which cannot overflow, are
+    computed without a check. [FastHypot.v] proves it. *)
+Definition hypot_exact (big small h : f64) (e : Z) : option f64 :=
+  let c := Fast.scale h e in
+  if ge c big then
+    let '(mc, ec) := DyadicPow.odd_parts c in
+    let '(ms, es) := DyadicPow.odd_parts small in
+    if ec <=? es then
+      let '(mb, eb) := DyadicPow.odd_parts big in
+      if ec <=? eb then
+        let a := Z.shiftl mb (eb - ec) in
+        let b := Z.shiftl ms (es - ec) in
+        if a * a + b * b =? mc * mc then Some c else None
+      else None
+    else None
+  else None.
+
 (** [fn fast_hypot(x: f64, y: f64, up: bool) -> Option<f64>] and [fn
     fast_hypot_near(x: f64, y: f64) -> Option<f64>], without the
     statements under [#[cfg(test)]], where [(v.to_bits() >> 52) as i64]
-    is [Z.shiftr (to_bits v) 52], and [big.to_bits() + 1] is
+    is [Z.shiftr (to_bits v) 52] and [big.to_bits() + 1] is
     [to_bits big + 1], which stays within [u64] for a finite [big].
     [FastHypot.v] proves them. *)
 Definition fast_hypot (fma : bool) (x y : f64) (up : bool) : option f64 :=
@@ -6459,7 +6480,11 @@ Definition fast_hypot (fma : bool) (x y : f64) (up : bool) : option f64 :=
     Some (if up then from_bits (to_bits big + 1) else big)
   else
     match hypot_dd fma big small with
-    | Some (h, l, e) => Fast.round_dir_err h l e err_hypot up
+    | Some (h, l, e) =>
+      match Fast.round_dir_err h l e err_hypot up with
+      | Some r => Some r
+      | None => hypot_exact big small h e
+      end
     | None => None
     end.
 Definition fast_hypot_near (fma : bool) (x y : f64) : option f64 :=
