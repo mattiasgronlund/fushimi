@@ -487,7 +487,7 @@ level_entry! {
 }
 
 /// x^y rounded toward +∞ if `up` and toward -∞ otherwise, and NaN for a finite x < 0 and for
-/// x = -∞, as the header says.
+/// x = -∞ at every y but ±0, as the header says.
 #[inline(always)]
 pub(crate) fn pow(x: f64, y: f64, up: bool) -> f64 {
     // A copy per direction, where `up` is a constant.
@@ -589,8 +589,8 @@ fn pow_dir<const UP: bool>(x: f64, y: f64) -> f64 {
     }
 }
 
-/// x^y rounded to nearest, ties to even, and NaN for a finite x < 0 and for x = -∞, as `pow`
-/// takes them.
+/// x^y rounded to nearest, ties to even, and NaN for a finite x < 0 and for x = -∞ at every y
+/// but ±0, as `pow` takes them.
 pub(crate) fn pow_near(x: f64, y: f64) -> f64 {
     if y == 0.0 {
         1.0
