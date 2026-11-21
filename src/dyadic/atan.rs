@@ -306,6 +306,14 @@ fn pi_bounds(k: f64) -> Option<[u64; 2]> {
 // c π rounded toward +∞ if `up` and toward -∞ otherwise, for an `f64` c != 0, which makes c π
 // irrational: from `pi_bounds` for |c| = 1/4, 1/2, 3/4 and 1, the c that `atan` and `atan2`
 // pass up to their signs, and from `ziv` for any other c.
+//
+// Always inlined, as `pi_times_near`, so that `pi_bounds` folds to the two bounds of a constant
+// |c| with no call. The two attributes alone make `atan2` take 7.24 (toward -∞) and 6.26 (toward
+// +∞) fewer instructions per call on arguments of which half have a finite y != 0 and x = ±0
+// (|c| = 1/2), a quarter y = ±0 and x <= -0, and a quarter a finite y != 0 and x = -∞ (|c| = 1
+// in both), in a crate that links `cr`, built for haswell, cachegrind chase=no (2026-11-21,
+// against 53fa1fe).
+#[inline(always)]
 fn pi_times(c: f64, up: bool) -> f64 {
     match pi_bounds(c.abs()) {
         // c π lies between lo and hi for c > 0, and between -hi and -lo for c < 0.
@@ -318,6 +326,11 @@ fn pi_times(c: f64, up: bool) -> f64 {
 
 // c π rounded to nearest, ties to even, for an `f64` c != 0: the lower bound of `pi_bounds`, with
 // the sign of c, for |c| = 1/4, 1/2, 3/4 and 1, and `ziv_near` otherwise.
+//
+// Always inlined, as `pi_times`: the two attributes alone make `atan2_near` take 5.50 fewer
+// instructions per call on the arguments named there, in a crate that links `cr`, built for
+// haswell, cachegrind chase=no (2026-11-21, against 53fa1fe).
+#[inline(always)]
 fn pi_times_near(c: f64) -> f64 {
     match pi_bounds(c.abs()) {
         Some([lo, _]) => f64::from_bits(lo).copysign(c),
@@ -1583,14 +1596,24 @@ fn atan2_dir_with<const FMA: bool, const UP: bool>(y: f64, x: f64) -> f64 {
             pi_times(1.0_f64.copysign(y), UP)
         }
     } else if y.is_infinite() {
-        let c: f64 = if x == f64::INFINITY {
-            0.25
+        // A constant |c| in each call, so that every call folds to its two bounds. Against one
+        // call with c from the three cases, in a crate that links `cr`, cachegrind chase=no
+        // (2026-11-21, on 53fa1fe with the attributes of `pi_times` and `pi_times_near`), this
+        // makes `atan2` take 15.74 (toward -∞) and 13.74 (toward +∞) fewer instructions per call
+        // on arguments with y = ±∞ of which a quarter have x = +∞, a quarter x = -∞ and half a
+        // finite x != 0, built for haswell and in the FMA copy built for x86-64, and 20.62 and
+        // 18.62 fewer in the Dekker copy. The library built for haswell has 8,037 fewer bytes of
+        // code and no `ziv::<PiMul>`. `atan2_near_with` keeps one call: in the FMA copy built for
+        // x86-64, three there made `atan2_near` take 11.75 fewer on those arguments but 2.00 and
+        // 2.89 more on two sets with x > 0 and |y / x| below 2^-27, and 0.74 more on CORE-MATH's
+        // hard cases.
+        if x == f64::INFINITY {
+            pi_times(0.25_f64.copysign(y), UP)
         } else if x == f64::NEG_INFINITY {
-            0.75
+            pi_times(0.75_f64.copysign(y), UP)
         } else {
-            0.5
-        };
-        pi_times(c.copysign(y), UP)
+            pi_times(0.5_f64.copysign(y), UP)
+        }
     } else if x == f64::INFINITY {
         0.0_f64.copysign(y)
     } else if x == f64::NEG_INFINITY {

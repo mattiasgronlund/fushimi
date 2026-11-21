@@ -4900,11 +4900,9 @@ Definition atan2_dir_with (y x : f64) (up : bool) : option f64 :=
   else if eq y zero then
     if negb (Bsign x) then Some y else pi_times_with (copysign DyadicExp.one y) up
   else if eq y infinity || eq y DyadicExp.neg_infinity then
-    let c :=
-      if eq x infinity then quarter
-      else if eq x DyadicExp.neg_infinity then three_quarters
-      else DyadicLog.half in
-    pi_times_with (copysign c y) up
+    if eq x infinity then pi_times_with (copysign quarter y) up
+    else if eq x DyadicExp.neg_infinity then pi_times_with (copysign three_quarters y) up
+    else pi_times_with (copysign DyadicLog.half y) up
   else if eq x infinity then Some (copysign zero y)
   else if eq x DyadicExp.neg_infinity then pi_times_with (copysign DyadicExp.one y) up
   else if eq x zero then pi_times_with (copysign DyadicLog.half y) up

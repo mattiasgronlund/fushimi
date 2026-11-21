@@ -591,7 +591,9 @@ intros y x up v. unfold DyadicAtan.atan2_dir, DyadicAtan.atan2_dir_with.
 destruct (is_nan y || is_nan x); [exact (fun h => h)|].
 destruct (eq y zero).
 { destruct (negb (Bsign x)); [exact (fun h => h) | apply pi_times_strict]. }
-destruct (eq y infinity || eq y DyadicExp.neg_infinity); [apply pi_times_strict|].
+destruct (eq y infinity || eq y DyadicExp.neg_infinity).
+{ destruct (eq x infinity); [apply pi_times_strict|].
+  destruct (eq x DyadicExp.neg_infinity); apply pi_times_strict. }
 destruct (eq x infinity); [exact (fun h => h)|].
 destruct (eq x DyadicExp.neg_infinity); [apply pi_times_strict|].
 destruct (eq x zero); [apply pi_times_strict|].
