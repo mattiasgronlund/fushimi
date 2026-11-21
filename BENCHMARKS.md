@@ -1,6 +1,6 @@
 # Benchmarks
 
-A comparison of the backends of inari, in eleven sittings:
+A comparison of the backends of inari, in twelve sittings:
 
 - 2026-09-22: `avx_fma`, then the default for x86-64, which set MXCSR around
   every instruction to make the hardware round, against the portable backend
@@ -31,6 +31,11 @@ A comparison of the backends of inari, in eleven sittings:
 - 2026-11-12: `sin`, `cos` and `tan` of intervals with `fma` again, after they
   moved from MPFR to inari's own kernel, against the last commit that computed
   them with MPFR.
+- 2026-11-21: `fma`, `generic` without an FMA and `sse42` again, all the
+  benchmarks of each, on `79ae348` against `174092e`, the commit that added the
+  eleventh sitting, with the benchmarks added between the two: `mul_add` of
+  intervals, the interval operations through the tokens of `inari::simd`, and a
+  chain of `mul_add_ru` whose steps stay inexact.
 
 `avx_fma` is the base column of the first three x86-64 sections, so that the
 two explicit backends are measured against what they replaced, and against each
@@ -48,22 +53,29 @@ source of `5543a69` with each other, and with builds of `d894347` and
 WebAssembly again, the first two against `avx_fma` built from `cc5e384`, as the
 fifth does. The eleventh compares two builds of the source of `893b06c` with
 each other, and with a build of `036d2f8`, the commit before `3f625c0` moved the
-bounds of the elementary functions from MPFR to the kernel. No backend for
-x86-64 changes the rounding mode any more: `avx512f` uses per-instruction
-embedded rounding, and the other two round by correcting a round-to-nearest
-result.
+bounds of the elementary functions from MPFR to the kernel. The twelfth compares
+builds of two commits, `174092e` and `79ae348`, each with its own `bench/`, in
+three of the native configurations. No backend for x86-64 changes the rounding
+mode any more: `avx512f` uses per-instruction embedded rounding, and the other
+two round by correcting a round-to-nearest result.
 
 ## Setup
 
 - CPU: AMD Ryzen 9 3900X (Zen 2, 12 cores). It has no AVX-512, so the `avx512f`
   backend could not be measured.
-- Linux 7.0, rustc 1.96.0, criterion 0.7.0, wasmtime 49.0. The governor was
-  `schedutil` in the first sitting and in the fifth; the second and the third
-  ran without a restart since the first, and the fourth without one before the
-  fifth. Read before and after the eleventh, it was `powersave`, with boost on;
-  the driver, read after it, was `amd-pstate-epp`. The sixth to the tenth did
-  not record the governor, and the machine had run without a restart since
-  2026-11-01, before the sixth, so they may have run under `powersave` too.
+- Linux 7.0, rustc 1.96.0 (1.98.1 in the twelfth sitting), criterion 0.7.0,
+  wasmtime 49.0. The governor was `schedutil` in the first sitting and in the
+  fifth; the second and the third ran without a restart since the first, and the
+  fourth without one before the fifth. Read before and after the eleventh, it
+  was `powersave`, with boost on; the driver, read after it, was
+  `amd-pstate-epp`. The sixth to the tenth did not record the governor, and the
+  machine had run without a restart since 2026-11-01, before the sixth, so they
+  may have run under `powersave` too. Read before the twelfth, the governor was
+  `powersave`, with boost on, the driver `amd-pstate-epp` and the
+  energy-performance preference `balance_performance`.
+- The builds of the twelfth sitting were compiled in the `rust:1-bookworm`
+  container image, pinned by its image id, whose rustc is 1.98.1, and run on
+  the host.
 - `lto = "fat"` and `codegen-units = 1`, so that the primitives are inlined into
   the benchmarks as they are within inari.
 - The first table of the trigonometric section, and the `036d2f8` column of its
@@ -362,6 +374,26 @@ between rounds, though: on `tan/narrow`, copy B takes 1.05 times as long as
 copy A, and 1.03–1.07 times in every one of the nine. `036d2f8` takes 3–4%
 longer than `b2390de` did in the first table on every row, so compare the times
 of the second table with those of the first only through its `036d2f8` column.
+
+The section on `fma`, `generic, no FMA` and `sse42`, `79ae348` against
+`174092e`, was measured on 2026-11-21 between 11:04 and 14:03. Both commits were
+built in the three configurations, with the flags of "Setup" and one
+`Cargo.lock`. Each benchmark took criterion's default 3 s of warm-up and 5 s of
+measurement, those of `benches/trig.rs` with its flat sampling. The three
+configurations ran one after another. In each, the two builds ran twice,
+interleaved, `174092e` first. A run is the three benchmark binaries of a build,
+one after the other, and each binary started only once the load average was
+below 1.5 and no build was running. Each binary run was kept under the rule of
+the `mul_add_ru` rows above. All 36 were, at a load average of 0.74 to 1.50,
+with the sibling at least 99.4% idle and the other cores busy for at most 0.44
+cores' worth of time. The rows report the lower of the two medians, and the
+spread as the first paragraph of this section defines it; for the benchmarks
+added since `174092e`, it is taken over the three configurations. Every spread
+is below 2.5%, except in the `token/add` and `token-v3/add` rows of `generic, no
+FMA`, where the second run of `79ae348` took 1.11–1.33 times as long as the
+first on all six. On the trigonometric rows, the `fma` build of `174092e` takes
+0.98–1.02 times as long as copy A of the eleventh sitting, whose code is the
+same but for comments, built by rustc 1.96.0.
 
 Composite benchmarks drift between sittings more than the primitives do: the
 `avx_fma` 3×3 determinant is 236 ns in the first section, 211 ns in the `sse42`
@@ -970,6 +1002,331 @@ The `mul`, `mul_ru`, Horner and determinant rows were measured again, whole, on
 medians over seven rounds (see "Variance"). The other rows are from the first
 sitting.
 
+### `fma`, `generic, no FMA` and `sse42`, `79ae348` against `174092e`
+
+This section measures every benchmark of three of the native configurations
+again, on `79ae348`, 60 commits after `174092e`, the commit that added the
+eleventh sitting. The library of `174092e` is that of `893b06c`, which the
+second table of the trigonometric section measures: the two commits differ only
+in `BENCHMARKS.md` and in comments of `benches/trig.rs`. Each commit was built
+with its own `bench/`. The benchmarks that both have run the same loops on the
+same inputs: between the two, `bench/` only moved code into helper functions and
+added benchmarks and comments. In `sse42`, the trigonometric functions of
+`79ae348` run, on this CPU, the copy of the kernel compiled with the target
+feature `fma`, which the kernel picks at run time since `5428c95`, where those
+of `174092e` ran its only copy, which computes the errors of its products with
+Dekker's algorithm. `generic, no FMA` and `fma` run one copy in both. Times are
+in ns, the lower of two medians; see "Variance" above.
+
+`fma`, interval operations:
+
+| Benchmark | 174092e (ns) | 79ae348 (ns) | ratio | spread |
+|---|--:|--:|--:|--:|
+| add/PP | 4.42 | 4.01 | 0.91× | 0% |
+| add/PM | 4.41 | 4.00 | 0.91× | 0% |
+| add/MM | 4.41 | 3.99 | 0.91× | 1% |
+| sub/PP | 4.51 | 4.09 | 0.91× | 0% |
+| sub/PM | 4.51 | 4.09 | 0.91× | 0% |
+| sub/MM | 4.51 | 4.09 | 0.91× | 0% |
+| mul/PP | 6.44 | 5.32 | 0.83× | 0% |
+| mul/PN | 6.46 | 5.38 | 0.83× | 0% |
+| mul/PM | 6.44 | 5.32 | 0.83× | 0% |
+| mul/NP | 6.68 | 5.37 | 0.80× | 0% |
+| mul/NN | 6.46 | 5.41 | 0.84× | 0% |
+| mul/NM | 6.45 | 5.34 | 0.83× | 0% |
+| mul/MP | 6.44 | 5.19 | 0.81× | 0% |
+| mul/MN | 6.45 | 5.34 | 0.83× | 0% |
+| mul/MM | 9.63 | 7.92 | 0.82× | 0% |
+| mul_tiny/PP | 8.42 | 8.14 | 0.97× | 0% |
+| mul_tiny/PN | 8.44 | 8.20 | 0.97× | 0% |
+| mul_tiny/PM | 8.41 | 8.14 | 0.97× | 0% |
+| mul_tiny/NP | 8.63 | 8.26 | 0.96× | 0% |
+| mul_tiny/NN | 8.46 | 8.25 | 0.97× | 0% |
+| mul_tiny/NM | 8.43 | 8.21 | 0.97× | 0% |
+| mul_tiny/MP | 8.42 | 8.12 | 0.96× | 0% |
+| mul_tiny/MN | 8.43 | 8.21 | 0.97× | 0% |
+| mul_tiny/MM | 14.95 | 13.46 | 0.90× | 0% |
+| div/PP | 6.96 | 5.94 | 0.85× | 0% |
+| div/PN | 6.97 | 5.99 | 0.86× | 0% |
+| div/MP | 7.20 | 5.95 | 0.83× | 1% |
+| div/NN | 7.20 | 5.86 | 0.81× | 1% |
+| div/PM (= ℝ) | 4.32 | 2.92 | 0.67× | 1% |
+| sqrt/P | 3.90 | 3.73 | 0.96× | 0% |
+| sqrt/M | 6.75 | 6.68 | 0.99× | 1% |
+| Horner, degree 8, P | 114.48 | 93.82 | 0.82× | 0% |
+| Horner, degree 8, M | 134.10 | 99.80 | 0.74× | 0% |
+| 3×3 determinant | 64.56 | 68.99 | 1.07× | 0% |
+
+`fma`, primitives:
+
+| Benchmark | 174092e (ns) | 79ae348 (ns) | ratio | spread |
+|---|--:|--:|--:|--:|
+| add_ru/throughput | 5.10 | 4.63 | 0.91× | 0% |
+| add_ru/latency | 9.16 | 8.10 | 0.88× | 2% |
+| mul_ru/throughput | 4.07 | 4.47 | 1.10× | 0% |
+| mul_ru/latency | 7.12 | 7.73 | 1.09× | 0% |
+| div_ru/throughput | 5.54 | 5.74 | 1.04× | 0% |
+| div_ru/latency | 9.97 | 10.03 | 1.01× | 1% |
+| mul_add_ru/throughput | 7.12 | 7.41 | 1.04× | 1% |
+| mul_add_ru/latency | 9.59 | 9.76 | 1.02× | 0% |
+| sqrt1_ru/throughput | 2.23 | 2.23 | 1.00× | 0% |
+| sqrt1_ru/latency | 7.44 | 7.43 | 1.00× | 0% |
+
+`fma`, trigonometric functions:
+
+| Benchmark | 174092e (ns) | 79ae348 (ns) | ratio | spread |
+|---|--:|--:|--:|--:|
+| sin/small | 73.07 | 44.23 | 0.61× | 0% |
+| cos/small | 67.16 | 39.93 | 0.59× | 0% |
+| tan/small | 83.15 | 57.19 | 0.69× | 1% |
+| sin/narrow | 72.40 | 43.37 | 0.60× | 1% |
+| cos/narrow | 66.18 | 39.02 | 0.59× | 1% |
+| tan/narrow | 87.54 | 59.00 | 0.67× | 1% |
+| sin/near | 142.41 | 114.87 | 0.81× | 0% |
+| cos/near | 113.63 | 94.01 | 0.83× | 0% |
+| tan/near | 134.02 | 108.90 | 0.81× | 0% |
+| sin/big | 90.22 | 66.32 | 0.74× | 1% |
+| cos/big | 85.10 | 58.57 | 0.69× | 0% |
+| tan/big | 91.75 | 74.04 | 0.81× | 1% |
+
+`generic, no FMA`, interval operations:
+
+| Benchmark | 174092e (ns) | 79ae348 (ns) | ratio | spread |
+|---|--:|--:|--:|--:|
+| add/PP | 12.43 | 9.75 | 0.78× | 1% |
+| add/PM | 10.82 | 10.32 | 0.95× | 0% |
+| add/MM | 12.42 | 11.85 | 0.95× | 1% |
+| sub/PP | 9.01 | 9.01 | 1.00× | 0% |
+| sub/PM | 10.26 | 10.16 | 0.99× | 1% |
+| sub/MM | 11.89 | 11.92 | 1.00× | 1% |
+| mul/PP | 14.69 | 15.22 | 1.04× | 0% |
+| mul/PN | 14.70 | 15.21 | 1.03× | 0% |
+| mul/PM | 14.69 | 15.16 | 1.03× | 0% |
+| mul/NP | 14.68 | 15.18 | 1.03× | 0% |
+| mul/NN | 14.75 | 15.26 | 1.03× | 0% |
+| mul/NM | 14.69 | 15.20 | 1.03× | 0% |
+| mul/MP | 14.71 | 15.19 | 1.03× | 0% |
+| mul/MN | 14.59 | 15.22 | 1.04× | 0% |
+| mul/MM | 32.10 | 30.43 | 0.95× | 1% |
+| mul_tiny/PP | 48.16 | 47.93 | 1.00× | 0% |
+| mul_tiny/PN | 48.63 | 47.57 | 0.98× | 1% |
+| mul_tiny/PM | 48.20 | 47.49 | 0.99× | 0% |
+| mul_tiny/NP | 48.28 | 48.04 | 0.99× | 0% |
+| mul_tiny/NN | 48.49 | 48.01 | 0.99× | 0% |
+| mul_tiny/NM | 48.68 | 47.54 | 0.98× | 0% |
+| mul_tiny/MP | 48.46 | 47.62 | 0.98× | 1% |
+| mul_tiny/MN | 48.72 | 47.59 | 0.98× | 1% |
+| mul_tiny/MM | 98.56 | 95.22 | 0.97× | 0% |
+| div/PP | 25.43 | 33.30 | 1.31× | 1% |
+| div/PN | 26.52 | 34.34 | 1.30× | 0% |
+| div/MP | 24.78 | 27.72 | 1.12× | 0% |
+| div/NN | 26.56 | 34.65 | 1.30× | 0% |
+| div/PM (= ℝ) | 5.14 | 4.89 | 0.95× | 0% |
+| sqrt/P | 12.77 | 11.38 | 0.89× | 1% |
+| sqrt/M | 10.00 | 10.40 | 1.04× | 1% |
+| Horner, degree 8, P | 188.98 | 198.97 | 1.05× | 0% |
+| Horner, degree 8, M | 239.26 | 218.03 | 0.91× | 1% |
+| 3×3 determinant | 198.36 | 208.40 | 1.05× | 1% |
+
+`generic, no FMA`, primitives:
+
+| Benchmark | 174092e (ns) | 79ae348 (ns) | ratio | spread |
+|---|--:|--:|--:|--:|
+| add_ru/throughput | 8.53 | 9.00 | 1.05× | 1% |
+| add_ru/latency | 13.27 | 13.43 | 1.01× | 0% |
+| mul_ru/throughput | 11.16 | 11.53 | 1.03× | 0% |
+| mul_ru/latency | 16.20 | 16.79 | 1.04× | 0% |
+| div_ru/throughput | 32.59 | 21.57 | 0.66× | 0% |
+| div_ru/latency | 35.41 | 27.74 | 0.78× | 0% |
+| mul_add_ru/throughput | 39.00 | 39.09 | 1.00× | 0% |
+| mul_add_ru/latency | 24.25 | 23.98 | 0.99× | 1% |
+| sqrt1_ru/throughput | 4.14 | 4.14 | 1.00× | 0% |
+| sqrt1_ru/latency | 7.87 | 7.88 | 1.00× | 1% |
+
+`generic, no FMA`, trigonometric functions:
+
+| Benchmark | 174092e (ns) | 79ae348 (ns) | ratio | spread |
+|---|--:|--:|--:|--:|
+| sin/small | 136.19 | 98.31 | 0.72× | 1% |
+| cos/small | 115.72 | 80.98 | 0.70× | 1% |
+| tan/small | 154.76 | 112.19 | 0.72× | 1% |
+| sin/narrow | 126.60 | 89.08 | 0.70× | 1% |
+| cos/narrow | 111.70 | 77.40 | 0.69× | 1% |
+| tan/narrow | 156.69 | 108.70 | 0.69× | 0% |
+| sin/near | 267.71 | 237.98 | 0.89× | 2% |
+| cos/near | 165.86 | 147.26 | 0.89× | 1% |
+| tan/near | 213.55 | 188.63 | 0.88× | 1% |
+| sin/big | 176.60 | 135.78 | 0.77× | 1% |
+| cos/big | 136.77 | 101.33 | 0.74× | 1% |
+| tan/big | 168.11 | 139.10 | 0.83× | 1% |
+
+`sse42`, interval operations:
+
+| Benchmark | 174092e (ns) | 79ae348 (ns) | ratio | spread |
+|---|--:|--:|--:|--:|
+| add/PP | 5.11 | 5.05 | 0.99× | 1% |
+| add/PM | 5.09 | 5.05 | 0.99× | 0% |
+| add/MM | 5.09 | 5.05 | 0.99× | 0% |
+| sub/PP | 5.25 | 5.05 | 0.96× | 0% |
+| sub/PM | 5.25 | 5.05 | 0.96× | 0% |
+| sub/MM | 5.24 | 5.05 | 0.96× | 0% |
+| mul/PP | 7.82 | 8.10 | 1.04× | 0% |
+| mul/PN | 7.86 | 8.10 | 1.03× | 1% |
+| mul/PM | 7.85 | 7.96 | 1.01× | 1% |
+| mul/NP | 7.91 | 8.17 | 1.03× | 0% |
+| mul/NN | 7.98 | 8.17 | 1.02× | 0% |
+| mul/NM | 7.91 | 8.13 | 1.03× | 0% |
+| mul/MP | 7.92 | 8.10 | 1.02× | 0% |
+| mul/MN | 7.94 | 8.12 | 1.02× | 0% |
+| mul/MM | 14.10 | 12.88 | 0.91× | 0% |
+| mul_tiny/PP | 11.77 | 12.06 | 1.02× | 0% |
+| mul_tiny/PN | 11.83 | 12.07 | 1.02× | 0% |
+| mul_tiny/PM | 11.78 | 12.10 | 1.03× | 0% |
+| mul_tiny/NP | 11.85 | 12.13 | 1.02× | 0% |
+| mul_tiny/NN | 11.95 | 12.24 | 1.02× | 0% |
+| mul_tiny/NM | 11.83 | 12.12 | 1.02× | 0% |
+| mul_tiny/MP | 11.79 | 12.15 | 1.03× | 0% |
+| mul_tiny/MN | 11.85 | 12.12 | 1.02× | 0% |
+| mul_tiny/MM | 22.68 | 20.96 | 0.92× | 0% |
+| div/PP | 9.96 | 9.76 | 0.98× | 0% |
+| div/PN | 10.07 | 9.75 | 0.97× | 0% |
+| div/MP | 10.07 | 9.78 | 0.97× | 0% |
+| div/NN | 9.94 | 9.56 | 0.96× | 0% |
+| div/PM (= ℝ) | 3.29 | 3.12 | 0.95× | 1% |
+| sqrt/P | 6.75 | 6.57 | 0.97× | 0% |
+| sqrt/M | 10.36 | 10.19 | 0.98× | 0% |
+| Horner, degree 8, P | 146.21 | 123.32 | 0.84× | 0% |
+| Horner, degree 8, M | 173.72 | 138.41 | 0.80× | 0% |
+| 3×3 determinant | 96.06 | 88.04 | 0.92× | 0% |
+
+`sse42`, primitives:
+
+| Benchmark | 174092e (ns) | 79ae348 (ns) | ratio | spread |
+|---|--:|--:|--:|--:|
+| add_ru/throughput | 5.33 | 5.23 | 0.98× | 0% |
+| add_ru/latency | 9.20 | 7.80 | 0.85× | 0% |
+| mul_ru/throughput | 6.83 | 6.97 | 1.02× | 1% |
+| mul_ru/latency | 10.88 | 10.79 | 0.99× | 0% |
+| div_ru/throughput | 9.39 | 9.43 | 1.00× | 0% |
+| div_ru/latency | 15.03 | 14.92 | 0.99× | 0% |
+| mul_add_ru/throughput | 15.74 | 14.20 | 0.90× | 0% |
+| mul_add_ru/latency | 16.12 | 15.63 | 0.97× | 0% |
+| sqrt1_ru/throughput | 5.91 | 5.91 | 1.00× | 0% |
+| sqrt1_ru/latency | 7.64 | 7.62 | 1.00× | 0% |
+
+`sse42`, trigonometric functions:
+
+| Benchmark | 174092e (ns) | 79ae348 (ns) | ratio | spread |
+|---|--:|--:|--:|--:|
+| sin/small | 88.67 | 51.47 | 0.58× | 0% |
+| cos/small | 80.33 | 45.63 | 0.57× | 0% |
+| tan/small | 117.59 | 61.47 | 0.52× | 0% |
+| sin/narrow | 87.16 | 49.61 | 0.57× | 0% |
+| cos/narrow | 78.76 | 45.23 | 0.57× | 0% |
+| tan/narrow | 124.68 | 62.14 | 0.50× | 0% |
+| sin/near | 159.52 | 96.59 | 0.61× | 0% |
+| cos/near | 122.94 | 78.92 | 0.64× | 0% |
+| tan/near | 158.46 | 93.85 | 0.59× | 1% |
+| sin/big | 109.82 | 73.27 | 0.67× | 0% |
+| cos/big | 99.46 | 63.69 | 0.64× | 0% |
+| tan/big | 126.73 | 76.33 | 0.60× | 0% |
+
+The benchmarks added since `174092e` have no time at `174092e`: the last table
+gives their times at `79ae348`, with a column per configuration. `mul_add` runs
+`x.mul_add(y, z)` on the classes of `x`, `y` and `z`, and `mul_add_tiny` the
+same with `x` scaled as in `mul_tiny`, so that the products of the endpoints of
+`x` and `y` lie below 2^-968; Horner with `mul_add` calls it in place of
+`acc * x + c`. The series `token/` and `token-v3/` run the loops of `add`,
+`mul`, `mul_tiny`, `div`, `sqrt`, both forms of Horner and the determinant with
+the operations of `inari::simd`, entering the region of a level once per batch
+of 1024: `token/` through `dispatch`, at the highest level that the CPU has,
+which on this CPU, without AVX-512, is that of `V3`, and `token-v3/` through
+`vectorize` of a `V3`. At `V3`, the `fma` backend runs in `fma` and in `sse42`,
+and the portable backend in `generic, no FMA`, as `force-generic` asks.
+`mul_add_ru/latency_inexact` is a chain of 1024 dependent `mul_add_ru`s, like
+`mul_add_ru/latency`, whose steps all take the fast path and are almost never
+exact.
+
+The benchmarks added since `174092e`, at `79ae348`:
+
+| Benchmark | fma (ns) | generic, no FMA (ns) | sse42 (ns) | spread |
+|---|--:|--:|--:|--:|
+| mul_add/PPP | 9.14 | 40.32 | 16.47 | 0% |
+| mul_add/PNM | 9.11 | 41.09 | 16.72 | 0% |
+| mul_add/MMM | 15.70 | 81.80 | 30.44 | 0% |
+| mul_add_tiny/PPP | 58.99 | 96.04 | 119.65 | 1% |
+| mul_add_tiny/PNM | 57.86 | 96.06 | 119.42 | 0% |
+| mul_add_tiny/MMM | 99.58 | 185.15 | 234.01 | 1% |
+| Horner with `mul_add`, degree 8, P | 119.53 | 357.58 | 170.61 | 1% |
+| Horner with `mul_add`, degree 8, M | 146.93 | 602.78 | 253.15 | 0% |
+| token/add/PP | 3.13 | 6.62 | 3.29 | 33% |
+| token/add/PM | 3.13 | 7.93 | 3.28 | 17% |
+| token/add/MM | 3.13 | 8.88 | 3.28 | 12% |
+| token/mul/PP | 4.11 | 13.89 | 3.78 | 0% |
+| token/mul/PN | 4.11 | 13.82 | 3.91 | 0% |
+| token/mul/PM | 4.11 | 13.83 | 3.80 | 0% |
+| token/mul/NP | 4.13 | 13.89 | 3.99 | 0% |
+| token/mul/NN | 4.34 | 14.13 | 4.03 | 0% |
+| token/mul/NM | 4.12 | 13.98 | 3.94 | 0% |
+| token/mul/MP | 3.95 | 13.78 | 3.86 | 0% |
+| token/mul/MN | 4.11 | 13.93 | 3.95 | 0% |
+| token/mul/MM | 6.83 | 30.91 | 6.30 | 0% |
+| token/mul_tiny/PP | 7.07 | 46.34 | 6.91 | 0% |
+| token/mul_tiny/PN | 7.17 | 46.33 | 7.12 | 0% |
+| token/mul_tiny/PM | 7.08 | 46.26 | 7.01 | 0% |
+| token/mul_tiny/NP | 7.33 | 46.32 | 7.23 | 0% |
+| token/mul_tiny/NN | 7.29 | 46.66 | 7.33 | 0% |
+| token/mul_tiny/NM | 7.19 | 46.66 | 7.14 | 0% |
+| token/mul_tiny/MP | 7.15 | 46.46 | 7.06 | 1% |
+| token/mul_tiny/MN | 7.19 | 46.65 | 7.14 | 0% |
+| token/mul_tiny/MM | 12.91 | 90.10 | 12.78 | 0% |
+| token/div/PP | 5.22 | 24.91 | 5.17 | 0% |
+| token/div/PN | 5.25 | 26.62 | 5.19 | 1% |
+| token/div/MP | 5.22 | 23.44 | 5.17 | 2% |
+| token/div/NN | 5.14 | 25.12 | 5.05 | 0% |
+| token/div/PM (= ℝ) | 1.70 | 4.26 | 1.70 | 0% |
+| token/sqrt/P | 2.97 | 8.67 | 2.97 | 0% |
+| token/sqrt/M | 2.76 | 4.82 | 2.49 | 2% |
+| token/Horner, degree 8, P | 84.09 | 238.33 | 76.92 | 0% |
+| token/Horner, degree 8, M | 88.28 | 271.64 | 86.89 | 0% |
+| token/Horner with `mul_add`, degree 8, P | 92.34 | 305.29 | 90.24 | 0% |
+| token/Horner with `mul_add`, degree 8, M | 123.15 | 552.69 | 120.38 | 0% |
+| token/3×3 determinant | 46.09 | 226.08 | 51.91 | 1% |
+| token-v3/add/PP | 3.01 | 6.68 | 3.28 | 32% |
+| token-v3/add/PM | 3.01 | 7.94 | 3.27 | 16% |
+| token-v3/add/MM | 3.01 | 8.89 | 3.27 | 11% |
+| token-v3/mul/PP | 4.10 | 13.79 | 3.77 | 0% |
+| token-v3/mul/PN | 4.11 | 13.76 | 3.91 | 0% |
+| token-v3/mul/PM | 4.11 | 13.76 | 3.80 | 0% |
+| token-v3/mul/NP | 4.11 | 13.79 | 3.98 | 0% |
+| token-v3/mul/NN | 4.14 | 14.11 | 4.03 | 0% |
+| token-v3/mul/NM | 4.11 | 13.93 | 3.94 | 0% |
+| token-v3/mul/MP | 3.93 | 13.77 | 3.85 | 0% |
+| token-v3/mul/MN | 4.11 | 13.89 | 3.94 | 0% |
+| token-v3/mul/MM | 6.80 | 30.45 | 6.29 | 0% |
+| token-v3/mul_tiny/PP | 7.06 | 48.45 | 6.90 | 0% |
+| token-v3/mul_tiny/PN | 7.16 | 46.68 | 7.13 | 0% |
+| token-v3/mul_tiny/PM | 7.06 | 46.60 | 7.00 | 0% |
+| token-v3/mul_tiny/NP | 7.32 | 48.50 | 7.22 | 0% |
+| token-v3/mul_tiny/NN | 7.28 | 49.11 | 7.32 | 0% |
+| token-v3/mul_tiny/NM | 7.18 | 49.05 | 7.14 | 0% |
+| token-v3/mul_tiny/MP | 7.14 | 48.48 | 7.06 | 0% |
+| token-v3/mul_tiny/MN | 7.22 | 49.12 | 7.13 | 0% |
+| token-v3/mul_tiny/MM | 13.00 | 90.16 | 12.78 | 0% |
+| token-v3/div/PP | 5.25 | 24.76 | 5.18 | 1% |
+| token-v3/div/PN | 5.27 | 26.36 | 5.20 | 1% |
+| token-v3/div/MP | 5.22 | 23.77 | 5.16 | 0% |
+| token-v3/div/NN | 5.14 | 25.34 | 5.07 | 0% |
+| token-v3/div/PM (= ℝ) | 1.69 | 4.27 | 1.70 | 1% |
+| token-v3/sqrt/P | 2.96 | 8.71 | 2.97 | 1% |
+| token-v3/sqrt/M | 11.71 | 4.62 | 2.50 | 1% |
+| token-v3/Horner, degree 8, P | 82.46 | 239.22 | 77.22 | 1% |
+| token-v3/Horner, degree 8, M | 88.34 | 272.34 | 87.64 | 0% |
+| token-v3/Horner with `mul_add`, degree 8, P | 92.64 | 305.96 | 90.90 | 0% |
+| token-v3/Horner with `mul_add`, degree 8, M | 124.43 | 552.33 | 120.40 | 0% |
+| token-v3/3×3 determinant | 46.13 | 231.16 | 51.57 | 0% |
+| mul_add_ru/latency_inexact | 9.98 | 42.76 | 15.84 | 0% |
+
 ## Observations
 
 - Every `avx_fma` primitive but the square root costs about 9 ns, both in
@@ -1175,6 +1532,60 @@ sitting.
   against 1.89–9.42 µs. `near` is still the slowest class, but by less: it takes
   1.6–1.9 times as long as `small` with the kernel, against 2.5–3.8 times with
   MPFR.
+- Between `174092e` and `79ae348`, in `fma`, interval addition and subtraction
+  take 0.91 times as long, multiplication 0.80–0.84, `mul_tiny/MM` 0.90 (the
+  other classes of `mul_tiny` 0.96–0.97), division 0.81–0.86 and `div/PM` 0.67,
+  and Horner of degree 8 0.82 on `P` and 0.74 on `M`, while `sqrt` takes
+  0.96–0.99. But the 3×3 determinant takes 1.07 times as long, and the
+  primitive `mul_ru` 1.09–1.10, while `add_ru` takes 0.88–0.91 and `div_ru`,
+  `mul_add_ru` and `sqrt1_ru` 1.00–1.04. In that time, `src/arith.rs`,
+  `src/classify.rs`, `src/simd/token.rs`, `src/simd/x86_64.rs`,
+  `src/simd/x86_64/fma.rs` and `src/simd/x86_64/lanewise.rs` changed in 15
+  commits, among them `7e92e46`, which added `inari::simd` and made the interval
+  operations call the backend through its token `Baseline`, `ef2c382`, which
+  classifies with one `movmskps` per operand, and `de13037`, which passes the
+  vectors of the backend's out-of-line functions in registers. Whether these
+  commits account for these moves, and which of them for which, has not been
+  measured.
+- In `generic, no FMA`, `79ae348` takes 1.30–1.31 times as long as `174092e` on
+  `div/PP`, `div/PN` and `div/NN`, and 1.12 times on `div/MP`, while the
+  primitive `div_ru` takes 0.66 times as long in throughput and 0.78 in
+  latency. The same divisions through a token, `token/div`, take 23.4–26.6 ns
+  there, where `div` took 24.8–26.6 ns at `174092e`. Of the commits in between,
+  `27b52bb` made the portable `div_ru`, which `Interval::div` calls out of line
+  in this configuration, take its vectors in registers; whether it or another
+  commit made `div` slower has not been measured. The other rows of this
+  configuration take 0.95–1.05 times as long as before, except `add/PP` (0.78),
+  `sqrt/P` (0.89), Horner of `M` (0.91) and the trigonometric functions.
+- In `sse42`, `79ae348` takes 0.80–0.84 times as long as `174092e` on Horner of
+  degree 8, 0.91–0.92 on `mul/MM`, `mul_tiny/MM` and the determinant, 0.85 on
+  `add_ru/latency` and 0.90 on `mul_add_ru/throughput`, and 0.95–1.04 on every
+  other row but those of the trigonometric functions.
+- The trigonometric functions take 0.59–0.83 times as long as at `174092e` in
+  `fma`, 0.69–0.89 in `generic, no FMA` and 0.50–0.67 in `sse42`.
+  `src/dyadic/trig.rs` and its tables, which compute their bounds, and the
+  files of the kernel that it imports from (`src/dyadic.rs`, `src/limbs.rs` and
+  `src/dyadic/consts.rs`, `exp.rs`, `fast.rs` and `level.rs`) changed in 30
+  commits in between, and in `sse42` the kernel now runs its copy with FMA (see
+  the section of these tables). At `79ae348`, where both run a copy of the
+  kernel compiled with FMA, `sse42` takes 0.84–0.86 times as long as `fma` on
+  `near` and 1.03–1.16 times on the other classes; at `174092e` it took
+  1.08–1.18 times as long on `near`. That has not been traced.
+- In `fma`, where `V3`, and so `dispatch` on this CPU, gives the build's
+  backend, the operations of `token/` take 0.76–0.90 times as long as the same
+  operations without a token, 0.96 on `mul_tiny/MM`, 0.67 on the determinant,
+  0.58 on `div/PM` and 0.41 on `sqrt/M`. That has not been traced. There
+  `token-v3/sqrt/M` takes 4.24 times as long as `token/sqrt/M`, while every
+  other row of `token-v3/` is within 5% of `token/`, and in `sse42` and
+  `generic, no FMA` the two take 0.96–1.01 times as long as each other on
+  `sqrt/M`. That has not been traced either.
+- In `generic, no FMA`, `mul_add_ru/latency_inexact` takes 1.78 times as long
+  as `mul_add_ru/latency`, against 1.02 times in `fma` and 1.01 in `sse42`. The
+  comment on it in `benches/primitives.rs` expects a backend that branches on
+  the rounding error or on the sign of the result, as the portable
+  `mul_add1_ru_fast` and `step_up` do in their source, to mispredict those
+  branches often on this chain; that this makes the difference has not been
+  measured.
 
 ## Conclusion
 
@@ -1227,8 +1638,8 @@ fast on multiplication.
 
 The benchmarks are in `bench/`, a separate package, so that criterion does not
 affect inari's minimum supported Rust version. They need a recent Rust
-(tested with 1.96). Primitives are exposed through the hidden `__bench`
-feature, which is not public API.
+(tested with 1.96 and 1.98.1). Primitives are exposed through the hidden
+`__bench` feature, which is not public API.
 
 ```bash
 cd bench
