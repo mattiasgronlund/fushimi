@@ -120,8 +120,11 @@ pub(crate) fn lt(x: F64X2, y: F64X2) -> F64X2 {
     unsafe { _mm_cmplt_pd(x, y) }
 }
 
-// The vector version of the `maximumNumber` operation defined in IEEE 754-2019,
-// which does not propagate NaNs.
+// The vector version of `x > y ? x : y`, lane by lane: `_mm_max_pd` returns the lane of `y` where
+// either lane is a NaN, and where both are zeros, so it differs from the `maximumNumber` operation
+// of IEEE 754-2019 (`generic::max`) where only the lane of `y` is a NaN, and where that of `x` is
+// +0 and that of `y` is -0. Its callers handle empty intervals before it, or want a NaN for them
+// (`mag`).
 #[inline(always)]
 pub(crate) fn max(x: F64X2, y: F64X2) -> F64X2 {
     unsafe { _mm_max_pd(x, y) }

@@ -5,7 +5,7 @@
 // MXCSR around every operation serializes them: about 9 ns per operation on Zen
 // 2 (see BENCHMARKS.md). So the operations that round upward use the method of
 // the generic backend (see `generic.rs`) instead: the fast paths are the same,
-// computed on both lanes at once, and the few inputs that fail their checks in
+// computed on both lanes at once, and the inputs that fail their checks in
 // either lane are recomputed by the generic backend. `mul_ru` goes further: where
 // x and y are nonzero and |RN(x * y)| < 2^-968, which its fast path rejects, it
 // computes RU(x * y) itself, as `generic::mul1_ru_tiny` does (see
@@ -313,10 +313,9 @@ pub(crate) fn sqrt_rd_ru(x: F64X2) -> F64X2 {
 }
 
 /// `sqrt1_rd(x) = √x` rounded toward -∞.
-// Part of the backend interface, but nothing calls it here: `Interval::sqrt`
-// needs a lone square root only for an interval containing zero, which rounds
-// up, and `sqrt_rd_ru` falls back to `generic` as a pair.
-#[allow(dead_code)]
+// `cr::sqrt_rd` calls it, through `crate::simd`, where this backend is the
+// build's; `Interval::sqrt` does not: it needs a lone square root only for an
+// interval containing zero, which rounds up.
 pub(crate) fn sqrt1_rd(x: f64) -> f64 {
     generic::sqrt1_rd(x)
 }

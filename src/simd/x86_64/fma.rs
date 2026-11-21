@@ -2,7 +2,7 @@
 // features (Haswell, 2013).
 //
 // It is the method of `sse42` — the fast paths of the generic backend computed
-// on both lanes at once, with the few inputs that fail their checks in either
+// on both lanes at once, with the inputs that fail their checks in either
 // lane recomputed by the generic backend (see `lanewise.rs`) — with the FMA,
 // which makes TwoProduct and the remainders of division and of the square root
 // one instruction each instead of Dekker's algorithm. As there, `mul_ru` computes
@@ -330,10 +330,9 @@ pub(crate) fn sqrt1_ru(x: f64) -> f64 {
 }
 
 /// `sqrt1_rd(x) = √x` rounded toward -∞.
-// Part of the backend interface, but nothing calls it here: `Interval::sqrt`
-// needs a lone square root only for an interval containing zero, which rounds
-// up, and `sqrt_rd_ru` falls back to `generic` as a pair.
-#[allow(dead_code)]
+// `cr::sqrt_rd` calls it, through `crate::simd`, where this backend is the
+// build's; `Interval::sqrt` does not: it needs a lone square root only for an
+// interval containing zero, which rounds up.
 pub(crate) fn sqrt1_rd(x: f64) -> f64 {
     generic::sqrt1_rd(x)
 }

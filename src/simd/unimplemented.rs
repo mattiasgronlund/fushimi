@@ -146,10 +146,8 @@ pub(crate) fn sqrt_rd_ru(_: F64X2) -> F64X2 {
     unimplemented!()
 }
 
-// Part of the backend interface, but nothing calls it here: `Interval::sqrt`
-// needs a lone square root only for an interval containing zero, which rounds
-// up.
-#[allow(dead_code)]
+// `cr::sqrt_rd` calls it, through `crate::simd`; `Interval::sqrt` does not: it
+// needs a lone square root only for an interval containing zero, which rounds up.
 pub(crate) fn sqrt1_rd(_: f64) -> f64 {
     unimplemented!()
 }

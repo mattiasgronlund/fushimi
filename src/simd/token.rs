@@ -50,21 +50,36 @@ mod sealed {
     // the same on every argument: where an argument is a NaN, or the arguments are zeros of
     // opposite signs, `max` of `src/simd/x86_64.rs` (`_mm_max_pd`) can return another value than
     // `max` of `src/simd/generic.rs`. A user can call the methods through the bound `S: Simd`,
-    // but cannot name the trait.
+    // but cannot name the trait. They are `#[doc(hidden)]`, the convention for items outside a
+    // crate's API, and the docs of `Simd` say that they are inari's internals.
     pub trait Backend {
+        #[doc(hidden)]
         fn add_ru(self, x: F64X2, y: F64X2) -> F64X2;
+        #[doc(hidden)]
         fn classify_bits(self, x: &F64X2) -> u8;
+        #[doc(hidden)]
         fn div_ru(self, x: F64X2, y: F64X2) -> F64X2;
+        #[doc(hidden)]
         fn max(self, x: F64X2, y: F64X2) -> F64X2;
+        #[doc(hidden)]
         fn mul_add_ru(self, x: F64X2, y: F64X2, z: F64X2) -> F64X2;
+        #[doc(hidden)]
         fn mul_ru(self, x: F64X2, y: F64X2) -> F64X2;
+        #[doc(hidden)]
         fn neg0(self, x: F64X2) -> F64X2;
+        #[doc(hidden)]
         fn shuffle02(self, x: F64X2, y: F64X2) -> F64X2;
+        #[doc(hidden)]
         fn shuffle03(self, x: F64X2, y: F64X2) -> F64X2;
+        #[doc(hidden)]
         fn shuffle13(self, x: F64X2, y: F64X2) -> F64X2;
+        #[doc(hidden)]
         fn splat(self, x: f64) -> F64X2;
+        #[doc(hidden)]
         fn sqrt_rd_ru(self, x: F64X2) -> F64X2;
+        #[doc(hidden)]
         fn sqrt1_ru(self, x: f64) -> f64;
+        #[doc(hidden)]
         fn swap(self, x: F64X2) -> F64X2;
     }
 }
@@ -76,10 +91,14 @@ mod sealed {
 ///
 /// The tokens are [`Baseline`], on every target, and on x86-64 `V2`, `V3` and `V4`, whose
 /// `try_new` returns one only on a CPU that has their target features. Only inari implements
-/// `Simd`. Every token gives the same intervals, since these operations return the tightest
-/// results (see [Conformance to the standard](crate::_docs::conformance)), and the same
-/// decorations, since those of `DecInterval` compute them from the arguments and these intervals
-/// alone; only the speed differs.
+/// `Simd`. The methods of its supertrait `Backend` are inari's internals: the type of the vectors
+/// that they take and return differs by build (`[f64; 2]` in a build for `x86-64`, `__m128d` in
+/// one for `haswell` without the feature `force-generic`), so a call that compiles in one build
+/// need not compile in another, and they can change in any release. Every token gives the same
+/// intervals, since these operations return the tightest results (see
+/// [Conformance to the standard](crate::_docs::conformance)), and the same decorations, since those
+/// of `DecInterval` compute them from the arguments and these intervals alone; only the speed
+/// differs.
 ///
 /// A function generic over `S: Simd` runs the operations at the level of the token that it is
 /// given:
@@ -412,7 +431,11 @@ pub fn dispatch<W: WithLevel>(w: W) -> W::Output {
 // `sup_raw`, `with_infsup_raw`, `zero`, `is_empty`, `contains`, `is_common_interval` and
 // `DecInterval::set_dec_impl` are `#[inline]`.
 // So a `*_with` method instantiated in a user's crate calls out of line only functions that round
-// upward or downward, and functions that they call.
+// upward or downward, and functions that they call (seen with rustc 1.96 in Cargo's default release
+// profile when the `*_with` methods of `DecInterval` were added: at `Baseline` in builds for
+// aarch64, riscv64gc, i686 and wasm32 with and without `simd128`, at `Baseline` and in the region
+// of `V3` in builds for `x86-64`, `x86-64-v2` and `haswell`, and in that of `V2` in one for
+// `x86-64`).
 //
 // Where the `fma` or `sse42` backend is the build's, the methods `add_ru`, `div_ru` and `mul_ru`
 // of `Baseline` (and `mul_add_ru` where `sse42` is) are `#[inline(always)]` and call forwarders

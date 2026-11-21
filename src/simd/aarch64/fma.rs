@@ -4,7 +4,7 @@
 // are the FMA.
 //
 // They compute the fast paths of the generic backend on both lanes at once, and
-// the few inputs that fail their checks in either lane are recomputed by the
+// the inputs that fail their checks in either lane are recomputed by the
 // generic backend (see `lanewise.rs`). The FMA makes the remainders of division
 // and of the square root one instruction each, and the error of TwoProduct one
 // instruction in `mul_ru`, which uses its negation, and two in `mul_add_ru` (see
