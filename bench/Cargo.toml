@@ -1,7 +1,7 @@
 # Benchmarks, in a separate package so that criterion and its dependencies do
 # not affect inari's minimum supported Rust version. See BENCHMARKS.md.
 [package]
-name = "inari-bench"
+name = "fushimi-bench"
 version = "0.0.0"
 edition = "2021"
 publish = false
@@ -10,10 +10,10 @@ publish = false
 [workspace]
 
 [features]
-force-generic = ["inari/force-generic"]
+force-generic = ["fushimi/force-generic"]
 
 [dependencies]
-inari = { path = "..", default-features = false, features = ["__bench"] }
+fushimi = { path = "..", default-features = false, features = ["__bench"] }
 
 [dev-dependencies]
 criterion = { version = "0.7", default-features = false, features = ["cargo_bench_support"] }

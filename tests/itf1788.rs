@@ -1,4 +1,4 @@
-use inari::*;
+use fushimi::*;
 
 #[allow(
     unused_attributes,

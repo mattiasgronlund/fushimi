@@ -18,7 +18,7 @@
 
 //Preamble
 use crate::*;
-use inari::{DecInterval as DI, Decoration as D, Interval as I, Overlap as O};
+use fushimi::{DecInterval as DI, Decoration as D, Interval as I, Overlap as O};
 
 #[test]
 fn minimal_atan2_test() {

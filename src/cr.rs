@@ -31,7 +31,7 @@
 //! wasm32 call too).
 //!
 //! ```
-//! use inari::cr;
+//! use fushimi::cr;
 //! assert_eq!(cr::exp_rn(0.0), 1.0);
 //! assert!(cr::sin_rd(1.0) < cr::sin_ru(1.0));
 //! assert_eq!(cr::pow_rn(-2.0, 3.0), -8.0);

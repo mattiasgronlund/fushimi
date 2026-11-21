@@ -34,7 +34,7 @@ A comparison of the backends of inari, in twelve sittings:
 - 2026-11-21: `fma`, `generic` without an FMA and `sse42` again, all the
   benchmarks of each, on `79ae348` against `174092e`, the commit that added the
   eleventh sitting, with the benchmarks added between the two: `mul_add` of
-  intervals, the interval operations through the tokens of `inari::simd`, and a
+  intervals, the interval operations through the tokens of `fushimi::simd`, and a
   chain of `mul_add_ru` whose steps stay inexact.
 
 `avx_fma` is the base column of the first three x86-64 sections, so that the
@@ -1238,7 +1238,7 @@ same with `x` scaled as in `mul_tiny`, so that the products of the endpoints of
 `x` and `y` lie below 2^-968; Horner with `mul_add` calls it in place of
 `acc * x + c`. The series `token/` and `token-v3/` run the loops of `add`,
 `mul`, `mul_tiny`, `div`, `sqrt`, both forms of Horner and the determinant with
-the operations of `inari::simd`, entering the region of a level once per batch
+the operations of `fushimi::simd`, entering the region of a level once per batch
 of 1024: `token/` through `dispatch`, at the highest level that the CPU has,
 which on this CPU, without AVX-512, is that of `V3`, and `token-v3/` through
 `vectorize` of a `V3`. At `V3`, the `fma` backend runs in `fma` and in `sse42`,
@@ -1541,7 +1541,7 @@ The benchmarks added since `174092e`, at `79ae348`:
   `mul_add_ru` and `sqrt1_ru` 1.00–1.04. In that time, `src/arith.rs`,
   `src/classify.rs`, `src/simd/token.rs`, `src/simd/x86_64.rs`,
   `src/simd/x86_64/fma.rs` and `src/simd/x86_64/lanewise.rs` changed in 15
-  commits, among them `7e92e46`, which added `inari::simd` and made the interval
+  commits, among them `7e92e46`, which added `fushimi::simd` and made the interval
   operations call the backend through its token `Baseline`, `ef2c382`, which
   classifies with one `movmskps` per operand, and `de13037`, which passes the
   vectors of the backend's out-of-line functions in registers. Whether these

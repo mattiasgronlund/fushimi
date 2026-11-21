@@ -82,7 +82,7 @@ This example was somewhat easy to analyze. But in practical computation, there a
 Let's change the type of `x` and the other constants in the previous code to [`Interval`].
 
 ```
-use inari::*;
+use fushimi::*;
 
 fn main() {
     let mut x = interval!("[0.1]").unwrap();
@@ -141,7 +141,7 @@ and for $b = 0$, we use the original formulae to avoid division by zero.
 Let's implement the formulae, but in this time, we use [`DecInterval`] instead of [`Interval`]. The reason will be made clear soon.
 
 ```
-use inari::*;
+use fushimi::*;
 
 /// Returns the solutions of the quadratic equation `a x^2 + b x + c = 0`.
 ///

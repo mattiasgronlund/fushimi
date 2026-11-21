@@ -185,7 +185,7 @@ impl Interval {
     /// # Examples
     ///
     /// ```
-    /// use inari::{Interval as I, const_interval as c};
+    /// use fushimi::{Interval as I, const_interval as c};
     /// let zero = c!(0.0, 0.0);
     /// assert_eq!(zero.mul_rev_to_pair(c!(1.0, 2.0)), [I::EMPTY; 2]);
     /// assert_eq!(zero.mul_rev_to_pair(c!(0.0, 2.0)), [I::ENTIRE, I::EMPTY]);
@@ -268,7 +268,7 @@ impl Interval {
     /// Getting an enclosure of a partial sum omitting a single term from their total:
     ///
     /// ```
-    /// use inari::*;
+    /// use fushimi::*;
     /// let x = interval!("[0.1, 0.2]").unwrap();
     /// let y = interval!("[0.3, 0.4]").unwrap();
     /// let z = interval!("[0.5, 0.6]").unwrap();
@@ -281,7 +281,7 @@ impl Interval {
     /// `sum.cancel_minus(x)` is a subset of `sum - x`:
     ///
     /// ```
-    /// # use inari::*;
+    /// # use fushimi::*;
     /// # let x = interval!("[0.1, 0.2]").unwrap();
     /// # let y = interval!("[0.3, 0.4]").unwrap();
     /// # let z = interval!("[0.5, 0.6]").unwrap();
@@ -292,7 +292,7 @@ impl Interval {
     /// But the inverse does not hold in general:
     ///
     /// ```should_panic
-    /// # use inari::*;
+    /// # use fushimi::*;
     /// # let x = interval!("[0.1, 0.2]").unwrap();
     /// # let y = interval!("[0.3, 0.4]").unwrap();
     /// # let z = interval!("[0.5, 0.6]").unwrap();
@@ -303,7 +303,7 @@ impl Interval {
     /// `sum.cancel_minus(x)`, etc. returns [`Interval::ENTIRE`] when `sum` is unbounded:
     ///
     /// ```
-    /// use inari::*;
+    /// use fushimi::*;
     /// let x = const_interval!(1.0, 2.0);
     /// let y = const_interval!(3.0, f64::MAX);
     /// let sum = x + y;
@@ -315,7 +315,7 @@ impl Interval {
     /// less than that of `x`:
     ///
     /// ```
-    /// use inari::*;
+    /// use fushimi::*;
     /// let x = const_interval!(1.0, 2.0);
     /// let sum = const_interval!(4.0, 4.5);
     /// assert_eq!(sum.cancel_minus(x), Interval::ENTIRE);
@@ -446,14 +446,14 @@ impl Interval {
     /// # Examples
     ///
     /// ```
-    /// use inari::{const_interval as c, simd::{Baseline, Simd}};
+    /// use fushimi::{const_interval as c, simd::{Baseline, Simd}};
     /// let x = c!(1.0, 2.0);
     /// let y = c!(-3.0, 0.5);
     /// let z = c!(0.1, 0.2);
     /// assert_eq!(Baseline.vectorize(|| x.mul_add_with(Baseline, y, z)), x.mul_add(y, z));
     /// #[cfg(target_arch = "x86_64")]
     /// {
-    ///     if let Some(s) = inari::simd::V3::try_new() {
+    ///     if let Some(s) = fushimi::simd::V3::try_new() {
     ///         assert_eq!(s.vectorize(|| x.mul_add_with(s, y, z)), x.mul_add(y, z));
     ///     }
     /// }
@@ -578,12 +578,12 @@ impl Interval {
     /// # Examples
     ///
     /// ```
-    /// use inari::{const_interval as c, simd::{Baseline, Simd}};
+    /// use fushimi::{const_interval as c, simd::{Baseline, Simd}};
     /// let x = c!(3.0, 4.0);
     /// assert_eq!(Baseline.vectorize(|| x.recip_with(Baseline)), x.recip());
     /// #[cfg(target_arch = "x86_64")]
     /// {
-    ///     if let Some(s) = inari::simd::V3::try_new() {
+    ///     if let Some(s) = fushimi::simd::V3::try_new() {
     ///         assert_eq!(s.vectorize(|| x.recip_with(s)), x.recip());
     ///     }
     /// }
@@ -663,12 +663,12 @@ impl Interval {
     /// # Examples
     ///
     /// ```
-    /// use inari::{const_interval as c, simd::{Baseline, Simd}};
+    /// use fushimi::{const_interval as c, simd::{Baseline, Simd}};
     /// let x = c!(-3.0, 0.1);
     /// assert_eq!(Baseline.vectorize(|| x.sqr_with(Baseline)), x.sqr());
     /// #[cfg(target_arch = "x86_64")]
     /// {
-    ///     if let Some(s) = inari::simd::V3::try_new() {
+    ///     if let Some(s) = fushimi::simd::V3::try_new() {
     ///         assert_eq!(s.vectorize(|| x.sqr_with(s)), x.sqr());
     ///     }
     /// }
@@ -740,12 +740,12 @@ impl Interval {
     /// # Examples
     ///
     /// ```
-    /// use inari::{const_interval as c, simd::{Baseline, Simd}};
+    /// use fushimi::{const_interval as c, simd::{Baseline, Simd}};
     /// let x = c!(2.0, 3.0);
     /// assert_eq!(Baseline.vectorize(|| x.sqrt_with(Baseline)), x.sqrt());
     /// #[cfg(target_arch = "x86_64")]
     /// {
-    ///     if let Some(s) = inari::simd::V3::try_new() {
+    ///     if let Some(s) = fushimi::simd::V3::try_new() {
     ///         assert_eq!(s.vectorize(|| x.sqrt_with(s)), x.sqrt());
     ///     }
     /// }
@@ -999,7 +999,7 @@ impl DecInterval {
     /// # Examples
     ///
     /// ```
-    /// use inari::{const_dec_interval as c, simd::{Baseline, Simd}};
+    /// use fushimi::{const_dec_interval as c, simd::{Baseline, Simd}};
     /// let x = c!(1.0, 2.0);
     /// let y = c!(-3.0, 0.5);
     /// let z = c!(0.1, 0.2);
@@ -1008,7 +1008,7 @@ impl DecInterval {
     /// assert_eq!((r.interval(), r.decoration()), (w.interval(), w.decoration()));
     /// #[cfg(target_arch = "x86_64")]
     /// {
-    ///     if let Some(s) = inari::simd::V3::try_new() {
+    ///     if let Some(s) = fushimi::simd::V3::try_new() {
     ///         let r = s.vectorize(|| x.mul_add_with(s, y, z));
     ///         assert_eq!((r.interval(), r.decoration()), (w.interval(), w.decoration()));
     ///     }
@@ -1063,14 +1063,14 @@ impl DecInterval {
     /// # Examples
     ///
     /// ```
-    /// use inari::{const_dec_interval as c, simd::{Baseline, Simd}};
+    /// use fushimi::{const_dec_interval as c, simd::{Baseline, Simd}};
     /// let x = c!(3.0, 4.0);
     /// let w = x.recip();
     /// let r = Baseline.vectorize(|| x.recip_with(Baseline));
     /// assert_eq!((r.interval(), r.decoration()), (w.interval(), w.decoration()));
     /// #[cfg(target_arch = "x86_64")]
     /// {
-    ///     if let Some(s) = inari::simd::V3::try_new() {
+    ///     if let Some(s) = fushimi::simd::V3::try_new() {
     ///         let r = s.vectorize(|| x.recip_with(s));
     ///         assert_eq!((r.interval(), r.decoration()), (w.interval(), w.decoration()));
     ///     }
@@ -1117,14 +1117,14 @@ impl DecInterval {
     /// # Examples
     ///
     /// ```
-    /// use inari::{const_dec_interval as c, simd::{Baseline, Simd}};
+    /// use fushimi::{const_dec_interval as c, simd::{Baseline, Simd}};
     /// let x = c!(-3.0, 0.1);
     /// let w = x.sqr();
     /// let r = Baseline.vectorize(|| x.sqr_with(Baseline));
     /// assert_eq!((r.interval(), r.decoration()), (w.interval(), w.decoration()));
     /// #[cfg(target_arch = "x86_64")]
     /// {
-    ///     if let Some(s) = inari::simd::V3::try_new() {
+    ///     if let Some(s) = fushimi::simd::V3::try_new() {
     ///         let r = s.vectorize(|| x.sqr_with(s));
     ///         assert_eq!((r.interval(), r.decoration()), (w.interval(), w.decoration()));
     ///     }
@@ -1169,14 +1169,14 @@ impl DecInterval {
     /// # Examples
     ///
     /// ```
-    /// use inari::{const_dec_interval as c, simd::{Baseline, Simd}};
+    /// use fushimi::{const_dec_interval as c, simd::{Baseline, Simd}};
     /// let x = c!(2.0, 3.0);
     /// let w = x.sqrt();
     /// let r = Baseline.vectorize(|| x.sqrt_with(Baseline));
     /// assert_eq!((r.interval(), r.decoration()), (w.interval(), w.decoration()));
     /// #[cfg(target_arch = "x86_64")]
     /// {
-    ///     if let Some(s) = inari::simd::V3::try_new() {
+    ///     if let Some(s) = fushimi::simd::V3::try_new() {
     ///         let r = s.vectorize(|| x.sqrt_with(s));
     ///         assert_eq!((r.interval(), r.decoration()), (w.interval(), w.decoration()));
     ///     }

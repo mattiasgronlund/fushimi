@@ -5,7 +5,7 @@
 use criterion::{
     criterion_group, criterion_main, BenchmarkId, Criterion, SamplingMode, Throughput,
 };
-use inari::Interval;
+use fushimi::Interval;
 use std::f64::consts::FRAC_PI_2;
 use std::hint::black_box;
 

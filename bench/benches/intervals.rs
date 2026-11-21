@@ -2,7 +2,7 @@
 // each sign class: P (positive), N (negative) and M (containing zero).
 //
 // The series under `token/` and `token-v3/` run the loops of `add`, `mul`, `mul_tiny`,
-// `div` and `unary` with the operations of the token API (`inari::simd`). Each batch
+// `div` and `unary` with the operations of the token API (`fushimi::simd`). Each batch
 // of N enters the region of a level, a function compiled with the target features of
 // that level, once: `token/` through `dispatch`, at the highest level that the CPU
 // has, and `token-v3/` (x86-64 only) through `vectorize` of a `V3`.
@@ -12,9 +12,9 @@ use criterion::{
     criterion_group, criterion_main, BenchmarkGroup, BenchmarkId, Criterion, Throughput,
 };
 #[cfg(target_arch = "x86_64")]
-use inari::simd::V3;
-use inari::simd::{dispatch, Simd, WithLevel};
-use inari::Interval;
+use fushimi::simd::V3;
+use fushimi::simd::{dispatch, Simd, WithLevel};
+use fushimi::Interval;
 use std::hint::black_box;
 
 const N: usize = 1024;

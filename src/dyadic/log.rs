@@ -4,7 +4,7 @@
 // (`src/dyadic.rs` says what `ziv` and `ziv_near` return at their caps).
 // `src/mpfr_calls/kernel.rs` makes the first the `ln_rd`, `ln_ru` and the others that
 // `src/elementary.rs` calls, `src/cr.rs` makes both the `ln_rn`, `ln_rd`, `ln_ru` and the
-// others of `inari::cr`, and the tests on 64-bit Linux and macOS compare them with those of
+// others of `fushimi::cr`, and the tests on 64-bit Linux and macOS compare them with those of
 // MPFR, `src/mpfr_calls/mpfr.rs`.
 //
 // Each function first settles some arguments by rules: NaN, ±∞, the arguments outside its

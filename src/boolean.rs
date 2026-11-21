@@ -10,7 +10,7 @@ impl Interval {
     /// # Examples
     ///
     /// ```
-    /// use inari::*;
+    /// use fushimi::*;
     /// assert!(const_interval!(1.0, 2.0).contains(1.0));
     /// assert!(!Interval::EMPTY.contains(1.0));
     /// assert!(Interval::ENTIRE.contains(1.0));
@@ -19,7 +19,7 @@ impl Interval {
     /// $±∞$ and NaN are not real numbers, thus do not belong to any interval:
     ///
     /// ```
-    /// use inari::*;
+    /// use fushimi::*;
     /// assert!(!Interval::ENTIRE.contains(f64::INFINITY));
     /// assert!(!Interval::ENTIRE.contains(f64::NEG_INFINITY));
     /// assert!(!Interval::ENTIRE.contains(f64::NAN));
@@ -61,7 +61,7 @@ impl Interval {
     /// # Examples
     ///
     /// ```
-    /// use inari::*;
+    /// use fushimi::*;
     /// assert!(const_interval!(1.0, 2.0).disjoint(const_interval!(3.0, 4.0)));
     /// assert!(!const_interval!(1.0, 3.0).disjoint(const_interval!(3.0, 4.0)));
     /// assert!(!const_interval!(1.0, 5.0).disjoint(const_interval!(3.0, 4.0)));
@@ -101,7 +101,7 @@ impl Interval {
     /// # Examples
     ///
     /// ```
-    /// use inari::*;
+    /// use fushimi::*;
     /// assert!(const_interval!(1.1, 1.9).interior(const_interval!(1.0, 2.0)));
     /// assert!(!const_interval!(1.1, 2.0).interior(const_interval!(1.0, 2.0)));
     /// assert!(Interval::EMPTY.interior(Interval::EMPTY));
@@ -130,7 +130,7 @@ impl Interval {
     /// # Examples
     ///
     /// ```
-    /// use inari::*;
+    /// use fushimi::*;
     /// assert!(const_interval!(1.0, 2.0).is_common_interval());
     /// assert!(!const_interval!(1.0, f64::INFINITY).is_common_interval());
     /// assert!(!Interval::EMPTY.is_common_interval());
@@ -167,7 +167,7 @@ impl Interval {
     /// # Examples
     ///
     /// ```
-    /// use inari::*;
+    /// use fushimi::*;
     /// assert!(!const_interval!(1.0, 1.0).is_empty());
     /// assert!(Interval::EMPTY.is_empty());
     /// assert!(!Interval::ENTIRE.is_empty());
@@ -201,7 +201,7 @@ impl Interval {
     /// # Examples
     ///
     /// ```
-    /// use inari::*;
+    /// use fushimi::*;
     /// assert!(!const_interval!(1.0, f64::INFINITY).is_entire());
     /// assert!(!Interval::EMPTY.is_entire());
     /// assert!(Interval::ENTIRE.is_entire());
@@ -221,7 +221,7 @@ impl Interval {
     /// # Examples
     ///
     /// ```
-    /// use inari::*;
+    /// use fushimi::*;
     /// assert!(const_interval!(1.0, 1.0).is_singleton());
     /// assert!(!const_interval!(1.0, 2.0).is_singleton());
     /// assert!(!Interval::EMPTY.is_singleton());
@@ -231,7 +231,7 @@ impl Interval {
     /// 0.1 is not representable as a [`f64`] number:
     ///
     /// ```
-    /// use inari::*;
+    /// use fushimi::*;
     /// // The singleton interval that consists of the closest [`f64`] number to 0.1.
     /// assert!(const_interval!(0.1, 0.1).is_singleton());
     /// // The tightest interval that encloses 0.1.
@@ -261,7 +261,7 @@ impl Interval {
     /// # Examples
     ///
     /// ```
-    /// use inari::*;
+    /// use fushimi::*;
     /// assert!(const_interval!(1.0, 2.0).less(const_interval!(3.0, 4.0)));
     /// assert!(const_interval!(1.0, 3.0).less(const_interval!(2.0, 4.0)));
     /// assert!(const_interval!(1.0, 4.0).less(const_interval!(1.0, 4.0)));
@@ -294,7 +294,7 @@ impl Interval {
     /// # Examples
     ///
     /// ```
-    /// use inari::*;
+    /// use fushimi::*;
     /// assert!(const_interval!(1.0, 2.0).precedes(const_interval!(3.0, 4.0)));
     /// assert!(const_interval!(1.0, 3.0).precedes(const_interval!(3.0, 4.0)));
     /// assert!(!const_interval!(1.0, 3.0).precedes(const_interval!(2.0, 4.0)));
@@ -330,7 +330,7 @@ impl Interval {
     /// # Examples
     ///
     /// ```
-    /// use inari::*;
+    /// use fushimi::*;
     /// assert!(const_interval!(1.0, 2.0).strict_less(const_interval!(3.0, 4.0)));
     /// assert!(const_interval!(1.0, 3.0).strict_less(const_interval!(2.0, 4.0)));
     /// assert!(!const_interval!(1.0, 4.0).strict_less(const_interval!(2.0, 4.0)));
@@ -391,7 +391,7 @@ impl Interval {
     /// # Examples
     ///
     /// ```
-    /// use inari::*;
+    /// use fushimi::*;
     /// assert!(const_interval!(1.0, 2.0).subset(const_interval!(1.0, 2.0)));
     /// assert!(Interval::EMPTY.subset(Interval::EMPTY));
     /// assert!(Interval::EMPTY.subset(Interval::ENTIRE));

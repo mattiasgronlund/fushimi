@@ -3,7 +3,7 @@
 // ties to even, as MPFR rounds them (`src/dyadic.rs` says what `ziv` and `ziv_near` return at
 // their caps). `src/mpfr_calls/kernel.rs` makes the first the `sin_rd`, `sin_ru` and the
 // others that `src/elementary.rs` calls, `src/cr.rs` makes both the `sin_rn`, `sin_rd`,
-// `sin_ru` and the others of `inari::cr`, and the tests on 64-bit Linux and macOS compare them
+// `sin_ru` and the others of `fushimi::cr`, and the tests on 64-bit Linux and macOS compare them
 // with those of MPFR, `src/mpfr_calls/mpfr.rs`.
 //
 // Each function first settles some arguments by rules: NaN and ±∞, at which it is NaN, the

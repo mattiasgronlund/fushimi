@@ -12,7 +12,7 @@ impl Interval {
     /// # Examples
     ///
     /// ```
-    /// use inari::*;
+    /// use fushimi::*;
     /// assert_eq!(const_interval!(0.2, 1.2).ceil(), const_interval!(1.0, 2.0));
     /// assert_eq!(const_interval!(0.8, 1.8).ceil(), const_interval!(1.0, 2.0));
     /// assert_eq!(const_interval!(-1.2, -0.2).ceil(), const_interval!(-1.0, 0.0));
@@ -45,7 +45,7 @@ impl Interval {
     /// # Examples
     ///
     /// ```
-    /// use inari::*;
+    /// use fushimi::*;
     /// assert_eq!(const_interval!(0.2, 1.2).floor(), const_interval!(0.0, 1.0));
     /// assert_eq!(const_interval!(0.8, 1.8).floor(), const_interval!(0.0, 1.0));
     /// assert_eq!(const_interval!(-1.2, -0.2).floor(), const_interval!(-2.0, -1.0));
@@ -77,7 +77,7 @@ impl Interval {
     /// # Examples
     ///
     /// ```
-    /// use inari::*;
+    /// use fushimi::*;
     /// assert_eq!(const_interval!(0.2, 1.2).round(), const_interval!(0.0, 1.0));
     /// assert_eq!(const_interval!(0.5, 1.5).round(), const_interval!(1.0, 2.0));
     /// assert_eq!(const_interval!(0.8, 1.8).round(), const_interval!(1.0, 2.0));
@@ -110,7 +110,7 @@ impl Interval {
     /// # Examples
     ///
     /// ```
-    /// use inari::*;
+    /// use fushimi::*;
     /// assert_eq!(const_interval!(0.2, 1.2).round_ties_even(), const_interval!(0.0, 1.0));
     /// assert_eq!(const_interval!(0.5, 1.5).round_ties_even(), const_interval!(0.0, 2.0));
     /// assert_eq!(const_interval!(0.8, 1.8).round_ties_even(), const_interval!(1.0, 2.0));
@@ -147,7 +147,7 @@ impl Interval {
     /// # Examples
     ///
     /// ```
-    /// use inari::*;
+    /// use fushimi::*;
     /// assert_eq!(const_interval!(-10.0, -0.1).sign(), const_interval!(-1.0, -1.0));
     /// assert_eq!(const_interval!(0.0, 0.0).sign(), const_interval!(0.0, 0.0));
     /// assert_eq!(const_interval!(0.1, 10.0).sign(), const_interval!(1.0, 1.0));
@@ -186,7 +186,7 @@ impl Interval {
     /// # Examples
     ///
     /// ```
-    /// use inari::*;
+    /// use fushimi::*;
     /// assert_eq!(const_interval!(0.2, 1.2).trunc(), const_interval!(0.0, 1.0));
     /// assert_eq!(const_interval!(0.8, 1.8).trunc(), const_interval!(0.0, 1.0));
     /// assert_eq!(const_interval!(-1.2, -0.2).trunc(), const_interval!(-1.0, 0.0));

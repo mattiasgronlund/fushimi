@@ -17,7 +17,7 @@ impl Interval {
     /// # Examples
     ///
     /// ```
-    /// use inari::*;
+    /// use fushimi::*;
     /// assert_eq!(const_interval!(-2.0, 3.0).inf(), -2.0);
     /// assert_eq!(Interval::EMPTY.inf(), f64::INFINITY);
     /// assert_eq!(Interval::ENTIRE.inf(), f64::NEG_INFINITY);
@@ -52,7 +52,7 @@ impl Interval {
     /// # Examples
     ///
     /// ```
-    /// use inari::*;
+    /// use fushimi::*;
     /// assert_eq!(const_interval!(-2.0, 3.0).mag(), 3.0);
     /// assert!(Interval::EMPTY.mag().is_nan());
     /// assert_eq!(Interval::ENTIRE.mag(), f64::INFINITY);
@@ -82,7 +82,7 @@ impl Interval {
     /// # Examples
     ///
     /// ```
-    /// use inari::*;
+    /// use fushimi::*;
     /// assert_eq!(const_interval!(-2.0, 3.0).mid(), 0.5);
     /// assert_eq!(const_interval!(f64::NEG_INFINITY, 3.0).mid(), f64::MIN);
     /// assert_eq!(const_interval!(-2.0, f64::INFINITY).mid(), f64::MAX);
@@ -132,7 +132,7 @@ impl Interval {
     /// # Examples
     ///
     /// ```
-    /// use inari::*;
+    /// use fushimi::*;
     /// assert_eq!(const_interval!(-2.0, 3.0).mig(), 0.0);
     /// assert_eq!(const_interval!(2.0, 3.0).mig(), 2.0);
     /// assert!(Interval::EMPTY.mig().is_nan());
@@ -165,7 +165,7 @@ impl Interval {
     /// # Examples
     ///
     /// ```
-    /// use inari::*;
+    /// use fushimi::*;
     /// assert_eq!(const_interval!(-2.0, 3.0).rad(), 2.5);
     /// assert!(Interval::EMPTY.rad().is_nan());
     /// assert_eq!(Interval::ENTIRE.rad(), f64::INFINITY);
@@ -201,7 +201,7 @@ impl Interval {
     /// # Examples
     ///
     /// ```
-    /// use inari::*;
+    /// use fushimi::*;
     /// assert_eq!(const_interval!(-2.0, 3.0).sup(), 3.0);
     /// assert_eq!(Interval::EMPTY.sup(), f64::NEG_INFINITY);
     /// assert_eq!(Interval::ENTIRE.sup(), f64::INFINITY);
@@ -233,7 +233,7 @@ impl Interval {
     /// # Examples
     ///
     /// ```
-    /// use inari::*;
+    /// use fushimi::*;
     /// assert_eq!(const_interval!(-2.0, 3.0).wid(), 5.0);
     /// assert_eq!(const_interval!(-1.0, f64::MAX).wid(), f64::INFINITY);
     /// assert!(Interval::EMPTY.wid().is_nan());

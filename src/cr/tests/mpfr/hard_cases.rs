@@ -765,7 +765,7 @@ fn sample_hard_cases() {
     writeln!(out, "# commit {}.", commit.trim()).unwrap();
     let rule = format!(
         "\
-# A line `@ <name> <file>` starts the arguments of the function <name> of `inari::cr`, from
+# A line `@ <name> <file>` starts the arguments of the function <name> of `fushimi::cr`, from
 # CORE-MATH's <file>. The other lines are CORE-MATH's: arguments, one per line, or two
 # separated by a comma, each after the comments of the section of its file that it comes
 # from (a run of comments and the arguments after it, mostly one search). After each argument,

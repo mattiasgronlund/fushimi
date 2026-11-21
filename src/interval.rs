@@ -422,12 +422,12 @@ macro_rules! interval {
 /// ### Exact construction
 ///
 /// ```
-/// use inari::*;
+/// use fushimi::*;
 /// assert_eq!(interval_exact!("[1.25]"), Ok(const_interval!(1.25, 1.25)));
 /// ```
 ///
 /// ```
-/// use inari::*;
+/// use fushimi::*;
 /// let s = format!("{:x}", Interval::PI);
 /// assert_eq!(s, "[0x3.243f6a8885a3p+0,0x3.243f6a8885a32p+0]");
 /// assert_eq!(interval_exact!(&s), Ok(Interval::PI));
@@ -436,7 +436,7 @@ macro_rules! interval {
 /// ### Inexact construction
 ///
 /// ```
-/// use inari::*;
+/// use fushimi::*;
 /// let result = interval_exact!("[0.1]");
 /// assert!(result.is_err());
 /// assert_eq!(result.unwrap_err().kind(), IntervalErrorKind::UndefinedOperation);

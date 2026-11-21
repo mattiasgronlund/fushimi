@@ -24,27 +24,27 @@ type usize = ();
 #[test]
 fn macros() {
     assert_eq!(
-        inari::interval!(1.0, 2.0).unwrap(),
-        inari::const_interval!(1.0, 2.0)
+        fushimi::interval!(1.0, 2.0).unwrap(),
+        fushimi::const_interval!(1.0, 2.0)
     );
     assert_eq!(
-        inari::dec_interval!(1.0, 2.0).unwrap(),
-        inari::const_dec_interval!(1.0, 2.0)
+        fushimi::dec_interval!(1.0, 2.0).unwrap(),
+        fushimi::const_dec_interval!(1.0, 2.0)
     );
 }
 
 #[test]
 fn macros_strings() {
     assert_eq!(
-        inari::interval!("[1.0, 2.0]").unwrap(),
-        inari::const_interval!(1.0, 2.0)
+        fushimi::interval!("[1.0, 2.0]").unwrap(),
+        fushimi::const_interval!(1.0, 2.0)
     );
     assert_eq!(
-        inari::interval_exact!("[1.0, 2.0]").unwrap(),
-        inari::const_interval!(1.0, 2.0)
+        fushimi::interval_exact!("[1.0, 2.0]").unwrap(),
+        fushimi::const_interval!(1.0, 2.0)
     );
     assert_eq!(
-        inari::dec_interval!("[1.0, 2.0]").unwrap(),
-        inari::const_dec_interval!(1.0, 2.0)
+        fushimi::dec_interval!("[1.0, 2.0]").unwrap(),
+        fushimi::const_dec_interval!(1.0, 2.0)
     );
 }

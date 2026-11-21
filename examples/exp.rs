@@ -2,7 +2,7 @@
 
 #![allow(clippy::approx_constant)]
 
-use inari::*;
+use fushimi::*;
 
 // To compute exp(x), change the base to 2 using the relation:
 //

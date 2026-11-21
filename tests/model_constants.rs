@@ -6,7 +6,7 @@
 // bounds of the Rust constants, and that the decimals in the comment above each round to
 // nearest to them.
 
-use inari::Interval;
+use fushimi::Interval;
 use std::{fs, path::Path};
 
 // Each constant with its name, which `stringify!` gives, so that the two cannot disagree.

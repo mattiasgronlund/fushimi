@@ -1,7 +1,7 @@
 // The cube root cbrt x and hypot(x, y) = √(x^2 + y^2) with the dyadic kernel, each rounded to
 // an `f64` toward +∞ if `up` and toward -∞ otherwise, and, as `cbrt_near` and `hypot_near`, to
 // nearest, ties to even, as MPFR rounds them. `src/cr.rs` makes them the `cbrt_rn`, `cbrt_rd`,
-// `cbrt_ru`, `hypot_rn`, `hypot_rd` and `hypot_ru` of `inari::cr`, and the tests on 64-bit
+// `cbrt_ru`, `hypot_rn`, `hypot_rd` and `hypot_ru` of `fushimi::cr`, and the tests on 64-bit
 // Linux and macOS compare them with those of MPFR, `src/mpfr_calls/mpfr.rs`.
 //
 // Each first tries a fast path in `f64` (below), and only where that cannot decide the rounding

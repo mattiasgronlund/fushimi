@@ -104,7 +104,7 @@ mod sealed {
 /// given:
 ///
 /// ```
-/// use inari::{simd::{Baseline, Simd}, *};
+/// use fushimi::{simd::{Baseline, Simd}, *};
 ///
 /// // `#[inline(always)]`, so that it is compiled with the target features of the region of
 /// // `vectorize` that calls it.
@@ -121,7 +121,7 @@ mod sealed {
 /// assert_eq!(Baseline.vectorize(|| dot(Baseline, &xs, &ys)), d);
 /// #[cfg(target_arch = "x86_64")]
 /// {
-///     if let Some(s) = inari::simd::V3::try_new() {
+///     if let Some(s) = fushimi::simd::V3::try_new() {
 ///         assert_eq!(s.vectorize(#[inline(always)] || dot(s, &xs, &ys)), d);
 ///     }
 /// }
@@ -138,7 +138,7 @@ pub trait Simd: sealed::Backend + Copy + Debug + Send + Sync + 'static {
     /// computes the same results, but can be slower. For [`Baseline`], `vectorize` only calls `f`.
     ///
     /// ```
-    /// use inari::{simd::{Baseline, Simd}, *};
+    /// use fushimi::{simd::{Baseline, Simd}, *};
     ///
     /// let xs = [const_interval!(1.0, 2.0), const_interval!(-0.5, 0.5), const_interval!(3.0, 3.0)];
     /// let zero = const_interval!(0.0, 0.0);
@@ -147,7 +147,7 @@ pub trait Simd: sealed::Backend + Copy + Debug + Send + Sync + 'static {
     /// assert_eq!(sum, const_interval!(3.5, 5.5));
     /// #[cfg(target_arch = "x86_64")]
     /// {
-    ///     if let Some(s) = inari::simd::V2::try_new() {
+    ///     if let Some(s) = fushimi::simd::V2::try_new() {
     ///         let sum_v2 = s.vectorize(
     ///             #[inline(always)]
     ///             || xs.iter().fold(zero, |acc, &x| acc.add_with(s, x)),
@@ -166,7 +166,7 @@ pub trait Simd: sealed::Backend + Copy + Debug + Send + Sync + 'static {
 /// It exists on every target.
 ///
 /// ```
-/// use inari::{simd::{Baseline, Simd}, *};
+/// use fushimi::{simd::{Baseline, Simd}, *};
 ///
 /// let x = const_interval!(1.0, 2.0);
 /// let y = const_interval!(-3.0, 0.5);
@@ -187,7 +187,7 @@ impl Simd for Baseline {
 /// CPU has.
 ///
 /// ```
-/// use inari::{simd::{dispatch, Simd, WithLevel}, *};
+/// use fushimi::{simd::{dispatch, Simd, WithLevel}, *};
 ///
 /// // The sum of the intervals.
 /// struct Sum<'a>(&'a [Interval]);
@@ -209,7 +209,7 @@ pub trait WithLevel {
     /// The result of the computation, which [`dispatch`] returns.
     ///
     /// ```
-    /// use inari::{simd::{dispatch, Simd, WithLevel}, *};
+    /// use fushimi::{simd::{dispatch, Simd, WithLevel}, *};
     ///
     /// // The sums of the intervals of two slices, element by element.
     /// struct AddAll<'a>(&'a [Interval], &'a [Interval]);
@@ -237,7 +237,7 @@ pub trait WithLevel {
     /// compiler inlines it into that region. Called on its own, it runs outside any region.
     ///
     /// ```
-    /// use inari::{simd::{dispatch, Baseline, Simd, WithLevel}, *};
+    /// use fushimi::{simd::{dispatch, Baseline, Simd, WithLevel}, *};
     ///
     /// // `Sum` as in the example of `WithLevel`.
     /// # struct Sum<'a>(&'a [Interval]);
@@ -268,7 +268,7 @@ pub trait WithLevel {
 /// the region.
 ///
 /// ```
-/// use inari::{simd::{dispatch, Simd, WithLevel}, *};
+/// use fushimi::{simd::{dispatch, Simd, WithLevel}, *};
 ///
 /// // The sum of the intervals.
 /// struct Sum<'a>(&'a [Interval]);
@@ -1039,7 +1039,7 @@ macro_rules! level {
             /// a loop, and pass the token on.
             ///
             /// ```
-            #[doc = concat!("use inari::{simd::{Simd, ", stringify!($t), "}, *};")]
+            #[doc = concat!("use fushimi::{simd::{Simd, ", stringify!($t), "}, *};")]
             ///
             /// let x = const_interval!(1.0, 2.0);
             /// let y = const_interval!(-3.0, 0.5);
@@ -1259,7 +1259,7 @@ level! {
     /// run the build's backend, that of [`Baseline`].
     ///
     /// ```
-    /// use inari::{simd::{Simd, V2}, *};
+    /// use fushimi::{simd::{Simd, V2}, *};
     ///
     /// let x = const_interval!(1.0, 2.0);
     /// let y = const_interval!(4.0, 8.0);
@@ -1295,7 +1295,7 @@ level! {
     /// `force-generic`, the operations run the build's backend, that of [`Baseline`].
     ///
     /// ```
-    /// use inari::{simd::{Simd, V3}, *};
+    /// use fushimi::{simd::{Simd, V3}, *};
     ///
     /// let x = const_interval!(4.0, 9.0);
     /// if let Some(s) = V3::try_new() {
@@ -1337,7 +1337,7 @@ level! {
     /// the build's backend, that of [`Baseline`].
     ///
     /// ```
-    /// use inari::{simd::{Simd, V4}, *};
+    /// use fushimi::{simd::{Simd, V4}, *};
     ///
     /// let x = const_interval!(1.0, 2.0);
     /// let y = const_interval!(3.0, 4.0);

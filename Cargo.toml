@@ -1,13 +1,12 @@
 [package]
-name = "inari"
+name = "fushimi"
 version = "2.0.0"
-authors = ["Masashi Mizuno"]
+authors = ["Masashi Mizuno", "Mattias Grönlund"]
 edition = "2021"
 rust-version = "1.89.0"
 description = "A Rust implementation of interval arithmetic"
-documentation = "https://docs.rs/inari"
 readme = "README.md"
-repository = "https://github.com/unageek/inari"
+repository = "https://github.com/mattiasgronlund/fushimi"
 license = "MIT"
 keywords = ["arithmetic", "interval", "math", "numerics"]
 categories = ["mathematics", "science"]

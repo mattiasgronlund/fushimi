@@ -4,7 +4,7 @@
 // says what `ziv` and `ziv_near` return at their caps). `src/mpfr_calls/kernel.rs` makes the
 // first the `pow_rd`, `pow_ru`, `pown_rd` and `pown_ru` that `src/elementary.rs` calls,
 // `src/cr.rs` makes both the `pow_rn`, `pow_rd`, `pow_ru`, `powi_rn`, `powi_rd` and `powi_ru`
-// of `inari::cr`, with MPFR's values of x^y at x < 0, and the tests on 64-bit Linux and macOS
+// of `fushimi::cr`, with MPFR's values of x^y at x < 0, and the tests on 64-bit Linux and macOS
 // compare them with those of MPFR, `src/mpfr_calls/mpfr.rs`.
 //
 // Each function first settles some arguments by rules: NaN, the zeros and the infinities, the

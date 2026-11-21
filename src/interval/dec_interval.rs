@@ -13,7 +13,7 @@ use crate::interval::*;
 /// By definition, a NaI is *not* equal to itself:
 ///
 /// ```
-/// use inari::*;
+/// use fushimi::*;
 /// assert_ne!(DecInterval::NAI, DecInterval::NAI);
 /// ```
 ///

@@ -32,7 +32,7 @@
 
 //Preamble
 use crate::*;
-use inari::{DecInterval as DI, Decoration as D, Interval as I, Overlap as O};
+use fushimi::{DecInterval as DI, Decoration as D, Interval as I, Overlap as O};
 
 // Tests A+B, B+A, A-B, B-A, -A, +A
 #[test]

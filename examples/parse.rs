@@ -1,6 +1,6 @@
 // Parses and displays interval literals.
 
-use inari::*;
+use fushimi::*;
 
 fn main() -> Result<()> {
     println!("{}", interval!("[  ]")?);

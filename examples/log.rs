@@ -2,7 +2,7 @@
 
 #![allow(clippy::approx_constant)]
 
-use inari::*;
+use fushimi::*;
 
 // To compute ln(x), change the basis to 2 using the relation:
 //

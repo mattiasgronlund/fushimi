@@ -5,7 +5,7 @@
 // of moderate magnitude, so the generic backend always takes its fast paths.
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use inari::__bench::*;
+use fushimi::__bench::*;
 use std::hint::black_box;
 
 const N: usize = 1024;
