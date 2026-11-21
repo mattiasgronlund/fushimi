@@ -814,9 +814,11 @@ fn pown_case(name: &str, rng: &mut Rng) -> (f64, i32) {
     }
 }
 
-// The calls of a set of arguments, and the rounding tests of the fast path that passed and failed
-// in them. A call without a test is settled by a rule, by `exact`, or by the kernel where y ln x is
-// outside the range of `fast_exp`; a failed test also leaves the call to the kernel.
+// The calls of a set of arguments, those in which a rounding test passed, and those in which one
+// failed and none passed, as `agree_pow` and `agree_pown` count them. A call without a test is
+// settled by a rule, by `exact`, or by the kernel where y ln x is outside the range of
+// `fast_exp`; a failed test also leaves the call to the kernel, or, in x^n, a failed test of
+// `pown_small` to the fast path.
 #[derive(Default)]
 struct Tally {
     calls: usize,
@@ -867,11 +869,30 @@ fn agree_pow(x: f64, y: f64) -> (usize, usize) {
     counts
 }
 
-// `agree_pow` for x^n.
-fn agree_pown(x: f64, n: i32) -> (usize, usize) {
+// Returns the result of `call`, a call of x^n, and adds it to `counts` as passed if a rounding
+// test passed in it, and as failed if one failed and none passed. A call of x^n can take two
+// tests, those of `pown_small_dir` or `pown_small_near` and, where they fail, those of the fast
+// path, so that it counts once, as a call of x^y, which takes at most one test, does.
+fn count_call(counts: &mut (usize, usize), call: impl FnOnce() -> f64) -> f64 {
     crate::dyadic::fast::reset_fast_counts();
-    let fast = (pown(x, n, false), pown(x, n, true), pown_near(x, n));
-    let counts = crate::dyadic::fast::fast_counts();
+    let v = call();
+    match crate::dyadic::fast::fast_counts() {
+        (0, 0) => (),
+        (0, _) => counts.1 += 1,
+        _ => counts.0 += 1,
+    }
+    v
+}
+
+// `agree_pow` for x^n, with the calls counted by `count_call`, so that `pown_small`'s tests and
+// the fast path's in the same call count as one.
+fn agree_pown(x: f64, n: i32) -> (usize, usize) {
+    let mut counts = (0, 0);
+    let fast = (
+        count_call(&mut counts, || pown(x, n, false)),
+        count_call(&mut counts, || pown(x, n, true)),
+        count_call(&mut counts, || pown_near(x, n)),
+    );
     crate::dyadic::fast::set_fast_path(false);
     let kernel = (pown(x, n, false), pown(x, n, true), pown_near(x, n));
     crate::dyadic::fast::set_fast_path(true);

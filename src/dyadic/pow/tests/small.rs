@@ -10,20 +10,6 @@
 
 use super::*;
 
-// Whether `pown_pos` and `pown_pos_near` pass (x, n) to `pown_small_dir` and `pown_small_near`,
-// for a finite x > 0 in [2^g, 2^(g + 1)) and n != 0: past their rules, which settle x^n where
-// its bound below, 2^(g n) for n > 0 and 2^((g + 1) n) for n < 0, is 2^1024 or above, and where
-// its bound above is 2^-1075 or below.
-fn reaches(x: f64, n: i32) -> bool {
-    let (g, n) = (expo(x), i64::from(n));
-    let (lo, hi) = if n > 0 {
-        (g * n, (g + 1) * n)
-    } else {
-        ((g + 1) * n, g * n)
-    };
-    lo < 1024 && hi > -1075
-}
-
 // The sets of `cases`.
 const SETS: [&str; 4] = ["random", "near 1", "2^e", "2^(k / n)"];
 
@@ -86,6 +72,21 @@ fn small_powers_agree() {
 mod mpfr {
     use super::*;
     use crate::mpfr_calls::mpfr::{pown_rd, pown_rn, pown_ru};
+
+    // Whether `pown_pos` and `pown_pos_near` pass (x, n) to `pown_small_dir` and
+    // `pown_small_near`, for a finite x > 0 in [2^g, 2^(g + 1)) and n != 0: past their rules,
+    // which settle x^n where its bound below, 2^(g n) for n > 0 and 2^((g + 1) n) for n < 0, is
+    // 2^1024 or above, and where its bound above is 2^-1075 or below. It is here, as only the
+    // test with MPFR uses it.
+    fn reaches(x: f64, n: i32) -> bool {
+        let (g, n) = (expo(x), i64::from(n));
+        let (lo, hi) = if n > 0 {
+            (g * n, (g + 1) * n)
+        } else {
+            ((g + 1) * n, g * n)
+        };
+        lo < 1024 && hi > -1075
+    }
 
     // Checks that the `f64`s that `pown_small_dir` toward -∞ and toward +∞ and `pown_small_near`
     // gave at (x, n), with an FMA if `FMA` and without one otherwise, where they gave one, are
