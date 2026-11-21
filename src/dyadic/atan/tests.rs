@@ -434,20 +434,21 @@ fn reductions_at_their_edges() {
     }
 }
 
-// `atan_series` around `NO_HALVE` = 2^-8, up to which it takes the series at u itself and above
-// which it halves u first, at the arguments around those at which u = 2^-8, both signs of them:
-// atan at 2^-8, where u = w, at 255/257 and 257/255, where u = (1 - w) / (1 + w) and
-// (w - 1) / (w + 1), and at 256, where u = 1 / w; asin and acos at 2^-8 / √(1 + 2^-16) and
-// 1 / √(1 + 2^-16), at which t / √(1 - t^2) and √(1 - t^2) / t are 2^-8; and atan2 at y around
-// 2^-8, 1 and 255 with x = 1, 256 and 257, where |y| / |x| is 2^-8 or 255/257, in each
-// quadrant, and at (x, y). The `f64` arithmetic gives each of these arguments within 2 `f64`s
-// of the number at which u = 2^-8, and the enclosures of u are far narrower than the steps of u
-// between adjacent `f64`s, so that the 3 `f64`s on each side of it take both branches (a check
-// of u at one limb found both in each family).
+// `atan_series` around `NO_HALVE` = 2^-3, up to which it takes the series at u itself and above
+// which it halves u first, at the arguments around those at which u = 2^-3, both signs of them:
+// atan at 2^-3, where u = w, at 7/9 and 9/7, where u = (1 - w) / (1 + w) and (w - 1) / (w + 1),
+// and at 8, where u = 1 / w; asin and acos at 2^-3 / √(1 + 2^-6) and 1 / √(1 + 2^-6), at which
+// t / √(1 - t^2) and √(1 - t^2) / t are 2^-3; and atan2 at y around 2^-3, 1 and 7/8 with x = 1,
+// 8 and 9/8, where |y| / |x| is 2^-3 or 7/9, in each quadrant, and at (x, y). The `f64`
+// arithmetic gives each of these arguments within 2 `f64`s of the number at which u = 2^-3, and
+// the enclosures of u are far narrower than the steps of u between adjacent `f64`s, so that the
+// 3 `f64`s on each side of it take both branches (a check of u at one limb found both in each
+// family).
 #[test]
 fn halving_at_its_threshold() {
     let s = (1.0 + NO_HALVE * NO_HALVE).sqrt();
-    for t in [NO_HALVE, 255.0 / 257.0, 257.0 / 255.0, 1.0 / NO_HALVE] {
+    let (below, above) = (1.0 - NO_HALVE, 1.0 + NO_HALVE);
+    for t in [NO_HALVE, below / above, above / below, 1.0 / NO_HALVE] {
         for x in around(t, 3) {
             check(ATAN, x);
             check(ATAN, -x);
@@ -461,7 +462,7 @@ fn halving_at_its_threshold() {
             }
         }
     }
-    for (y0, x) in [(NO_HALVE, 1.0), (1.0, 1.0 / NO_HALVE), (255.0, 257.0)] {
+    for (y0, x) in [(NO_HALVE, 1.0), (1.0, 1.0 / NO_HALVE), (below, above)] {
         for y in around(y0, 3) {
             for (sy, sx) in QUADRANTS {
                 check2(sy * y, sx * x);

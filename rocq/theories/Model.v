@@ -4012,8 +4012,8 @@ Definition huge_atan : f64 := from_bits 0x4350000000000000.
 Definition quarter : f64 := from_bits 0x3fd0000000000000.
 Definition three_quarters : f64 := from_bits 0x3fe8000000000000.
 
-(** [NO_HALVE] = 2^-8. *)
-Definition no_halve : f64 := from_bits 0x3f70000000000000.
+(** [NO_HALVE] = 2^-3. *)
+Definition no_halve : f64 := from_bits 0x3fc0000000000000.
 
 (** [fn terms<N>(z: &Encl<N>) -> u64], where [-bits - z.hi.exp], which
     is positive there, and [64 * N as u64 + 3 + e], which is below

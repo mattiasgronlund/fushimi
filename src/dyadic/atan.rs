@@ -174,18 +174,24 @@ const TINY_ASIN: f64 = 1.0 / 134_217_728.0;
 // `f64`s, and round alike in both directions.
 const HUGE_ATAN: f64 = 18_014_398_509_481_984.0;
 
-// 2^-8: `atan_series` takes the series at u itself if the upper bound of u is at most this. For
-// u in [0, 2^-8], z = u^2 <= 2^-16 gives at least 15 bits a term, so that `terms` gives at most
-// 5 at one limb, and the halving, which costs a square root and a quotient, would save at most
-// one of them.
-const NO_HALVE: f64 = 1.0 / 256.0;
+// 2^-3: `atan_series` takes the series at u itself if the upper bound of u is at most this. For
+// u in [0, 2^-3], z = u^2 <= 2^-6 gives at least 5 bits a term, so that `terms` gives at most
+// 14 at one limb, and the halving, which costs a square root and a quotient, would save at most
+// five of them. z <= 2^-6 is below the 0.0396 up to which the cap 14 N + 2 of `terms` suffices,
+// which 2^-2 would not be. On CORE-MATH's hard cases, 2^-3 takes up to 2,753 fewer instructions
+// per call than 2^-8 for asin, 2,229 for acos, 1,480 for atan2 and 430 for atan (5,506 for
+// `Interval::asin` of a point), while 3/16 and 105/512 take up to 88 more than 2^-3 for atan2,
+// in a crate that links `cr`, built for haswell, cachegrind chase=no (2026-11-21, against
+// 53fa1fe).
+const NO_HALVE: f64 = 1.0 / 8.0;
 
 // The terms of `series` at `N` limbs for the enclosure `z` of v^2: 1 if z is [0, 0], where
 // the series is exact, and otherwise 14 N + 2, or ceil((64 N + 4) / e) if that is fewer, for
 // z < 2^-e. The upper bound of z is m 2^exp for a mantissa m of 64 N bits, so that it is below
 // 2^(exp + 64 N), and e = -(exp + 64 N) if that is positive. ceil((64 N + 4) / e) makes
 // z^n < 2^-(64 N + 4), and so does 14 N + 2 for z <= 0.0396, which gives 4.65 bits a term:
-// v^2 for v = u / (1 + √(1 + u^2)) and |u| <= 0.4144 is at most that.
+// v^2 for v = u / (1 + √(1 + u^2)) and |u| <= 0.4144 is at most that, and so is u^2 for
+// |u| <= `NO_HALVE`.
 fn terms<const N: usize>(z: &Encl<N>) -> u64 {
     let cap = 14 * N as u64 + 2;
     let bits = 64 * N as i64;

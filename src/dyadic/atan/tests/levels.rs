@@ -110,12 +110,14 @@ impl Eval for Pi {
 //   (1e-5, 1) has the exact quotient 1e-5, an `f64` above `TINY_HYP`, which `tiny_quotient`
 //   also leaves to `ziv`.
 // - atan_series: it takes the series at u itself, without the halving, where the upper bound
-//   of u is at most `NO_HALVE`, 2^-8, with the terms that `terms` counts from u^2: for atan at
-//   0.003, where u = w = 0.003 is below 2^-8 = 0.0039, and at 1e10, where u = 1 / w is 1e-10,
-//   and for atan2 at (1e-5, 1), where u = w is 1e-5. It also takes it for atan at 1e300, asin
-//   and acos at 1e-5 and atan2 at (1e-300, 1e300), where u is about 1e-300, 1e-5 and 1e-600,
-//   and for acos at 0.0 and -1.0 and atan2 at (1, 1), where u is 0. It halves u for the other
-//   arguments of atan, asin, acos and atan2.
+//   of u is at most `NO_HALVE`, 2^-3, with the terms that `terms` counts from u^2: for atan at
+//   0.003, where u = w = 0.003, at 10.1, where u = 1 / w = 0.099, and at 1e10, where u = 1 / w
+//   is 1e-10, for asin and acos at 0.72, where u = (w - 1) / (w + 1) = 0.018, and at -0.999,
+//   where u = w = r / t = 0.045, and for atan2 at (1e-5, 1), where u = w is 1e-5. It also takes
+//   it for atan at 1e300, asin and acos at 1e-5 and atan2 at (1e-300, 1e300), where u is about
+//   1e-300, 1e-5 and 1e-600, and for acos at 0.0 and -1.0 and atan2 at (1, 1), where u is 0. It
+//   halves u for the other arguments of atan, asin, acos and atan2, at which u is at least 0.142
+//   (asin and acos at 0.99).
 // - c π: 1/4, 1/2, -3/4 and 1, which are the c that `atan` and `atan2` pass to `pi_times` up
 //   to their signs.
 // None of the results is an `f64`, which Ziv's strategy could settle only with an exact bound:

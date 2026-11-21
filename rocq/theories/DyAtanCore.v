@@ -5,7 +5,7 @@
     ([atan_tail_bounds] and [atan_horner]), from the enclosure
     [[0, 1/(2 terms + 1)]] of the remainder after [terms n z] terms.
     [atan_series] is [series] at its argument [u] if the upper bound of
-    [u] is at most [2^-8], and otherwise twice [series] at [u] halved
+    [u] is at most [2^-3], and otherwise twice [series] at [u] halved
     once ([atan_halve] of [AtanSeries.v]). [atan_encl] encloses [atan]
     of every point of a nonnegative enclosure [w] with the series at
     [w], [(1 - w)/(1 + w)], [(w - 1)/(w + 1)] or [1/w], and π of
@@ -215,8 +215,8 @@ Qed.
 
 (** ** [atan_series]
 
-    The proof does not use the comparison with [2^-8]: each branch
-    encloses [atan] of every point of [u]. At most [2^-8], [atan_series]
+    The proof does not use the comparison with [2^-3]: each branch
+    encloses [atan] of every point of [u]. At most [2^-3], [atan_series]
     is [series] at [u]. Above, the exponents grow by the steps of [DyGrow.v]: [u^2] by
     [E + 2^13], [1 + u^2] to [2E + 2^14], its square root by [2^13], the
     divisor [d] to [2E + 2^15] and the halved [v] to [3E + 2^16], below
@@ -230,7 +230,7 @@ Proof.
 intros n u c E uv Hn Hu HuE HE Huv H. unfold DyadicAtan.atan_series in H.
 destruct (Dyadic.from_f64 n DyadicAtan.no_halve) as [h|] eqn:Eh; [|discriminate H].
 destruct (negb (DyadicExp.dy_gt n (Dyadic.en_hi u) h)) eqn:B.
-{ (* [u <= 2^-8]: the series at [u] *)
+{ (* [u <= 2^-3]: the series at [u] *)
   assert (HE' : 0 <= E <= 2 ^ 34) by lia.
   destruct (series_correct n u c E uv Hn Hu HuE HE' Huv H) as (Hc & HcE & Hcv).
   split; [exact Hc|]. split; [apply (encl_le_mono (2 ^ 49)); [lia | exact HcE] | exact Hcv]. }
