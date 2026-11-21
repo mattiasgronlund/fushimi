@@ -911,8 +911,10 @@ destruct (Z.eqb_spec i 0) as [I0|I0].
   revert H. destruct (Fast.fast_two_sum (sub th c) tl) as (nh, nl) eqn:EN. intros H.
   destruct (core_num th tl c i nh nl Fth Ftl Fc Hth' Htl I1 Hidx Ec EN)
     as (Fnh & Fnl & Rnh & Enh & Z0).
-  revert H. destruct (eq nh zero) eqn:E0; intros H.
-  + (* [t = c]: the table alone. *)
+  revert H. destruct (Model.lt (fabs nh) DyadicAtan.two_m80) eqn:E80; intros H.
+  + (* [|nh| < 2^-80]: [None] unless [nh = 0]. *)
+    revert H. destruct (eq nh zero) eqn:E0; intros H; [|discriminate H].
+    (* [t = c]: the table alone. *)
     apply (eq_zero_R nh Fnh) in E0. specialize (Z0 E0).
     injection H as <- <-.
     do 2 (split; [assumption|]). split; [exact TR|].
@@ -921,9 +923,7 @@ destruct (Z.eqb_spec i 0) as [I0|I0].
     change (bpow radix2 (-104)) with (/ 20282409603651670423947251286016).
     change (bpow radix2 (-74)) with (/ 18889465931478580854784).
     rewrite Ec in Hat |- *. lra.
-  + revert H. destruct (Model.lt (fabs nh) DyadicAtan.two_m80) eqn:E80; intros H;
-      [discriminate H|].
-    destruct (core_nh (B2R th + B2R tl - B2R c) nh nl Fnh Rnh Enh) as (Hnh & Hnl);
+  + destruct (core_nh (B2R th + B2R tl - B2R c) nh nl Fnh Rnh Enh) as (Hnh & Hnl);
       [|exact E80|].
     { apply Rle_trans with (1 := HN).
       change (bpow radix2 (-52)) with (/ 4503599627370496). lra. }
@@ -1038,7 +1038,6 @@ destruct (Z.eqb i 0) eqn:I0.
   destruct (Fast.fast_two_sum (sub th c) tl) as (nh, nl) eqn:EN.
   destruct (core_num th tl c i nh nl Fth Ftl Fc Hth' Htl I1 Hidx Ec EN)
     as (Fnh & Fnl & Rnh & Enh & _).
-  destruct (eq nh zero); [reflexivity|].
   destruct (Model.lt (fabs nh) DyadicAtan.two_m80) eqn:E80; [reflexivity|].
   destruct (core_nh (B2R th + B2R tl - B2R c) nh nl Fnh Rnh Enh) as (Hnh & Hnl);
     [|exact E80|].

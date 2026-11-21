@@ -652,7 +652,15 @@ fn fast_atan_poly<const FMA: bool>(uh: f64, ul: f64) -> (f64, f64) {
 // exact as a pair, as the comments below say.
 // `rocq/theories/FastAtanCore.v` proves the bound, and that the result is the same with and
 // without an FMA (`fast_atan_core_correct` and `fast_atan_core_fma`).
-#[cfg_attr(inari_kernel_dispatch, inline(always))]
+//
+// Always inlined: under `cfg(inari_kernel_dispatch)` as the dispatch of `level.rs` requires,
+// and in the other builds too, where LLVM, left to itself, kept it out of line for haswell.
+// There, inlining it makes `atan2` take 7.83 (toward -∞ and +∞) to 8.91 (to nearest)
+// and `atan` 2.03 (to nearest) to 3.23 (toward -∞ and +∞) fewer instructions per call on
+// CORE-MATH's hard cases, and no more on any other set of arguments counted, in a crate that
+// links `cr`, built for haswell, cachegrind chase=no (2026-11-21, against 53fa1fe with the two
+// tests of `nh` below merged). The other targets were not counted.
+#[inline(always)]
 fn fast_atan_core<const FMA: bool>(th: f64, tl: f64) -> Option<(f64, f64)> {
     // 64 th < 2^51, so adding and subtracting `SHIFTER` rounds it to an integer, within 1/2, and
     // i is in [0, 64]. ks is the integer SHIFTER + i, so its low 32 bits are i.
@@ -669,12 +677,9 @@ fn fast_atan_core<const FMA: bool>(th: f64, tl: f64) -> Option<(f64, f64)> {
     // and a multiple of ulp(th), so that it is 0 or above |tl| in magnitude and Fast2Sum
     // applies [Dekker].
     let (nh, nl) = fast_two_sum(th - c, tl);
-    if nh == 0.0 {
-        // t = c.
-        return Some((gh, gl));
-    }
     if nh.abs() < TWO_M80 {
-        return None;
+        // t = c where nh = 0.
+        return if nh == 0.0 { Some((gh, gl)) } else { None };
     }
     // d = 1 + t c = dh + dl up to 2^-104 d: th c = p + pe exactly [Dekker], and 1 + p = s + s0
     // exactly by TwoSum [Knuth], as p may exceed 1.

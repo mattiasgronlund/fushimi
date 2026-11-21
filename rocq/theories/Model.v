@@ -4305,8 +4305,7 @@ Definition fast_atan_core (fma : bool) (th tl : f64) : option (f64 * f64) :=
   let '(gh, gl) := atbl i in
   let c := mul kf (from_bits 0x3f90000000000000) in
   let '(nh, nl) := Fast.fast_two_sum (sub th c) tl in
-  if eq nh zero then Some (gh, gl) else
-  if lt (fabs nh) two_m80 then None else
+  if lt (fabs nh) two_m80 then (if eq nh zero then Some (gh, gl) else None) else
   let p := mul th c in
   let pe := Generic.two_prod_err fma th c p in
   let '(s, s0) := Fast.two_sum DyadicExp.one p in
