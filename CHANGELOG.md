@@ -93,6 +93,7 @@ The first release of fushimi, a fork of inari v2.0.0; the entries below are the 
 ### Removed
 
 - ⚠️ Removed the Cargo feature `gmp`, which was enabled by default, and the features `gmp-mpfr-sys`, `nom` and `rug`, which Cargo derived from the optional dependencies that `gmp` enabled. Literals, formatting and the elementary functions need neither GMP nor MPFR now (see above), and `nom` is a dependency of every build.
+- ⚠️ Removed the Cargo feature `libm`, which Cargo derived from the optional dependency `libm`, and which only the examples `exp` and `log` used. They now take `libm` as a dev-dependency.
 
 ### Fixed
 

@@ -144,14 +144,14 @@ fn main() {
     let x = interval!("[1.234567]").unwrap();
 
     println!("log2(x) ⊆ {:.15e}", log2(x));
-    println!("log2(x) ⊆ {:.15e} (MPFR)", x.log2());
+    println!("log2(x) ⊆ {:.15e} (fushimi)", x.log2());
     assert!(x.log2().subset(log2(x)));
 
     println!("ln(x) ⊆ {:.15e}", ln(x));
-    println!("ln(x) ⊆ {:.15e} (MPFR)", x.ln());
+    println!("ln(x) ⊆ {:.15e} (fushimi)", x.ln());
     assert!(x.ln().subset(ln(x)));
 
     println!("log10(x) ⊆ {:.15e}", log10(x));
-    println!("log10(x) ⊆ {:.15e} (MPFR)", x.log10());
+    println!("log10(x) ⊆ {:.15e} (fushimi)", x.log10());
     assert!(x.log10().subset(log10(x)));
 }

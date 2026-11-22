@@ -39,14 +39,14 @@ __bench = []
 cfg-if = "1.0"
 forward_ref = "1.0.0"
 
-[dependencies.libm]
-version = "0.2"
-optional = true
-
 [dependencies.nom]
 version = "7.0"
 default-features = false
 features = ["std"]
+
+# The examples `exp` and `log` use `libm::ldexp` and `libm::frexp`.
+[dev-dependencies]
+libm = "0.2"
 
 # The tests compare fushimi's results with MPFR's, on the platforms where `gmp-mpfr-sys` builds
 # GMP and MPFR. The test code that uses them is compiled under the same `cfg` expression.
@@ -59,11 +59,3 @@ features = ["mpfr"]
 version = "1.19"
 default-features = false
 features = ["float", "integer", "rational"]
-
-[[example]]
-name = "exp"
-required-features = ["libm"]
-
-[[example]]
-name = "log"
-required-features = ["libm"]

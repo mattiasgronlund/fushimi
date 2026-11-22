@@ -119,14 +119,14 @@ fn main() {
     let x = interval!("[1.234567]").unwrap();
 
     println!("2^x ⊆ {:.15e}", exp2(x));
-    println!("2^x ⊆ {:.15e} (MPFR)", x.exp2());
+    println!("2^x ⊆ {:.15e} (fushimi)", x.exp2());
     assert!(x.exp2().subset(exp2(x)));
 
     println!("e^x ⊆ {:.15e}", exp(x));
-    println!("e^x ⊆ {:.15e} (MPFR)", x.exp());
+    println!("e^x ⊆ {:.15e} (fushimi)", x.exp());
     assert!(x.exp().subset(exp(x)));
 
-    println!("10^x ⊆ {:.15e}", x.exp10());
-    println!("10^x ⊆ {:.15e} (MPFR)", exp10(x));
+    println!("10^x ⊆ {:.15e}", exp10(x));
+    println!("10^x ⊆ {:.15e} (fushimi)", x.exp10());
     assert!(x.exp10().subset(exp10(x)));
 }
