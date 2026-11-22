@@ -21,12 +21,12 @@
 // (1 - (tan r)^2) / (1 + (tan r)^2). `ziv` computes the rest from an `Eval`. The functions
 // rounded to nearest have the rules of NaN, ±∞ and of the arguments of magnitude below 2^-27
 // (`TINY_NEAR`), whose results are less than half an ulp from x or 1, and `ziv_near` computes
-// the rest from the same `Eval`s. They have no rules at
-// small arguments, which only save levels of `ziv`. At some arguments with few bits, sin and
-// tan lie close to the midpoint of two `f64`s, as the results of those rules lie close to an
-// `f64`: t - t^3 / 6 is a midpoint at t = 21 2^-24, and sin t lies above it by about t^5 / 120,
-// and t + t^3 / 3 is one at t = 3 2^-26. `ziv_near` settles them at a later level, as no sin,
-// cos or tan of a nonzero `f64` is a midpoint, which is rational too.
+// the rest from the same `Eval`s. They have no counterparts of `sin_small`, `cos_small` and
+// `tan_small`, which would only save levels of `ziv_near`. At some arguments with few bits,
+// sin and tan lie close to the midpoint of two `f64`s, as the results of those rules lie close
+// to an `f64`: t - t^3 / 6 is a midpoint at t = 21 2^-24, and sin t lies above it by about
+// t^5 / 120, and t + t^3 / 3 is one at t = 3 2^-26. `ziv_near` settles them at a later level,
+// as no sin, cos or tan of a nonzero `f64` is a midpoint, which is rational too.
 //
 // The evaluations take t = |x|, as sin and tan are odd and cos is even, and reduce it to
 // t = k π/2 + σ ρ for an integer k >= 0, a sign σ and an enclosure of ρ (`reduce`). The
@@ -802,7 +802,8 @@ fn fast_reduce_band_win<const FMA: bool>(n: i64, a: i64, lo: u64, x: f64) -> (i6
 // Always inlined: out of line, `sin` and `cos` took 23 to 27 more instructions per call and
 // `tan` 12 to 13 more, when this was a product of two rows, on each of five sets of 4,096
 // arguments: uniform in [0.1, 10), [-10, 10) and [-π/4, π/4), and of either sign with a
-// magnitude log-uniform in [2^-30, 2^1024) and in [2^60, 2^1024) (cachegrind, row 107).
+// magnitude log-uniform in [2^-30, 2^1024) and in [2^60, 2^1024) (cachegrind in the release
+// build of the lib's tests for x86-64 with haswell, before rule M5, row 107).
 #[inline(always)]
 fn fast_sc(i: i64) -> (f64, f64, f64, f64) {
     let r = if i > 1024 {
@@ -973,8 +974,11 @@ fn fast_band_big_body<const FMA: bool>(n: i64, a: i64, lo: u64, x: f64, s: i64) 
 // (q + s) π/2 + i u + ρ, and sin(i u + ρ) and cos(i u + ρ) = sin((2048 - i) u - ρ) are both
 // `fast_eval` with j in [1, 2047]. At i = 0, which only `fast_reduce` gives, the result can be
 // near 0, and `fast_band` takes x.
-// Always inlined: out of line, `sin` and `cos` took 8 to 18 more instructions per call on the
-// same arguments as `fast_sc` (cachegrind, row 107).
+// Always inlined: out of line, `cos` took 14 to 17 more instructions per call on the same
+// arguments as `fast_sc` (a crate that links `cr`, built for haswell, cachegrind chase=no,
+// row 177, at e9e5ae5), and 61 to 63 more in that crate built for x86-64, with the dispatch,
+// where its copy with an FMA is then compiled outside `fma_copy`, without the target feature
+// `fma`, and calls the library's `fma` for `two_prod_err` (`level.rs`).
 #[inline(always)]
 fn fast_quad<const FMA: bool>(n: i64, s: i64, rh: f64, rl: f64, rr: f64) -> Option<(f64, f64)> {
     let i = n & 2047;
@@ -998,8 +1002,13 @@ fn fast_quad<const FMA: bool>(n: i64, s: i64, rh: f64, rl: f64, rr: f64) -> Opti
 // or `None`. `rocq/theories/FastTrigCore.v` proves the bound (`fast_sin_correct`).
 // Always inlined, as `fast_sin_dir`: LLVM stopped inlining `fast_sin` and `fast_cos` into
 // `sin`, `sin_near`, `cos` and `cos_near` when the band calls were added, and out of line they
-// cost 15 to 21 more instructions per call on the same arguments as `fast_sc` (cachegrind, row
-// 107).
+// cost 15 to 21 more instructions per call on the same arguments as `fast_sc` (cachegrind in
+// the release build of the lib's tests for x86-64 with haswell, before rule M5, row 107). At
+// e9e5ae5, LLVM still kept `fast_sin` out of line without the attribute, and with `fast_quad`
+// out of line too, `sin` took 18 to 26 more on those arguments (a crate that links `cr`, built
+// for haswell, cachegrind chase=no, row 177), and 79 to 113 more in that crate built for
+// x86-64, with the dispatch, where the copies of both with an FMA are then compiled outside
+// `fma_copy`, as at `fast_quad`.
 #[inline(always)]
 fn fast_sin<const FMA: bool>(x: f64) -> Option<(f64, f64)> {
     // n = 0 comes only from `fast_reduce`, as `fast_reduce_big_band` gives no `BigRed::Red` with
@@ -1191,12 +1200,12 @@ fn fast_round_near(h: f64, l: f64) -> Option<f64> {
 // `rocq/theories/FastTrig.v` proves that they return those roundings (`fast_sin_dir_correct`
 // and the others), and the same with and without an FMA (`fast_sin_dir_fma` and the others).
 // Always inlined, into the copies `sin_dir`, `cos_dir` and `tan_dir`, where sin and cos rounded
-// down and up take 1.6 to 1.7 times the instructions of CORE-MATH in the same rounding
+// down and up took 1.6 to 1.7 times the instructions of CORE-MATH in the same rounding
 // (cachegrind, row 121, 4,096 arguments in [0.1, 10), [-10, 10) or [-π/4, π/4), in the release
-// build of the tests for x86-64 with haswell). Before those copies, LLVM inlined the three into
-// `sin`, `cos` and `tan` by itself from 09e972a on; out of line, they cost 7 to 15 more
-// instructions per call there (cachegrind, at 09e972a). The attribute keeps that layout if the
-// fast path grows.
+// build of the lib's tests for x86-64 with haswell, before rule M5). Before those copies, LLVM
+// inlined the three into `sin`, `cos` and `tan` by itself from 09e972a on; out of line, they
+// cost 7 to 15 more instructions per call there (cachegrind in the same build, row 105, at
+// 09e972a). The attribute keeps that layout if the fast path grows.
 #[inline(always)]
 fn fast_sin_dir<const FMA: bool>(x: f64, up: bool) -> Option<f64> {
     let (h, l) = fast_sin::<FMA>(x)?;
