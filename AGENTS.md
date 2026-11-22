@@ -49,7 +49,7 @@ crate-wide `#[allow]`s. Local allows need a comment explaining why.
 - README.md, "Supported Platforms": add new architectures in the same format,
   including any required RUSTFLAGS / target features.
 - README.md, "Cargo Features": document any new feature in the same one-line style
-  as `gmp`.
+  as `force-generic`.
 - CHANGELOG.md: add entries under a new "## Unreleased" heading using the existing
   "### Added / ### Changed" sections. Mark breaking changes with ⚠️. Past-tense
   sentences, backticked identifiers, e.g.

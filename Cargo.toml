@@ -1,6 +1,6 @@
 [package]
 name = "fushimi"
-version = "2.0.0"
+version = "0.1.0"
 authors = ["Masashi Mizuno", "Mattias Grönlund"]
 edition = "2021"
 rust-version = "1.85.0"
@@ -11,7 +11,6 @@ license = "MIT"
 keywords = ["arithmetic", "interval", "math", "numerics"]
 categories = ["mathematics", "science"]
 include = [
-  "/.cargo/**",
   "/examples/**",
   "/src/**",
   "/tests/**",
@@ -28,14 +27,6 @@ rustdoc-args = ["--cfg", "docsrs", "--html-in-header", "src/_docs/header.html"]
 
 [features]
 default = []
-# Deprecated: does nothing; to be removed in the next major release. Literals, formatting and
-# the elementary functions need neither GMP nor MPFR now.
-gmp = []
-# Deprecated: do nothing; to be removed in the next major release. They keep the features that
-# Cargo used to derive from the optional dependencies of `gmp`.
-gmp-mpfr-sys = []
-nom = []
-rug = []
 # Use the portable backend (src/simd/generic.rs) on every architecture.
 force-generic = []
 # Adds the token `V4` (AVX-512) to `fushimi::simd`; needs Rust 1.89, where the AVX-512 target

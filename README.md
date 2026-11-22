@@ -1,10 +1,19 @@
 # 🦊 fushimi
 
+[![crates.io](https://img.shields.io/crates/v/fushimi.svg)](https://crates.io/crates/fushimi)
+[![docs](https://img.shields.io/docsrs/fushimi)](https://docs.rs/fushimi)
 [![rustc 1.85+](https://img.shields.io/badge/rustc-1.85%2B-lightgrey)](https://blog.rust-lang.org/2025/02/20/Rust-1.85.0/)
 
 **fushimi** is a Rust implementation of [interval arithmetic](https://en.wikipedia.org/wiki/Interval_arithmetic), a fork of [inari](https://github.com/unageek/inari) by Masashi Mizuno.
 
 It [conforms](src/_docs/conformance.md) to [IEEE Std 1788.1-2017](https://doi.org/10.1109/IEEESTD.2018.8277144). It also implements a subset of [IEEE Std 1788-2015](https://doi.org/10.1109/IEEESTD.2015.7140721).
+
+To use it, add it to the dependencies in your `Cargo.toml`:
+
+```toml
+[dependencies]
+fushimi = "0.1"
+```
 
 ## Supported Platforms
 
@@ -65,7 +74,6 @@ The module also has `cbrt`, `hypot` (of two `f64`s) and `sqrt` in the same three
 
 ## Cargo Features
 
-- `gmp` - Deprecated, and does nothing; to be removed in the next major release. It used to be enabled by default, and to enable interval literals, formatting and the elementary functions, which need neither GMP nor MPFR now (see above). The features `gmp-mpfr-sys`, `nom` and `rug`, which Cargo used to derive from the optional dependencies of `gmp`, are deprecated and do nothing too.
 - `force-generic` - Uses the portable backend (see above) on x86-64, AArch64 and WebAssembly with `simd128` too, and at every token of `fushimi::simd`. It is slower. On x86-64 it also keeps the multi-precision kernel from detecting the CPU at run time (see [Building for Several x86-64 Levels](#building-for-several-x86-64-levels)): the kernel then uses FMA instructions only where the target CPU has FMA.
 - `avx512` - Adds the token `V4` (AVX-512) to `fushimi::simd`; needs Rust 1.89.
 
