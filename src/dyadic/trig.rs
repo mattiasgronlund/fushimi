@@ -177,6 +177,15 @@ const NO_REDUCE: f64 = 0.78515625;
 // t - k π/2.
 const GUARD_LIMBS: usize = 2;
 
+// The limbs of `s`, zeroed. The result borrows `s`, so no edit can name the stack array again
+// while the result is live.
+fn zeroed(s: &mut [MaybeUninit<u64>]) -> &mut [u64] {
+    s.fill(MaybeUninit::new(0));
+    // SAFETY: `fill` has just initialized each limb of `s`, and `MaybeUninit<u64>` has the size,
+    // alignment and ABI of `u64`, so they are a valid `[u64]` of the same length.
+    unsafe { &mut *(s as *mut [MaybeUninit<u64>] as *mut [u64]) }
+}
+
 // (k mod 4, σ = -1, ρ) for t = k π/2 + σ ρ and a finite t >= 0, as the header says, with
 // ρ in [-1, 1]. For t > `NO_REDUCE`, t = m 2^exp for the mantissa m of one limb of
 // `Dyadic::<1>::from_f64(t)`, so that t < 2^b for b = exp + 64, which is in [0, 1024] as t > 1/2.
@@ -201,18 +210,13 @@ fn reduce<const N: usize>(t: f64) -> (u64, bool, Encl<N>) {
     // all: on the stack where they fit, as they do at every level up to 4 limbs, where the most
     // is 185 limbs, at N = 4 and b = 1024, and on the heap otherwise. Only the first `need`
     // limbs of the array are zeroed, not all 192, so it is an array of `MaybeUninit<u64>`
-    // whose other limbs stay uninitialized.
+    // whose other limbs stay uninitialized and are never read: every slice below is a part of
+    // `buf`.
     let need = 3 * nx + 3 * l + 2;
     let mut stack = [MaybeUninit::<u64>::uninit(); 192];
     let mut heap = Vec::new();
     let buf: &mut [u64] = if need <= stack.len() {
-        let buf = &mut stack[..need];
-        buf.fill(MaybeUninit::new(0));
-        // SAFETY: `fill` has just initialized each of the `need` limbs of `buf`, and
-        // `MaybeUninit<u64>` has the size, alignment and ABI of `u64`, so that they are a valid
-        // `[u64]` of the same length. The limbs of `stack` past `need` stay uninitialized and
-        // are never read: every slice below is a part of this one.
-        unsafe { &mut *(buf as *mut [MaybeUninit<u64>] as *mut [u64]) }
+        zeroed(&mut stack[..need])
     } else {
         heap.resize(need, 0);
         &mut heap
