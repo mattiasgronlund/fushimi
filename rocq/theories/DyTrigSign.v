@@ -7,8 +7,8 @@
     [ρ] is at least [2^-(s+1)] by construction. Where it keeps the
     quotient [k >= 1], [ρ = t - k π/2] is at least 2^-61 by
     [km_distance] of [KahanMcDonald.v], as it is above [-k 2^-(s+1)],
-    which is far smaller than 2^-61 in magnitude at every level, and the
-    roundings of the enclosure at [n] limbs lose less than that. The upper
+    which is below 2^-63 in magnitude at every level, and that bound and
+    the roundings of the enclosure at [n] limbs lose less than 2^-61. The upper
     bound is [π/4] and a rounding, or [t <= 201/256] itself. *)
 
 From Stdlib Require Import ZArith Reals Lra Lia List.
@@ -135,16 +135,16 @@ end.
   { unfold bq. pose proof (Nat.div_mod_eq b 64).
     pose proof (Nat.mod_upper_bound b 64 ltac:(lia)). lia. }
   assert (Hbq2 : (bq <= 129)%nat) by lia.
-  assert (Hl : (3 <= l <= 66)%nat)
+  assert (Hl : (2 <= l <= 66)%nat)
     by (unfold l, DyadicTrig.guard_limbs; unfold level_ok in Hn; lia).
-  assert (Hlmin : l = Nat.min (n + 2 + bq) 66) by reflexivity.
+  assert (Hlmin : l = Nat.min (n + 1 + bq) 66) by reflexivity.
   assert (Hnx : nx = (l + 1 + bq)%nat) by reflexivity.
   assert (He : e = 1 - 64 * Z.of_nat l) by (unfold e, s; lia).
   assert (Hs : s = 64 * Z.of_nat l - 2) by reflexivity.
   clearbody b bq l s nx e.
-  (* [t 2^e < 2^-128]: [t < 2^b] with [b + e <= -64 n - 64] below the
-     cap of 66 limbs, and [t < 2^1024] with [e = -4223] at it. *)
-  assert (Hte : (B2R t * bpow radix2 e < bpow radix2 (-128))%R).
+  (* [t 2^e < 2^-64]: [t < 2^b] with [b + e <= -64 n] below the cap of
+     66 limbs, and [t < 2^1024] with [e = -4223] at it. *)
+  assert (Hte : (B2R t * bpow radix2 e < bpow radix2 (-64))%R).
   { assert (A : (B2R t < bpow radix2 (Z.min (Z.of_nat b) 1024))%R).
     { destruct (Z.min_spec (Z.of_nat b) 1024) as [[_ ->] | [_ ->]].
       - rewrite Hb. exact Htb.
@@ -161,11 +161,13 @@ end.
   clearbody p.
   pose proof (bpow_gt_0 radix2 e) as Hbe.
   pose proof (val_nonneg p Hpok) as Hp0.
-  assert (Hbe2 : (bpow radix2 e <= bpow radix2 (-128))%R) by (apply bpow_le; lia).
-  (* Numbers: [2^-128 <= 2^-63 <= 1/1000] and [2^-61 = 4 2^-63]. *)
+  assert (Hbe2 : (bpow radix2 e <= bpow radix2 (-127))%R) by (apply bpow_le; lia).
+  (* Numbers: [2^-127 <= 2^-63 <= 1/1000], [2^-61 = 4 2^-63] and
+     [2^-63 = 2 2^-64]. *)
   assert (HM : (bpow radix2 (-63) <= / 1000 /\ bpow radix2 (-61) = 4 * bpow radix2 (-63) /\
-                0 < bpow radix2 (-128) <= bpow radix2 (-63) /\
-                1000 * bpow radix2 (-128) <= bpow radix2 (-63))%R)
+                bpow radix2 (-63) = 2 * bpow radix2 (-64) /\
+                0 < bpow radix2 (-127) <= bpow radix2 (-63) /\
+                1000 * bpow radix2 (-127) <= bpow radix2 (-63))%R)
     by (cbn [bpow radix_val radix2]; lra).
   pose proof ts_PI as HPI.
   (* [P >= 2], as π/2 > 1 and [2^e <= 1/4]. *)
@@ -205,7 +207,7 @@ end.
   pose proof (Z.div_mod (Limbs.val x) (Limbs.val p) ltac:(lia)) as Hdm.
   rewrite <- Hqv, <- HRv in Hdm.
   pose proof (val_nonneg q Hqok) as Hq0.
-  (* [q 2^e <= 2 t 2^e < 2^-127]: [q P 2^e <= t] with [P 2^e > π/2 - 2^e >= 1/2]. *)
+  (* [q 2^e <= 2 t 2^e < 2^-63]: [q P 2^e <= t] with [P 2^e > π/2 - 2^e >= 1/2]. *)
   assert (Hqe : (IZR (Limbs.val q) * bpow radix2 e <= 2 * (B2R t * bpow radix2 e))%R).
   { assert (A : (IZR (Limbs.val q) * (IZR (Limbs.val p) * bpow radix2 e) <= B2R t)%R).
     { rewrite HtX, Hdm, plus_IZR, mult_IZR.
@@ -342,7 +344,7 @@ end.
     assert (0 <= x0)%R by (unfold x0; apply Rmult_le_pos; [apply IZR_le; lia | lra]).
     lra. }
   assert (Hx01 : (Rabs x0 <= 1)%R) by (rewrite Rabs_pos_eq; lra).
-  assert (Hkr : (0 <= kr <= 3 * bpow radix2 (-128))%R).
+  assert (Hkr : (0 <= kr <= bpow radix2 (-63) + bpow radix2 (-127))%R).
   { unfold kr. rewrite Hq'v, plus_IZR.
     assert (0 <= IZR (if up then 1 else 0) <= 1)%R by (destruct up; cbv beta iota; lra).
     assert (A : (IZR (if up then 1 else 0) * bpow radix2 e <= 1 * bpow radix2 e)%R)
@@ -388,7 +390,7 @@ end.
       assert (B : (0 <= dround n false x0 - dround n true kr)%R)  by lra.
       destruct (ts_round_rel n _ Hn B) as [C _]. lra. }
   split; [lra |]. split; [| intro; exact Hlo].
-  (* [hi <= π/4 + 2^-63 + 6 2^-128 + 2^-63 < 4/5] *)
+  (* [hi <= π/4 + 2^-63 + 2 (2^-63 + 2^-127) + 2^-63 < 4/5] *)
   rewrite Hrhi. destruct up.
   + assert (A : (Rabs (dround n true x0 + dround n true kr) <= 1)%R) by (rewrite Rabs_pos_eq; lra).
     destruct (ts_round_abs n _ Hn A) as [_ B]. lra.

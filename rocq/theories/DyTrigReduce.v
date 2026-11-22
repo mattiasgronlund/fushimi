@@ -230,7 +230,7 @@ end.
   { unfold bq. pose proof (Nat.div_mod_eq b 64).
     pose proof (Nat.mod_upper_bound b 64 ltac:(lia)). lia. }
   assert (Hbq2 : (bq <= 129)%nat) by lia.
-  assert (Hl : (3 <= l <= 66)%nat)
+  assert (Hl : (2 <= l <= 66)%nat)
     by (unfold l, DyadicTrig.guard_limbs; unfold level_ok in Hn; lia).
   assert (Hnx : nx = (l + 1 + bq)%nat) by reflexivity.
   assert (He : e = 1 - 64 * Z.of_nat l) by (unfold e, s; lia).

@@ -12,7 +12,7 @@
 // where the tests have MPFR, the rounding to nearest is that of `src/mpfr_calls/mpfr.rs`, each
 // enclosure also holds the value of the function that MPFR computes, each doubling of the
 // precision at least halves its width, and at each level at which `reduce` is under its cap of
-// the 66 limbs of `PI`, the width at `N` limbs is at most 2^(8 - 64 N) times the magnitude of
+// the 66 limbs of `PI`, the width at `N` limbs is at most 2^(46 - 64 N) times the magnitude of
 // the value.
 //
 // Where its enclosures are widened so that no rounding test passes, `ziv` also gives the
@@ -50,8 +50,8 @@ const KM: f64 = 5.319372648326541e255;
 //   2 with σ = -1 for 3.0 and -2.5, and with σ = 1 for 3.3; 3 with σ = -1 for 4.0, and with
 //   σ = 1 for 5.0; and 0 with σ = -1 for 5.5, and with σ = 1 for 6.5.
 // - The cap of `reduce` at the 66 limbs of `PI`, as `mpfr::capped` states it: 1e10, below
-//   2^34, stays under it at each level, and it holds at 64 limbs for 1e19, above 2^63, from 52
-//   limbs for `KM`, above 2^849, from 50 limbs for 1e300 and from 49 limbs for `f64::MAX`.
+//   2^34, and 1e19, above 2^63, stay under it at each level, and it holds from 53 limbs for
+//   `KM`, above 2^849, from 51 limbs for 1e300 and from 50 limbs for `f64::MAX`.
 // - `terms`: its cap 6 N + 5 where the enclosure of ρ^2 reaches 1/2, for 0.785, 0.7852, 0.786,
 //   4 and 5.5, and fewer terms where ρ^2 is small, down to 1 at 1 limb for the four near the
 //   multiples of π/2 below.
@@ -299,13 +299,13 @@ mod mpfr {
 
     // Each enclosure of `f`, the evaluation of the function `i` at `x`, holds its value, the
     // width at 2 N limbs is at most half of that at N limbs, for N from 1 to 32, and the width
-    // at N limbs is at most 2^(8 - 64 N) times the magnitude of the value where `reduce` is
+    // at N limbs is at most 2^(46 - 64 N) times the magnitude of the value where `reduce` is
     // under its cap.
     pub(super) fn enclosures<E: Eval>(f: &E, i: usize, x: f64) {
         let v = &[value(i, x, Round::Down), value(i, x, Round::Up)];
         let w = at_each_level!(enclosure_at(f, i, x, v));
         assert!(w[0] > 0, "{}({:e})", FUNCTIONS[i].0, x);
-        // The levels up to 48 limbs are under the cap for every `f64`, as b <= 1024, and the
+        // The levels up to 49 limbs are under the cap for every `f64`, as b <= 1024, and the
         // width at the cap, at most about 2^-3100 relative to the value at these arguments, is
         // far below half of that at 32 limbs, so the halving needs no exemption.
         for n in 1..=32 {
@@ -318,11 +318,12 @@ mod mpfr {
                 2 * n
             );
         }
-        // The relative width, which the reduction keeps near the multiples of π/2, where
-        // t - k π/2 cancels, as the header of `trig.rs` says. `mag`, the bound of the value
-        // nearer to 0, is at most its magnitude, as none of the values is 0. At these
-        // arguments, the width is at most 2^(4.6 - 64 N) times the magnitude, with 3.4 bits to
-        // spare below the bound.
+        // The relative width, also near the multiples of π/2, where t - k π/2 cancels. `mag`,
+        // the bound of the value nearer to 0, is at most its magnitude, as none of the values
+        // is 0. At these arguments, the width is at most 2^(42.1 - 64 N) times the magnitude,
+        // with 3.9 bits to spare below the bound. It is widest at tan(6134899525417045), where
+        // t is below 2^53 and ρ about 2^-53, so that the reduction with one guard limb gives ρ a
+        // width of about 2^-(64 N + 11) (the header of `trig.rs`).
         let mag = if v[0] > 0 {
             v[0].clone()
         } else {
@@ -331,7 +332,7 @@ mod mpfr {
         for n in 1..=64 {
             if !capped(x.abs(), n) {
                 assert!(
-                    w[n - 1].clone() << u32::try_from(64 * n - 8).unwrap() <= mag,
+                    w[n - 1].clone() << u32::try_from(64 * n).unwrap() <= mag.clone() << 46,
                     "{}({:e}) at {} limbs: too wide",
                     FUNCTIONS[i].0,
                     x,

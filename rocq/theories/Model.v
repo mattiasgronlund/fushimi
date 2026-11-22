@@ -5035,8 +5035,9 @@ Module DyadicTrig.
 (** [NO_REDUCE] = 0.78515625 = 201/256, written with [from_bits]. *)
 Definition no_reduce : f64 := from_bits 0x3fe9200000000000.
 
-(** [GUARD_LIMBS] *)
-Definition guard_limbs : nat := 2.
+(** [GUARD_LIMBS]. The bounds of [reduce] in [DyTrigReduce.v] and
+    [DyTrigSign.v] use its value. *)
+Definition guard_limbs : nat := 1.
 
 (** [fn reduce<N>(t: f64) -> (u64, bool, Encl<N>)], where [(d.exp + 64)
     as usize] is [Z.to_nat], as [d.exp + 64] is not negative there, [64 *

@@ -35,12 +35,14 @@
 // 0 <= R < P, so that t - k π/2 = (R - k δ) 2^-(s + 1). That holds for every k, and the
 // division only makes |ρ| small: about π/4, or k + 1 and P - R in place of k and R when R is
 // above P/2. Its width, k 2^-(s + 1), shrinks with the number of limbs of P, which grows with
-// the level and with the exponent of t, so that ρ keeps its relative precision near the
-// multiples of π/2, where it cancels, up to the 66 limbs of `PI`. The least distance from an
-// `f64` to a multiple of π/2 other than 0 is about 2^-61, at 6381956970095103 2^797 (the case
-// of Kahan and McDonald; J.-M. Muller, Elementary Functions, 3rd ed., the chapter on range
-// reduction). `km_distance` in `rocq/theories/KahanMcDonald.v` proves that it is at least
-// 2^-61, and the search of every binade for the hard cases of the tests found none closer.
+// the level and with the exponent of t: at `N` limbs it is at most 2^-(64 N - 1) below the cap
+// of the 66 limbs of `PI`, and at most 2^-3199 at it. The least distance from an `f64` to a
+// multiple of π/2 other than 0 is about 2^-61, at 6381956970095103 2^797 (the case of Kahan
+// and McDonald; J.-M. Muller, Elementary Functions, 3rd ed., the chapter on range reduction).
+// `km_distance` in `rocq/theories/KahanMcDonald.v` proves that it is at least 2^-61, and the
+// search of every binade for the hard cases of the tests found none closer. So near the
+// multiples of π/2, where t - k π/2 cancels, ρ keeps at least 64 N - 62 bits of relative
+// precision below the cap: 2 at 1 limb, and 66 at 2 limbs (`GUARD_LIMBS`).
 //
 // sin(k π/2 + σ ρ) is ±sin ρ or ±cos ρ by k mod 4 and σ (`sin_k`), and cos t = sin(t + π/2).
 // The series sin ρ = Σ_{i >= 0} (-1)^i ρ^(2i + 1) / (2i + 1)! and
@@ -51,7 +53,7 @@
 // -σ cos ρ / sin ρ for an odd k, from one series: cos ρ = √((1 - sin ρ)(1 + sin ρ)), as
 // cos ρ > 0 for |ρ| <= 1. The divisor cos ρ is positive. The divisor sin ρ is positive where
 // the enclosure of ρ is, and `Encl::div` panics where it contains 0, which for an odd k needs
-// the distance from t to k π/2 to be below the width of the reduction: below 2^-(64 N + 63)
+// the distance from t to k π/2 to be below the width of the reduction: below 2^-(64 N - 1)
 // at `N` limbs, or 2^-3199 where the 66 limbs of `PI` cap it. No `f64` is that close by the
 // bound above. `tan_div_pos` in `rocq/theories/DyTrigPos.v` proves, from that bound, that the
 // enclosure of the divisor is above 0 at every level for either parity of k, and
@@ -172,10 +174,16 @@ mod tests;
 // k = 0 and ρ = t for them.
 const NO_REDUCE: f64 = 0.78515625;
 
-// The limbs of P beyond those of the level and of the integer part of t, which make the width
-// of the reduction at most 2^-(64 N + 63), with 64 bits to spare for the cancellation of
-// t - k π/2.
-const GUARD_LIMBS: usize = 2;
+// The limb of P beyond those of the level and of the integer part of t, which makes the width
+// of the reduction at most 2^-(64 N - 1) at `N` limbs below the cap (`reduce`). For t in
+// [2^(b - 1), 2^b), that width, k 2^-(s + 1), leaves ρ log2|ρ| + 64 (N + 1) - (b mod 64) bits
+// of relative precision, within a bit where k > 0: fewest near the multiples of π/2, where |ρ|
+// is at least 2^-61 (the header), and where b mod 64 is close to 63, and at least 64 N - 62,
+// which is 2 at 1 limb and 66 at 2 limbs. A rounding test of `ziv` at 1 limb can fail for want
+// of them, and `ziv` then takes the next level. A second guard limb would add 64 bits at every
+// level below the cap, for a division (`limbs::div_rem`) by a P of one more limb at each
+// reduction there.
+const GUARD_LIMBS: usize = 1;
 
 // The limbs of `s`, zeroed. The result borrows `s`, so no edit can name the stack array again
 // while the result is live.
@@ -195,7 +203,7 @@ fn zeroed(s: &mut [MaybeUninit<u64>]) -> &mut [u64] {
 // nx = L + 1 + floor(b / 64) limbs that it is written in. Its quotient by P is below 2^b, as
 // P >= 2^(64 L - 1), so that k, the quotient or the quotient plus 1, is at most 2^b. The
 // width that δ adds to ρ is k 2^-(s + 1) rounded up, at most the power of 2
-// 2^(b - 64 L + 1) <= 2^-(64 N + 63) below the cap of 66 limbs, and at most 2^-3199 at it.
+// 2^(b - 64 L + 1) <= 2^-(64 N - 1) below the cap of 66 limbs, and at most 2^-3199 at it.
 fn reduce<const N: usize>(t: f64) -> (u64, bool, Encl<N>) {
     if t <= NO_REDUCE {
         return (0, false, Encl::point(t));
@@ -208,7 +216,7 @@ fn reduce<const N: usize>(t: f64) -> (u64, bool, Encl<N>) {
     let p = &PI[66 - l..];
     // X, the quotient, R, P - R, and the scratch of `div_rem`, of nx + L + 2 limbs, `need` in
     // all: on the stack where they fit, as they do at every level up to 4 limbs, where the most
-    // is 185 limbs, at N = 4 and b = 1024, and on the heap otherwise. Only the first `need`
+    // is 179 limbs, at N = 4 and b = 1024, and on the heap otherwise. Only the first `need`
     // limbs of the array are zeroed, not all 192, so it is an array of `MaybeUninit<u64>`
     // whose other limbs stay uninitialized and are never read: every slice below is a part of
     // `buf`.
@@ -225,7 +233,7 @@ fn reduce<const N: usize>(t: f64) -> (u64, bool, Encl<N>) {
     let (q, buf) = buf.split_at_mut(nx);
     let (r, buf) = buf.split_at_mut(l);
     let (c, scratch) = buf.split_at_mut(l);
-    // exp + s + 1 >= -64 + 64 (N + 2) - 1 > 0.
+    // exp + s + 1 >= -64 + 64 (N + 1) - 1 > 0.
     limbs::shl_into(x, &d.m, (d.exp + s + 1) as u64);
     // X = k P + R, with R < P.
     limbs::div_rem(q, r, x, p, scratch);

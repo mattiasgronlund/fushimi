@@ -1484,6 +1484,7 @@ mod mpfr {
     use crate::mpfr_calls::mpfr::*;
     use rug::{
         float::{Constant, Round},
+        integer::Order,
         Float, Integer,
     };
 
@@ -2259,6 +2260,84 @@ mod mpfr {
                     );
                 }
             }
+        }
+    }
+
+    // The precision of the checks of `reduce` in the highest binade: K π/2 is below 2^1024 for
+    // the K there, so that its product from π/2 to `TOP_PREC` bits, rounded there, is within
+    // about 2^-1375 of it, and so is the computed t - K π/2, against widths of the enclosures of
+    // about 2^-511 |ρ| at 8 limbs.
+    const TOP_PREC: u32 = 2400;
+
+    // The value of `x`, exactly, as in `tests/levels.rs`.
+    fn float<const N: usize>(x: &Dyadic<N>) -> Float {
+        let mut f = Float::with_val(64 * N as u32, Integer::from_digits(&x.m, Order::Lsf));
+        if x.neg {
+            f = -f;
+        }
+        f <<= i32::try_from(x.exp).unwrap();
+        f
+    }
+
+    // `reduce::<N>(t)` = (q, up, ρ) for t in [2^1023, 2^1024): q = K mod 4 for K = t / (π/2)
+    // rounded to an integer, and ρ holds σ (t - K π/2), with σ = -1 if `up` and 1 otherwise.
+    // Its width is at most 2^(3 - 64 N) |ρ|, the sum of three parts. The rounding of R or P - R
+    // to the 64 N bits of N limbs, and then that of one bound of its sum with or difference from
+    // [0, k], each add at most an ulp, 2^(1 - 64 N) times the magnitude. k, the bound on
+    // K δ 2^-(s + 1), is about 2^(b - 64 L + 1) = 2^(-64 N - 63) at b = 1024 and L = N + 17,
+    // below 2^(-64 N - 2) |ρ| as |ρ| >= 2^-61 (`km_distance` in `rocq/theories/KahanMcDonald.v`).
+    fn check_top<const N: usize>(t: f64, half_pi: &Float) {
+        let (q, up, rho) = reduce::<N>(t);
+        let k = Float::with_val(TOP_PREC, t / half_pi).to_integer().unwrap();
+        let mut want = Float::with_val(TOP_PREC, t - Float::with_val(TOP_PREC, half_pi * &k));
+        if up {
+            want = -want;
+        }
+        let (lo, hi) = (float(&rho.lo), float(&rho.hi));
+        let width = Float::with_val(TOP_PREC, &hi - &lo);
+        let mut bound = Float::with_val(TOP_PREC, want.abs_ref());
+        bound <<= 3;
+        bound >>= 64 * N as u32;
+        assert!(
+            q == u64::from(k.mod_u(4)) && lo <= want && want <= hi && width <= bound,
+            "reduce::<{N}>({t:e}) = ({q}, {up}, [{:e}, {:e}]), with K = {k} and ρ = {:e}",
+            lo.to_f64(),
+            hi.to_f64(),
+            want.to_f64()
+        );
+    }
+
+    // `reduce` at the levels of 4 to 8 limbs, at t in the highest binade, [2^1023, 2^1024), as
+    // `check_top` checks it: 2^1023, the `f64` above it, 1.5 2^1023, `f64::MAX` and the `f64`
+    // below it, and 16 random t. There b = 1024, and the limbs that `reduce` takes for X, its
+    // quotient, R, P - R and the scratch of `div_rem`, `need`, are the most at each level: 179 at
+    // 4 limbs, the most at the levels of `ziv` up to 4 limbs, on the stack array of 192 limbs;
+    // 185 and 191 at 5 and 6 limbs, on the stack too; and 197 and 203 at 7 limbs and at 8, the
+    // next level of `ziv`, on the heap.
+    #[test]
+    fn reduce_top_binade() {
+        // `need` at n limbs for b = 1024, as `reduce` computes it.
+        let need = |n: usize| {
+            let l = (n + GUARD_LIMBS + 16).min(66);
+            3 * (l + 17) + 3 * l + 2
+        };
+        assert_eq!([4, 5, 6, 7, 8].map(need), [179, 185, 191, 197, 203]);
+        let half_pi = Float::with_val(TOP_PREC, Constant::Pi) / 2u32;
+        let mut rng = Rng(1072);
+        let mut args = vec![
+            pow2(1023),
+            next_up(pow2(1023)),
+            1.5 * pow2(1023),
+            next_down(f64::MAX),
+            f64::MAX,
+        ];
+        args.extend((0..16).map(|_| from_parts(2046, (1 << 52) + u128::from(rng.below(1 << 52)))));
+        for t in args {
+            check_top::<4>(t, &half_pi);
+            check_top::<5>(t, &half_pi);
+            check_top::<6>(t, &half_pi);
+            check_top::<7>(t, &half_pi);
+            check_top::<8>(t, &half_pi);
         }
     }
 }
