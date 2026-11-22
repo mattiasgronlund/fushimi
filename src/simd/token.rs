@@ -986,8 +986,11 @@ macro_rules! level {
     // instructions per call on an interval containing zero, but 1 to 5 more on a positive one,
     // whose path does not call it (cachegrind, row 136).
     (@sqrt1_ru_copy copy, $backend:ident, [$($f:tt),*]) => {
+        /// # Safety
+        ///
+        /// The CPU must have the level's target features.
         $(#[target_feature(enable = $f)])*
-        pub(super) fn sqrt1_ru(x: f64) -> f64 {
+        pub(super) unsafe fn sqrt1_ru(x: f64) -> f64 {
             $backend::sqrt1_ru(x)
         }
     };
@@ -1000,9 +1003,12 @@ macro_rules! level {
     };
     // `sqrt1_ru inline`: as `copy`, but the copy is inlined.
     (@sqrt1_ru_copy inline, $backend:ident, [$($f:tt),*]) => {
+        /// # Safety
+        ///
+        /// The CPU must have the level's target features.
         #[inline]
         $(#[target_feature(enable = $f)])*
-        pub(super) fn sqrt1_ru(x: f64) -> f64 {
+        pub(super) unsafe fn sqrt1_ru(x: f64) -> f64 {
             $backend::sqrt1_ru(x)
         }
     };
@@ -1061,9 +1067,12 @@ macro_rules! level {
         impl Simd for $t {
             #[inline(always)]
             fn vectorize<F: FnOnce() -> R, R>(self, f: F) -> R {
+                /// # Safety
+                ///
+                /// The CPU must have the level's target features.
                 $(#[target_feature(enable = $f)])*
                 #[inline]
-                fn region<F: FnOnce() -> R, R>(f: F) -> R {
+                unsafe fn region<F: FnOnce() -> R, R>(f: F) -> R {
                     f()
                 }
 
@@ -1096,24 +1105,33 @@ macro_rules! level {
             use crate::simd::x86_64::$backend;
             use std::arch::x86_64::__m128d;
 
+            /// # Safety
+            ///
+            /// The CPU must have the level's target features.
             #[allow(improper_ctypes_definitions)] // `__m128d` (see `Baseline`).
             $(#[$ad])*
             $(#[target_feature(enable = $f)])*
-            pub(super) extern $adabi fn add_ru(x: __m128d, y: __m128d) -> __m128d {
+            pub(super) unsafe extern $adabi fn add_ru(x: __m128d, y: __m128d) -> __m128d {
                 $backend::add_ru(x, y)
             }
 
+            /// # Safety
+            ///
+            /// The CPU must have the level's target features.
             #[allow(improper_ctypes_definitions)] // `__m128d` (see `Baseline`).
             $(#[$ad])*
             $(#[target_feature(enable = $f)])*
-            pub(super) extern $adabi fn div_ru(x: __m128d, y: __m128d) -> __m128d {
+            pub(super) unsafe extern $adabi fn div_ru(x: __m128d, y: __m128d) -> __m128d {
                 $backend::div_ru(x, y)
             }
 
+            /// # Safety
+            ///
+            /// The CPU must have the level's target features.
             #[allow(improper_ctypes_definitions)] // `__m128d` (see `Baseline`).
             $(#[$ma])*
             $(#[target_feature(enable = $f)])*
-            pub(super) extern $abi fn mul_add_ru(
+            pub(super) unsafe extern $abi fn mul_add_ru(
                 x: __m128d,
                 y: __m128d,
                 z: __m128d,
@@ -1121,16 +1139,22 @@ macro_rules! level {
                 $backend::mul_add_ru(x, y, z)
             }
 
+            /// # Safety
+            ///
+            /// The CPU must have the level's target features.
             #[allow(improper_ctypes_definitions)] // `__m128d` (see `Baseline`).
             $(#[$ad])*
             $(#[target_feature(enable = $f)])*
-            pub(super) extern $adabi fn mul_ru(x: __m128d, y: __m128d) -> __m128d {
+            pub(super) unsafe extern $adabi fn mul_ru(x: __m128d, y: __m128d) -> __m128d {
                 $backend::mul_ru(x, y)
             }
 
+            /// # Safety
+            ///
+            /// The CPU must have the level's target features.
             #[inline]
             $(#[target_feature(enable = $f)])*
-            pub(super) fn sqrt_rd_ru(x: __m128d) -> __m128d {
+            pub(super) unsafe fn sqrt_rd_ru(x: __m128d) -> __m128d {
                 $backend::sqrt_rd_ru(x)
             }
 

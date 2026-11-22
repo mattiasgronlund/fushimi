@@ -96,8 +96,11 @@ macro_rules! level_entry {
         #[cfg(fushimi_kernel_dispatch)]
         $(#[$attr])*
         $vis fn $name<const UP: bool>($($arg: $ty),*) -> $ret {
+            /// # Safety
+            ///
+            /// The CPU must have `fma`.
             #[target_feature(enable = "fma")]
-            fn fma_copy<const UP: bool>($($arg: $ty),*) -> $ret {
+            unsafe fn fma_copy<const UP: bool>($($arg: $ty),*) -> $ret {
                 $with::<true, UP>($($arg),*)
             }
             // Out of line, so that its frame stays out of the entry.
@@ -155,8 +158,11 @@ macro_rules! level_entry {
         #[cfg(fushimi_kernel_dispatch)]
         $(#[$attr])*
         $vis fn $name($($arg: $ty,)* up: bool) -> $ret {
+            /// # Safety
+            ///
+            /// The CPU must have `fma`.
             #[target_feature(enable = "fma")]
-            fn fma_copy<const UP: bool>($($arg: $ty),*) -> $ret {
+            unsafe fn fma_copy<const UP: bool>($($arg: $ty),*) -> $ret {
                 $with::<true>($($arg,)* UP)
             }
             // Out of line, so that its frame stays out of the entry and its callers.
@@ -209,8 +215,11 @@ macro_rules! level_entry {
         #[cfg(fushimi_kernel_dispatch)]
         $(#[$attr])*
         $vis fn $name($($arg: $ty),*) -> $ret {
+            /// # Safety
+            ///
+            /// The CPU must have `fma`.
             #[target_feature(enable = "fma")]
-            fn fma_copy($($arg: $ty),*) -> $ret {
+            unsafe fn fma_copy($($arg: $ty),*) -> $ret {
                 $with::<true>($($arg),*)
             }
             // Out of line, so that its frame stays out of the entry.
