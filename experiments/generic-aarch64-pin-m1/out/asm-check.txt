@@ -1,0 +1,7 @@
+build  primitives: __bench::add_ru mul_ru div_ru  intervals: Interval::mul mul1_ru_tiny::<true> Interval::sqrt
+P0-L0  primitives: 110@60 99@28 106@52  intervals: 135@20 72@32 35@40
+B-L0  primitives: 4@60 4@28 4@12  intervals: 135@60 72@12 35@40
+A1-L0  primitives: 110@60 99@28 106@52  intervals: 135@60 72@12 35@40
+P0-L6  primitives: 110@0 99@0 106@0  intervals: 135@0 72@0 35@0
+B-L6  primitives: 4@0 4@0 4@0  intervals: 135@0 72@0 35@0
+A1-L6  primitives: 110@0 99@0 106@0  intervals: 135@0 72@0 35@0

@@ -1,0 +1,38 @@
+00000001000ad77c <inari::__bench::add_ru>:
+1000ad77c:     	ldp	d0, d1, [x0]
+1000ad780:     	ldp	d2, d3, [x1]
+1000ad784:     	mov	x0, x8
+1000ad788:     	b	0x1000ad024 <inari::simd::generic::add_ru>
+
+00000001000ad78c <inari::__bench::div_ru>:
+1000ad78c:     	ldp	d0, d1, [x0]
+1000ad790:     	ldp	d2, d3, [x1]
+1000ad794:     	mov	x0, x8
+1000ad798:     	b	0x1000acdf8 <inari::simd::generic::div_ru>
+
+00000001000ad79c <inari::__bench::mul_ru>:
+1000ad79c:     	ldp	d0, d1, [x0]
+1000ad7a0:     	ldp	d2, d3, [x1]
+1000ad7a4:     	mov	x0, x8
+1000ad7a8:     	b	0x1000ad4b4 <inari::simd::generic::mul_ru>
+
+00000001000b36c0 <inari::__bench::add_ru>:
+1000b36c0:     	ldp	d0, d1, [x0]
+1000b36c4:     	ldp	d2, d3, [x1]
+1000b36c8:     	mov	x0, x8
+1000b36cc:     	b	0x1000b2f80 <inari::simd::generic::add_ru>
+1000b36d0:     	nop
+--
+00000001000b3700 <inari::__bench::div_ru>:
+1000b3700:     	ldp	d0, d1, [x0]
+1000b3704:     	ldp	d2, d3, [x1]
+1000b3708:     	mov	x0, x8
+1000b370c:     	b	0x1000b2d80 <inari::simd::generic::div_ru>
+1000b3710:     	nop
+--
+00000001000b3740 <inari::__bench::mul_ru>:
+1000b3740:     	ldp	d0, d1, [x0]
+1000b3744:     	ldp	d2, d3, [x1]
+1000b3748:     	mov	x0, x8
+1000b374c:     	b	0x1000b3440 <inari::simd::generic::mul_ru>
+1000b3750:     	nop

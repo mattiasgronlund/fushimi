@@ -1,0 +1,3 @@
+    Finished `bench` profile [optimized] target(s) in 0.03s
+  Executable benches/intervals.rs (/Users/mattias/git/mattiasgronlund/target-146/P0-L0/release/build/inari-bench/5fc8d764f9f22a1b/out/intervals-5fc8d764f9f22a1b)
+  Executable benches/primitives.rs (/Users/mattias/git/mattiasgronlund/target-146/P0-L0/release/build/inari-bench/b17df1662361fc4b/out/primitives-b17df1662361fc4b)
