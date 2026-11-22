@@ -1,0 +1,5 @@
+   Compiling inari v2.0.0 (/Users/mattias/git/mattiasgronlund/inari-base)
+   Compiling inari-bench v0.0.0 (/Users/mattias/git/mattiasgronlund/inari-base/bench)
+    Finished `bench` profile [optimized] target(s) in 16.52s
+  Executable benches/intervals.rs (target/release/build/inari-bench/3ca25be2a6dd7659/out/intervals-3ca25be2a6dd7659)
+  Executable benches/primitives.rs (target/release/build/inari-bench/93b39ac8e2e2330c/out/primitives-93b39ac8e2e2330c)
