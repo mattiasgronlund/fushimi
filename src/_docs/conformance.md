@@ -1,6 +1,6 @@
 # Conformance to the standard
 
-inari implements a subset of IEEE Std 1788-2015. This page describes the current status of conformance to the standard.
+fushimi implements a subset of IEEE Std 1788-2015. This page describes the current status of conformance to the standard.
 
 ## Implemented operations
 
@@ -191,7 +191,7 @@ a. Implementation-defined behavior
 
 1. What status flags or other means to signal the occurrence of certain decoration values in computations does the implementation provide if any?
 
-   inari does not signal occurrence of decoration values.
+   fushimi does not signal occurrence of decoration values.
 
 Does the implementation provide the set-based flavor? If so answer the following set of questions.
 
@@ -199,13 +199,13 @@ b. Documentation of behavior
 
 1. If the implementation supports implicit interval types, how is the interval hull operation realized?
 
-   inari does not have implicit interval types.
+   fushimi does not have implicit interval types.
 
 2. What accuracy is achieved (i.e., tightest, accurate, or valid) for each of the implementation’s interval operations?
 
    Unless otherwise noted, all operations return the tightest results.
 
-   The [forward-mode elementary functions](#forward-mode-elementary-functions) from pown(_x_, _n_) to atanh(_x_) compute their bounds with a multi-precision kernel of inari's own. Where no special rule settles an argument, the kernel rounds by Ziv's strategy: it raises its precision until a rounding test passes, up to a cap of 4,096 bits. These operations return the tightest results unless an argument makes the kernel reach that cap without the test passing, which no known argument does. Failing the test at the cap does not make the kernel panic: it returns the bound of its 4,096-bit enclosure on the side of the rounding, rounded outward. That value is on the correct side of the exact one, and is believed to be within one [`f64`] of its correct rounding, but it is not proved to be that rounding. With the portable backend, the interval that the operation on `Interval` then returns is proved to contain the range of the function over its arguments, wherever the kernel does not panic. [`Interval::sin`], [`Interval::cos`] and [`Interval::tan`] also take the quadrant of an argument from the signs of such values, and are proved to take the right one, as no `f64` lies within 2^-61 of a multiple of π/2 other than 0. The kernel also panics where one of its checks fails, such as that a divisor is not zero. No known argument makes one fail, but that none can is not proved.
+   The [forward-mode elementary functions](#forward-mode-elementary-functions) from pown(_x_, _n_) to atanh(_x_) compute their bounds with a multi-precision kernel of fushimi's own. Where no special rule settles an argument, the kernel rounds by Ziv's strategy: it raises its precision until a rounding test passes, up to a cap of 4,096 bits. These operations return the tightest results unless an argument makes the kernel reach that cap without the test passing, which no known argument does. Failing the test at the cap does not make the kernel panic: it returns the bound of its 4,096-bit enclosure on the side of the rounding, rounded outward. That value is on the correct side of the exact one, and is believed to be within one [`f64`] of its correct rounding, but it is not proved to be that rounding. With the portable backend, the interval that the operation on `Interval` then returns is proved to contain the range of the function over its arguments, wherever the kernel does not panic. [`Interval::sin`], [`Interval::cos`] and [`Interval::tan`] also take the quadrant of an argument from the signs of such values, and are proved to take the right one, as no `f64` lies within 2^-61 of a multiple of π/2 other than 0. The kernel also panics where one of its checks fails, such as that a divisor is not zero. No known argument makes one fail, but that none can is not proved.
 
    The [recommended](#recommended-operations) rootn(_x_, 3) and hypot(_x_, _y_) compute their bounds with the same kernel, from an exact integer cube or square root where a fast path in `f64` does not decide the rounding, without Ziv's strategy, so the cap does not concern them: they return the tightest results at every argument. With the portable backend, this is proved, with the decorations that the standard asks for, and so is that the kernel returns at every argument of theirs, without panicking.
 
@@ -219,7 +219,7 @@ b. Documentation of behavior
 
 5. How are interval datums converted to their exact text representations?
 
-   The user can use `format!("{:x}", x)` to convert an interval to its exact representation. The result is a hexadecimal interval literal, with each bound in the layout of MPFR's `%Ra` conversion, for example `[0x3.243f6a8885a3p+0,0x3.243f6a8885a32p+0]` for [`Interval::PI`]. inari writes it with its own code, not with MPFR.
+   The user can use `format!("{:x}", x)` to convert an interval to its exact representation. The result is a hexadecimal interval literal, with each bound in the layout of MPFR's `%Ra` conversion, for example `[0x3.243f6a8885a3p+0,0x3.243f6a8885a32p+0]` for [`Interval::PI`]. fushimi writes it with its own code, not with MPFR.
 
 c. Implementation-defined behavior
 
@@ -233,11 +233,11 @@ c. Implementation-defined behavior
 
 3. What means if any does the implementation provide for an exception to be signaled when a NaI is produced?
 
-   inari does not signal production of NaIs.
+   fushimi does not signal production of NaIs.
 
 4. What interval types are supported besides the required ones?
 
-   inari does not have additional interval types.
+   fushimi does not have additional interval types.
 
 5. What mechanisms of exception handling are used in exception handlers provided by the implementation? What additional exception handling is provided by the implementation?
 
@@ -245,7 +245,7 @@ c. Implementation-defined behavior
 
 6. What is the tie-breaking method used in rounding of supported number formats F that are not IEEE 754 conforming?
 
-   inari does not support non IEEE 754 number formats.
+   fushimi does not support non IEEE 754 number formats.
 
 7. Does the implementation include different versions of the same operation for a given type and how are these provided to the user?
 
@@ -265,11 +265,11 @@ c. Implementation-defined behavior
 
 11. What is the tightness of the string to interval conversion for non IEEE 754 conforming interval types and the tightness for the interval to string conversion for all interval types?
 
-    inari does not support non IEEE 754 interval types. The tightness of output is _valid_.
+    fushimi does not support non IEEE 754 interval types. The tightness of output is _valid_.
 
 12. What is the result of Level 3 operations for invalid inputs?
 
-    inari prevents creation of invalid interval datums. For invalid inputs, bare interval constructors return an [`Err`] with either [`IntervalErrorKind::UndefinedOperation`] or [`IntervalErrorKind::PossiblyUndefinedOperation`]. See also the answers to b.3 and c.5.
+    fushimi prevents creation of invalid interval datums. For invalid inputs, bare interval constructors return an [`Err`] with either [`IntervalErrorKind::UndefinedOperation`] or [`IntervalErrorKind::PossiblyUndefinedOperation`]. See also the answers to b.3 and c.5.
 
 13. What are the interchange representations of the fields of the standard Level 3 representation listed in 14.4?
 

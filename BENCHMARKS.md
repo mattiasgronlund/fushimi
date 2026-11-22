@@ -1,6 +1,6 @@
 # Benchmarks
 
-A comparison of the backends of inari, in twelve sittings:
+A comparison of the backends of fushimi, in twelve sittings:
 
 - 2026-09-22: `avx_fma`, then the default for x86-64, which set MXCSR around
   every instruction to make the hardware round, against the portable backend
@@ -29,7 +29,7 @@ A comparison of the backends of inari, in twelve sittings:
   again, after that change, with the composite benchmarks on WebAssembly, and
   two builds of the same source against each other.
 - 2026-11-12: `sin`, `cos` and `tan` of intervals with `fma` again, after they
-  moved from MPFR to inari's own kernel, against the last commit that computed
+  moved from MPFR to fushimi's own kernel, against the last commit that computed
   them with MPFR.
 - 2026-11-21: `fma`, `generic` without an FMA and `sse42` again, all the
   benchmarks of each, on `79ae348` against `174092e`, the commit that added the
@@ -77,11 +77,11 @@ two round by correcting a round-to-nearest result.
   container image, pinned by its image id, whose rustc is 1.98.1, and run on
   the host.
 - `lto = "fat"` and `codegen-units = 1`, so that the primitives are inlined into
-  the benchmarks as they are within inari.
+  the benchmarks as they are within fushimi.
 - The first table of the trigonometric section, and the `036d2f8` column of its
   second, measure builds in which `sin`, `cos` and `tan` computed their bounds
   with MPFR. They linked GMP 6.3.0 and MPFR 4.2.2, as built by `gmp-mpfr-sys`
-  1.7.1. inari now computes those bounds with its own multi-precision kernel
+  1.7.1. fushimi now computes those bounds with its own multi-precision kernel
   (`src/dyadic.rs`), which the other columns of the second table measure.
 - Each run was pinned to one core with `taskset -c 11`, on an otherwise idle
   machine (load average below 3). Rounds measured on a loaded machine were
@@ -318,7 +318,7 @@ in `generic, no FMA`, `scalar` and `simd128`, with the flags of "Setup", and the
 WebAssembly builds were compiled and run as in the seventh sitting. These builds
 run the code of `8aef5d1`, the main branch then: of the files in `src/`,
 `bench/` and the manifests, the two commits differ only in `src/dyadic.rs` and
-the files under `src/dyadic/`, which are compiled only for inari's own tests.
+the files under `src/dyadic/`, which are compiled only for fushimi's own tests.
 `d894347` was built in `generic, Nehalem` and `generic, FMA`, `0a7c306` in
 `wasm32`, and `avx_fma` from `cc5e384`, as in the fifth sitting, all with the
 `bench/` of `5543a69` and one `Cargo.lock`. Each benchmark took 2 s of warm-up
@@ -861,7 +861,7 @@ written. `b2390de` takes 1.00–1.01 times as long as `216e5f5` on every row, wh
 within how far these builds move on `narrow` (see "Variance").
 
 `3f625c0` moved the bounds of `sin`, `cos` and `tan`, and of the other
-elementary functions, from MPFR to inari's own kernel. The second table
+elementary functions, from MPFR to fushimi's own kernel. The second table
 compares two copies of the source of `893b06c`, the main branch when it was
 measured, the same byte for byte but at paths of different lengths, copy A and
 copy B, with `036d2f8`, the commit before `3f625c0`. In all three,
@@ -1637,7 +1637,7 @@ fast on multiplication.
 ## Running the benchmarks
 
 The benchmarks are in `bench/`, a separate package, so that criterion does not
-affect inari's minimum supported Rust version. They need a recent Rust
+affect fushimi's minimum supported Rust version. They need a recent Rust
 (tested with 1.96 and 1.98.1). Primitives are exposed through the hidden
 `__bench` feature, which is not public API.
 
@@ -1652,7 +1652,7 @@ The 2.0.0 columns of the sections on tiny products come from
 `inari = "=2.0.0"` with `default-features = false`, with the same
 `[profile.bench]`.
 
-The trigonometric functions compute their bounds with inari's own kernel, so
+The trigonometric functions compute their bounds with fushimi's own kernel, so
 their benchmark, `benches/trig.rs`, needs no feature, and `cargo bench` runs it
 with the others. To run it alone:
 

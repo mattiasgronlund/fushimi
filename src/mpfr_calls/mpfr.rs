@@ -31,7 +31,7 @@ use std::{
 pub(crate) fn assert_thread_safe() {
     assert!(
         unsafe { mpfr::buildopt_tls_p() } != 0,
-        "inari needs an MPFR built thread-safe, and the linked one is not; the feature \
+        "fushimi needs an MPFR built thread-safe, and the linked one is not; the feature \
          `use-system-libs` of `gmp-mpfr-sys` links a system MPFR, which need not be"
     );
 }
@@ -358,13 +358,13 @@ macro_rules! mpfr_once {
 
 mpfr_once!(sqrt, sqrt_rn, sqrt_rd, sqrt_ru);
 
-// The bound `x` of an interval as inari printed it with MPFR before it had digits of its own,
-// against which `src/format/diff_tests.rs` checks `bound` of `src/format.rs`: rounded toward
-// +∞ if `up` and toward -∞ otherwise by `mpfr::asprintf`, with the conversion `conv` (`'f'`,
-// `'e'` or `'a'`, as in C's `printf`) and `prec` digits after the point, or MPFR's default for
-// `conv` if `prec` is `None`, and an infinite `x` as `-inf` or `inf`. It calls
+// The bound `x` of an interval as inari 2.0.0 printed it with MPFR before fushimi had digits of
+// its own, against which `src/format/diff_tests.rs` checks `bound` of `src/format.rs`: rounded
+// toward +∞ if `up` and toward -∞ otherwise by `mpfr::asprintf`, with the conversion `conv`
+// (`'f'`, `'e'` or `'a'`, as in C's `printf`) and `prec` digits after the point, or MPFR's
+// default for `conv` if `prec` is `None`, and an infinite `x` as `-inf` or `inf`. It calls
 // `assert_thread_safe` before the MPFR call. It reads all the `len` bytes that MPFR wrote,
-// where inari used to stop at the first NUL, so that a NUL that MPFR writes in a digit (see
+// where inari 2.0.0 stopped at the first NUL, so that a NUL that MPFR writes in a digit (see
 // `mpfr_bumps_exact` in `src/format/diff_tests.rs`) shows.
 pub(crate) fn fmt_bound_mpfr(x: f64, prec: Option<usize>, conv: char, up: bool) -> String {
     assert!(!x.is_nan());

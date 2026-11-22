@@ -1,6 +1,6 @@
 // Compares `bound` of `src/format.rs` with MPFR, through `fmt_bound_mpfr` of
-// `src/mpfr_calls/mpfr.rs`, the MPFR call with which inari printed a bound of an interval
-// before it had digits of its own: the text, byte for byte, in both directions, for the
+// `src/mpfr_calls/mpfr.rs`, the MPFR call with which inari 2.0.0 printed a bound of an interval
+// before fushimi had digits of its own: the text, byte for byte, in both directions, for the
 // conversions `'f'`, `'e'` and `'a'`, without a precision and with the precisions 0 to 20, and
 // on a sample of the numbers also with 40, 100, 330 and 1100. The numbers are random bit
 // patterns, integers, numbers beside a decimal carry, numbers whose hex digits are at an edge,

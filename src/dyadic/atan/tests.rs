@@ -2327,7 +2327,7 @@ fn first_stage_pass_rates() {
 // The sets of `stage0_pass_rates`, as (name, a, b): `u` is x uniform in [-1, 1), and the others x
 // with a random sign and 1 - |x| in [a, b), half uniform and half of any exponent in it
 // (`in_range`): the decades of 1 - |x| into which 95.6% of the arguments of solidcore's acos
-// calls fall, by a sample of one call in 10,000 (inari issue #2).
+// calls fall, by a sample of one call in 10,000 (fushimi issue #2).
 const STAGE0_SETS: [(&str, f64, f64); 6] = [
     ("u", -1.0, 1.0),
     ("1e-1", 1e-1, 1.0),

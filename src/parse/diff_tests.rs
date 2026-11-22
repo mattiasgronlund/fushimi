@@ -1,6 +1,6 @@
 // Compares `rational_to_f64` of `src/parse.rs` with MPFR, through `round_rational` of
-// `src/mpfr_calls/mpfr.rs`, the MPFR calls with which inari rounded a rational to an `f64`
-// before it had its own rounding: `f` by its bits, so that the sign of zero counts, `inexact`
+// `src/mpfr_calls/mpfr.rs`, the MPFR calls with which inari 2.0.0 rounded a rational to an `f64`
+// before fushimi had its own rounding: `f` by its bits, so that the sign of zero counts, `inexact`
 // and `overflow`, in both directions, on random rationals of up to about 4000 bits, on exact
 // `f64`s, midpoints and numbers just beside them, written as decimal, hexadecimal and `p/q`
 // literals give them, on subnormal numbers, on exponents up to `i32::MAX` and down to

@@ -15,7 +15,7 @@
 // the entries named `<op>/fpcr` below, and the references of the square roots),
 // a reference that shares no rounding code with either backend.
 // On wasm32, `f64::mul_add` is a software routine, but still correctly rounded.
-// NaNs compare equal regardless of their sign and payload, which inari does not
+// NaNs compare equal regardless of their sign and payload, which fushimi does not
 // depend on (x86 returns a negative default NaN, the generic backend does not).
 //
 // The number of random cases per generator can be set with `FUSHIMI_DIFF_N`.

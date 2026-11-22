@@ -1,4 +1,4 @@
-# Working in this repo (inari)
+# Working in this repo (fushimi)
 
 ## Must pass before every commit (mirrors .github/workflows/ci-x86-64.yml)
 CI runs with RUSTFLAGS="-Ctarget-cpu=haswell -Dwarnings", so warnings are errors.

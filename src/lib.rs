@@ -4,7 +4,7 @@
 //!
 //! [Formal introduction to interval arithmetic][`_docs::formal_intro`]
 //!
-//! inari implements a subset of the following standards for interval arithmetic:
+//! fushimi implements a subset of the following standards for interval arithmetic:
 //!
 //! - [IEEE Std 1788-2015](https://doi.org/10.1109/IEEESTD.2015.7140721)
 //! - [IEEE Std 1788.1-2017](https://doi.org/10.1109/IEEESTD.2018.8277144) - A simplified version and a subset of IEEE Std 1788-2015

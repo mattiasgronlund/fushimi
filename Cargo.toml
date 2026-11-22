@@ -54,7 +54,7 @@ version = "7.0"
 default-features = false
 features = ["std"]
 
-# The tests compare inari's results with MPFR's, on the platforms where `gmp-mpfr-sys` builds
+# The tests compare fushimi's results with MPFR's, on the platforms where `gmp-mpfr-sys` builds
 # GMP and MPFR. The test code that uses them is compiled under the same `cfg` expression.
 [target.'cfg(all(target_pointer_width = "64", any(target_os = "linux", target_os = "macos")))'.dev-dependencies.gmp-mpfr-sys]
 version = "1.5"

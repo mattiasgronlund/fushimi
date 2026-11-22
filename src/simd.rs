@@ -1,6 +1,6 @@
 //! Interval arithmetic at a level of the CPU detected at run time.
 //!
-//! Without a token, interval arithmetic such as `x + y` runs the backend that inari picks when
+//! Without a token, interval arithmetic such as `x + y` runs the backend that fushimi picks when
 //! it is compiled, from the target of the build, its target features and the feature
 //! `force-generic`. The `*_with` operations of [`Interval`](crate::Interval) and
 //! [`DecInterval`](crate::DecInterval), such as [`Interval::add_with`](crate::Interval::add_with)

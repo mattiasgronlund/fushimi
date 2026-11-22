@@ -1,5 +1,5 @@
 # Benchmarks, in a separate package so that criterion and its dependencies do
-# not affect inari's minimum supported Rust version. See BENCHMARKS.md.
+# not affect fushimi's minimum supported Rust version. See BENCHMARKS.md.
 [package]
 name = "fushimi-bench"
 version = "0.0.0"

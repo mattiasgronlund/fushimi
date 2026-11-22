@@ -35,7 +35,7 @@ fn fmt_impl(x: Interval, d: Option<Decoration>, f: &mut fmt::Formatter, conv: ch
 }
 
 // The bound `x` of a nonempty interval, rounded toward +∞ if `up` and toward -∞ otherwise, in
-// the text that inari printed with MPFR before it had digits of its own: that of
+// the text that inari 2.0.0 printed with MPFR, before fushimi had digits of its own: that of
 // `mpfr::asprintf` with the template `%RUc` or `%RDc`, or `%.pRUc` or `%.pRDc` for the
 // precision `prec = Some(p)`, for the conversion `c = conv` (`'f'`, `'e'` or `'a'`, as in C's
 // `printf`), and `-inf` or `inf` for an infinite `x`. `src/format/diff_tests.rs` compares the

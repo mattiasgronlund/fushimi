@@ -16,9 +16,9 @@
 // directed operation saved FPCR, set the rounding mode and restored it. On an
 // Apple M1 Pro, a dot product of two 3-vectors of intervals, building the
 // intervals included, took 141.0 ns that way and 44.1 ns with the generic
-// backend, a cost that fits those FPCR writes (inari issue #2). On the same
+// backend, a cost that fits those FPCR writes (fushimi issue #2). On the same
 // machine, the determinant of a 3 × 3 matrix of intervals took 384.9 ns that way
-// and 39.2 ns with a prototype of this backend (inari issue #4).
+// and 39.2 ns with a prototype of this backend (fushimi issue #4).
 //
 // The scalar operations are those of the generic backend, which uses the FMA
 // here as well.

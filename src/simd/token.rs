@@ -51,7 +51,7 @@ mod sealed {
     // opposite signs, `max` of `src/simd/x86_64.rs` (`_mm_max_pd`) can return another value than
     // `max` of `src/simd/generic.rs`. A user can call the methods through the bound `S: Simd`,
     // but cannot name the trait. They are `#[doc(hidden)]`, the convention for items outside a
-    // crate's API, and the docs of `Simd` say that they are inari's internals.
+    // crate's API, and the docs of `Simd` say that they are fushimi's internals.
     pub trait Backend {
         #[doc(hidden)]
         fn add_ru(self, x: F64X2, y: F64X2) -> F64X2;
@@ -90,8 +90,8 @@ mod sealed {
 /// [`vectorize`](Simd::vectorize).
 ///
 /// The tokens are [`Baseline`], on every target, and on x86-64 `V2`, `V3` and `V4`, whose
-/// `try_new` returns one only on a CPU that has their target features. Only inari implements
-/// `Simd`. The methods of its supertrait `Backend` are inari's internals: the type of the vectors
+/// `try_new` returns one only on a CPU that has their target features. Only fushimi implements
+/// `Simd`. The methods of its supertrait `Backend` are fushimi's internals: the type of the vectors
 /// that they take and return differs by build (`[f64; 2]` in a build for `x86-64`, `__m128d` in
 /// one for `haswell` without the feature `force-generic`), so a call that compiles in one build
 /// need not compile in another, and they can change in any release. Every token gives the same
@@ -378,7 +378,7 @@ pub fn dispatch<W: WithLevel>(w: W) -> W::Output {
 // (see below), whereas `CrateBaseline` calls `div_ru` and `mul_ru`. `x + y` and `x - y` of
 // intervals call `add_ru_c_abi` through `CrateBaseline`, whose `add_ru` calls the method of
 // `Baseline`, and LLVM inlined it into them in Cargo's default release profile. In a crate that
-// links inari, built for `aarch64-unknown-linux-gnu` in that profile and counted under QEMU, a loop
+// links fushimi, built for `aarch64-unknown-linux-gnu` in that profile and counted under QEMU, a loop
 // of `*_with` calls at `Baseline` then ran 7 fewer instructions per `add_with` or `sub_with`, 8
 // fewer per `div_with` by a positive or a negative interval and per `recip_with` of one, 20 to 22
 // fewer per `mul_with` (39 for a `mul_with` of two intervals that have 0 in their interiors) and 19
@@ -445,7 +445,7 @@ pub fn dispatch<W: WithLevel>(w: W) -> W::Output {
 // Each forwarder is one `jmp` to its function (see `add_ru_exported` in `x86_64/lanewise.rs`).
 // `CrateBaseline` calls `add_ru`, `div_ru`, `mul_ru` and `mul_add_ru` themselves, which the crate
 // does not export, so that its operations, `x + y` and `x - y` of intervals among them, call them
-// directly, not through the global offset table. In a crate that links inari, built for `haswell`
+// directly, not through the global offset table. In a crate that links fushimi, built for `haswell`
 // and for `x86-64-v2` in Cargo's default release profile, each operation without a token that
 // was counted then ran as many instructions and conditional branches as with the methods without
 // `#[inline]` above, and a loop of `*_with` calls at `Baseline`, at `V3` in the build for `haswell`
@@ -517,7 +517,7 @@ impl sealed::Backend for Baseline {
     // (such as one for plain `x86-64`), whose backend is the portable one, the `classify_bits` of
     // `src/simd/x86_64.rs` too, which the copies of `V2`, `V3` and `V4` below call there as well.
     // It uses only SSE and SSE2 intrinsics, which every x86-64 CPU has, and `to_m128d` passes it
-    // the `F64X2` of these builds, `[f64; 2]`, as an `__m128d`. In a crate that links inari,
+    // the `F64X2` of these builds, `[f64; 2]`, as an `__m128d`. In a crate that links fushimi,
     // built for `x86-64` in Cargo's default release profile, a call of `Interval::recip` or
     // `Interval::sqr` took 8 fewer instructions with it than with that of `src/classify.rs`, and
     // one of `Interval::mul`, `Interval::div`, `Interval::mul_add` or
