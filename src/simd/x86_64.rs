@@ -233,17 +233,21 @@ cfg_if::cfg_if! {
         mod fma;
         pub(crate) use fma::*;
 
-        // The backend of the token `V4` (`src/simd/token.rs`), whose copies of the functions
-        // below compile it with the target features of `x86-64-v4`.
+        // With the feature `avx512`, the backend of the token `V4` (`src/simd/token.rs`), whose
+        // copies of the functions below compile it with the target features of `x86-64-v4`.
+        #[cfg(feature = "avx512")]
         #[allow(dead_code, unused_imports)] // Only what those copies call is used.
         pub(super) mod avx512f;
 
         // The vectors of this build are those of the backends: the copies take them as they are.
+        // Only those of `V4` call these.
+        #[cfg(feature = "avx512")]
         #[inline(always)]
         pub(super) fn to_m128d(x: F64X2) -> __m128d {
             x
         }
 
+        #[cfg(feature = "avx512")]
         #[inline(always)]
         pub(super) fn from_m128d(x: __m128d) -> F64X2 {
             x
@@ -253,11 +257,12 @@ cfg_if::cfg_if! {
         mod sse42;
         pub(crate) use sse42::*;
 
-        // The backends of the tokens `V3` and `V4` (`src/simd/token.rs`), whose copies of the
-        // functions below compile them with the target features of `x86-64-v3` and
-        // `x86-64-v4`.
+        // The backends of the tokens `V3` and, with the feature `avx512`, `V4`
+        // (`src/simd/token.rs`), whose copies of the functions below compile them with the target
+        // features of `x86-64-v3` and `x86-64-v4`.
         #[allow(dead_code, unused_imports)] // Only what those copies call is used.
         pub(super) mod fma;
+        #[cfg(feature = "avx512")]
         #[allow(dead_code, unused_imports)] // Only what those copies call is used.
         pub(super) mod avx512f;
 
@@ -273,14 +278,15 @@ cfg_if::cfg_if! {
         }
     } else {
         // Plain `x86-64`, without `sse4.2`: `src/simd.rs` takes the portable backend, and
-        // compiles this module as the backends of the tokens `V2`, `V3` and `V4`
-        // (`src/simd/token.rs`), whose copies of the functions below compile them with the
-        // target features of `x86-64-v2`, `x86-64-v3` and `x86-64-v4`, and for the
+        // compiles this module as the backends of the tokens `V2`, `V3` and, with the feature
+        // `avx512`, `V4` (`src/simd/token.rs`), whose copies of the functions below compile them
+        // with the target features of `x86-64-v2`, `x86-64-v3` and `x86-64-v4`, and for the
         // `classify_bits` above, which the `classify_bits` of `Baseline` calls in place of that
         // of `src/classify.rs`: its intrinsics are of SSE and SSE2, which every x86-64 CPU has.
         mod lanewise;
         pub(super) mod sse42;
         pub(super) mod fma;
+        #[cfg(feature = "avx512")]
         pub(super) mod avx512f;
 
         // The vectors of this build, `[f64; 2]`, to and from those of the backends.

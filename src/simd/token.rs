@@ -17,6 +17,9 @@
 //   sse4.2 (x86-64-v2)           sse42        sse42           fma (copies)  avx512f (copies)
 //   plain x86-64                 generic      sse42 (copies)  fma (copies)  avx512f (copies)
 //
+// `V4` exists only with the feature `avx512`, which needs Rust 1.89 or later, where the AVX-512
+// target features are stable; without it, no build compiles the copies of `V4`.
+//
 // In the row of plain `x86-64`, every method of `Baseline` but `classify_bits` calls the portable
 // backend; `classify_bits`, as at `V2`, `V3` and `V4`, is that of `src/simd/x86_64.rs`, which uses
 // only SSE and SSE2 (see `Baseline` below).
@@ -89,13 +92,13 @@ mod sealed {
 /// [`Interval::add_with`](crate::Interval::add_with), and the target features of its
 /// [`vectorize`](Simd::vectorize).
 ///
-/// The tokens are [`Baseline`], on every target, and on x86-64 `V2`, `V3` and `V4`, whose
-/// `try_new` returns one only on a CPU that has their target features. Only fushimi implements
-/// `Simd`. The methods of its supertrait `Backend` are fushimi's internals: the type of the vectors
-/// that they take and return differs by build (`[f64; 2]` in a build for `x86-64`, `__m128d` in
-/// one for `haswell` without the feature `force-generic`), so a call that compiles in one build
-/// need not compile in another, and they can change in any release. Every token gives the same
-/// intervals, since these operations return the tightest results (see
+/// The tokens are [`Baseline`], on every target, and on x86-64 `V2`, `V3` and, with the feature
+/// `avx512`, `V4`, whose `try_new` returns one only on a CPU that has their target features. Only
+/// fushimi implements `Simd`. The methods of its supertrait `Backend` are fushimi's internals: the
+/// type of the vectors that they take and return differs by build (`[f64; 2]` in a build for
+/// `x86-64`, `__m128d` in one for `haswell` without the feature `force-generic`), so a call that
+/// compiles in one build need not compile in another, and they can change in any release. Every
+/// token gives the same intervals, since these operations return the tightest results (see
 /// [Conformance to the standard](crate::_docs::conformance)), and the same decorations, since those
 /// of `DecInterval` compute them from the arguments and these intervals alone; only the speed
 /// differs.
@@ -261,11 +264,11 @@ pub trait WithLevel {
 /// Runs `w` at the highest level of `V4`, `V3`, `V2` and [`Baseline`] that the CPU has, inside
 /// that level's [`vectorize`](Simd::vectorize), and returns what `w` returns.
 ///
-/// On targets other than x86-64, the level is `Baseline`. On x86-64, each call checks the
-/// target features of the CPU (std caches what it detects) and enters a region, so call
-/// `dispatch` around a loop, not inside it. Mark [`WithLevel::with_level`] `#[inline(always)]`,
-/// as its code gets the target features of the level only where the compiler inlines it into
-/// the region.
+/// On targets other than x86-64, the level is `Baseline`, and on x86-64 without the feature
+/// `avx512`, which adds `V4`, it is at most `V3`. On x86-64, each call checks the target features
+/// of the CPU (std caches what it detects) and enters a region, so call `dispatch` around a loop,
+/// not inside it. Mark [`WithLevel::with_level`] `#[inline(always)]`, as its code gets the target
+/// features of the level only where the compiler inlines it into the region.
 ///
 /// ```
 /// use fushimi::{simd::{dispatch, Simd, WithLevel}, *};
@@ -293,6 +296,7 @@ pub fn dispatch<W: WithLevel>(w: W) -> W::Output {
         // Without `#[inline(always)]` on the closures, LLVM left a large `with_level` out of
         // the regions in a plain `x86-64` build: the region jumped to the closure, which ran
         // without the target features of the level.
+        #[cfg(feature = "avx512")]
         if let Some(s) = V4::try_new() {
             return s.vectorize(
                 #[inline(always)]
@@ -1258,12 +1262,17 @@ macro_rules! level {
     };
 }
 
-// The builds of the copies of `V4`, which include those of `V2` and `V3`.
+// The builds of the copies of `V3`, which include those of `V2`, and with the feature `avx512`
+// those of `V4`, which include both.
 #[cfg(all(
     target_arch = "x86_64",
     not(docsrs),
     not(feature = "force-generic"),
     not(target_feature = "avx512f"),
+    any(
+        feature = "avx512",
+        not(all(target_feature = "avx", target_feature = "fma"))
+    ),
 ))]
 use super::x86_64::{self, from_m128d, to_m128d};
 
@@ -1343,7 +1352,7 @@ level! {
     sqrt1_ru copy
 }
 
-#[cfg(target_arch = "x86_64")]
+#[cfg(all(target_arch = "x86_64", feature = "avx512"))]
 level! {
     /// The token of the target features of [`V3`] and `avx512bw`, `avx512cd`, `avx512dq`,
     /// `avx512f` and `avx512vl`, which the level `x86-64-v4` of the x86-64 psABI has.
@@ -1359,6 +1368,9 @@ level! {
     /// the target feature `avx512f`, such as one for `x86-64`, `x86-64-v2`, `x86-64-v3` or
     /// `haswell`. In other builds, such as one for `x86-64-v4`, and with `force-generic`, they run
     /// the build's backend, that of [`Baseline`].
+    ///
+    /// Only with the feature `avx512`, which needs Rust 1.89 or later, where the AVX-512 target
+    /// features are stable.
     ///
     /// ```
     /// use fushimi::{simd::{Simd, V4}, *};

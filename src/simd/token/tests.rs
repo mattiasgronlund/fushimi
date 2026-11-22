@@ -358,7 +358,7 @@ fn check_v3<C: TestCase>() {
 }
 
 // Checks every case at `V4`, if the CPU has its target features.
-#[cfg(target_arch = "x86_64")]
+#[cfg(all(target_arch = "x86_64", feature = "avx512"))]
 fn check_v4<C: TestCase>() {
     match V4::try_new() {
         Some(s) => check_token::<C, _>(s),
@@ -441,7 +441,7 @@ fn classes_v3() {
     }
 }
 
-#[cfg(target_arch = "x86_64")]
+#[cfg(all(target_arch = "x86_64", feature = "avx512"))]
 #[test]
 fn classes_v4() {
     match V4::try_new() {
@@ -529,13 +529,13 @@ fn dec_v3() {
     check_v3::<DecCase>();
 }
 
-#[cfg(target_arch = "x86_64")]
+#[cfg(all(target_arch = "x86_64", feature = "avx512"))]
 #[test]
 fn v4() {
     check_v4::<Case>();
 }
 
-#[cfg(target_arch = "x86_64")]
+#[cfg(all(target_arch = "x86_64", feature = "avx512"))]
 #[test]
 fn dec_v4() {
     check_v4::<DecCase>();
@@ -608,6 +608,7 @@ fn sqrt_bounds() {
         if let Some(s) = V3::try_new() {
             check_sqrt_bounds(s);
         }
+        #[cfg(feature = "avx512")]
         if let Some(s) = V4::try_new() {
             check_sqrt_bounds(s);
         }
@@ -637,19 +638,28 @@ impl WithLevel for Level {
     }
 }
 
+// The name of the highest token that the CPU has, of those that `dispatch` tries: without the
+// feature `avx512`, there is no `V4`, and `dispatch` stops at `V3`.
+fn highest_level() -> &'static str {
+    #[cfg(all(target_arch = "x86_64", feature = "avx512"))]
+    if V4::try_new().is_some() {
+        return type_name::<V4>();
+    }
+    #[cfg(target_arch = "x86_64")]
+    {
+        if V3::try_new().is_some() {
+            return type_name::<V3>();
+        }
+        if V2::try_new().is_some() {
+            return type_name::<V2>();
+        }
+    }
+    type_name::<Baseline>()
+}
+
 #[test]
 fn dispatch_picks_the_highest_level() {
-    #[allow(unused_mut)] // Only x86-64 has levels above `Baseline`.
-    let mut expected = type_name::<Baseline>();
-    #[cfg(target_arch = "x86_64")]
-    if V4::try_new().is_some() {
-        expected = type_name::<V4>();
-    } else if V3::try_new().is_some() {
-        expected = type_name::<V3>();
-    } else if V2::try_new().is_some() {
-        expected = type_name::<V2>();
-    }
-    assert_eq!(dispatch(Level), expected);
+    assert_eq!(dispatch(Level), highest_level());
 }
 
 // Checks every case through `dispatch`.

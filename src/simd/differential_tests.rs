@@ -1558,20 +1558,29 @@ fn classify_bits_baseline() {
 
 // The tokens whose backend functions are copies compiled with their target
 // features (`src/simd/token.rs`), compared as `differential` compares the build's
-// backend: without `force-generic`, `V4` in every x86-64 build without `avx512f`,
-// `V3` in those that also do not have both `avx` and `fma`, and `V2` in those that
-// also lack `sse4.2`, a plain `x86-64` build. Otherwise, in an x86-64 build with a
-// SIMD backend, a token's backend is the build's, which `differential` compares,
-// and with `force-generic` the portable one. A test whose token the CPU lacks is
-// skipped, with a note on stderr.
-#[cfg(all(target_arch = "x86_64", not(target_feature = "avx512f")))]
+// backend: without `force-generic`, `V4`, with the feature `avx512`, in every
+// x86-64 build without `avx512f`, `V3` in those that also do not have both `avx`
+// and `fma`, and `V2` in those that also lack `sse4.2`, a plain `x86-64` build.
+// Otherwise, in an x86-64 build with a SIMD backend, a token's backend is the
+// build's, which `differential` compares, and with `force-generic` the portable
+// one. A test whose token the CPU lacks is skipped, with a note on stderr.
+#[cfg(all(
+    target_arch = "x86_64",
+    not(target_feature = "avx512f"),
+    any(
+        feature = "avx512",
+        not(all(target_feature = "avx", target_feature = "fma"))
+    )
+))]
 mod tokens {
     use super::*;
     #[cfg(not(target_feature = "sse4.2"))]
     use crate::simd::V2;
     #[cfg(not(all(target_feature = "avx", target_feature = "fma")))]
     use crate::simd::V3;
-    use crate::simd::{constant, extract, Simd, F64X2, V4};
+    #[cfg(feature = "avx512")]
+    use crate::simd::V4;
+    use crate::simd::{constant, extract, Simd, F64X2};
 
     // A token made without an argument, as the functions of `Ops` are pointers,
     // which cannot capture one. A test calls them only after `try_new` has
@@ -1621,6 +1630,7 @@ mod tokens {
     // names that of aarch64. The other copies of `V4` are compared in `ops` as
     // those of `V3` are: with the generic backend, and `sqrt_rd_ru` with
     // `sqrt_rd_ru_reference`, which in these builds also switches MXCSR.
+    #[cfg(feature = "avx512")]
     impl Token for V4 {
         const SQRT1_RU: &'static str = "sqrt1_ru/mxcsr";
 
@@ -1772,6 +1782,7 @@ mod tokens {
         }
     }
 
+    #[cfg(feature = "avx512")]
     #[test]
     fn differential_v4() {
         match V4::try_new() {

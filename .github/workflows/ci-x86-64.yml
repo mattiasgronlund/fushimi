@@ -62,6 +62,10 @@ jobs:
           done
         continue-on-error: true
 
+      # `V4` and its tests exist only with the feature `avx512`.
+      - name: Test (--features avx512)
+        run: cargo test --release --features avx512
+
       # The tests `v4`, `dec_v4`, `classes_v4` and `differential_v4` print
       # "skipped" and pass where `V4::try_new` returns `None`. On a CPU with the
       # target features of `V4`, this step shows that they run.
@@ -69,7 +73,7 @@ jobs:
         if: ${{ steps.v4.outcome == 'success' }}
         shell: bash
         run: |
-          cargo test --release --lib v4 -- --nocapture 2>&1 | tee v4.log
+          cargo test --release --lib --features avx512 v4 -- --nocapture 2>&1 | tee v4.log
           grep --quiet --extended-regexp '^running [1-9][0-9]* tests?$' v4.log
           if grep --quiet skipped v4.log; then
             echo "A test of V4 was skipped."
@@ -77,7 +81,7 @@ jobs:
           fi
 
       - name: Test (target AVX-512F)
-        run: cargo test --release
+        run: cargo test --release --features avx512
         if: ${{ steps.avx512f.outcome == 'success' }}
         env:
           RUSTFLAGS: ${{ env.RUSTFLAGS }} -Ctarget-feature=+avx512f
@@ -101,17 +105,23 @@ jobs:
         run: cargo test --release --features force-generic
 
       - name: Clippy
-        run: cargo clippy --all-targets
+        run: |
+          cargo clippy --all-targets
+          cargo clippy --all-targets --features avx512
 
       - name: Clippy (target AVX-512F)
-        run: cargo clippy --all-targets
+        run: |
+          cargo clippy --all-targets
+          cargo clippy --all-targets --features avx512
         if: ${{ steps.avx512f.outcome == 'success' }}
         env:
           RUSTFLAGS: ${{ env.RUSTFLAGS }} -Ctarget-feature=+avx512f
           RUSTDOCFLAGS: ${{ env.RUSTDOCFLAGS }} -Ctarget-feature=+avx512f
 
       - name: Clippy (target Nehalem)
-        run: cargo clippy --all-targets
+        run: |
+          cargo clippy --all-targets
+          cargo clippy --all-targets --features avx512
         env:
           RUSTFLAGS: -Ctarget-cpu=nehalem -Dwarnings
           RUSTDOCFLAGS: -Ctarget-cpu=nehalem -Dwarnings
@@ -120,7 +130,9 @@ jobs:
         run: cargo fmt -- --check
 
       - name: Check docs
-        run: cargo rustdoc
+        run: |
+          cargo rustdoc
+          cargo rustdoc --features avx512
 
       # With `--cfg docsrs`, as on docs.rs, `src/simd.rs` selects the stubs in
       # `src/simd/unimplemented.rs`. Rustdoc does not report a call to a missing
@@ -221,6 +233,10 @@ jobs:
       - name: Test (--no-default-features)
         run: cargo test --release --no-default-features --lib --tests
 
+      # The tokens with the feature `avx512`, which adds `V4` and its copies.
+      - name: Test the tokens (--features avx512)
+        run: cargo test --release --features avx512 --lib simd
+
       # The kernel's copies with Dekker's products, on the runner's CPU:
       # `--cfg fushimi_force_no_fma` makes the kernel take them on any CPU.
       - name: Test the kernel without FMA (--cfg fushimi_force_no_fma)
@@ -254,7 +270,9 @@ jobs:
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUNNER: qemu-x86_64 -cpu Nehalem
 
       - name: Clippy
-        run: cargo clippy --all-targets
+        run: |
+          cargo clippy --all-targets
+          cargo clippy --all-targets --features avx512
 
       # The newest versions of some dependencies can need a newer Rust. Pick the
       # newest versions that support the `rust-version` in Cargo.toml.
@@ -335,8 +353,9 @@ jobs:
       - name: Check (--no-default-features)
         run: cargo check --no-default-features --all-targets
 
-  # This job checks and lints the `avx512f` backend on 1.89, the MSRV. It runs
-  # nothing built with `+avx512f`, so the runner needs no AVX-512F.
+  # This job checks and lints the `avx512f` backend on 1.89, the MSRV, as the
+  # build's backend and, with the feature `avx512`, as that of the token `V4`.
+  # It runs nothing built with `+avx512f`, so the runner needs no AVX-512F.
   avx512f:
     runs-on: ubuntu-latest
 
@@ -383,10 +402,23 @@ jobs:
           rustc --print cfg $RUSTFLAGS --target x86_64-unknown-linux-gnu | grep -x 'target_feature="avx512f"'
 
       - name: Check
-        run: cargo check --all-targets --target x86_64-unknown-linux-gnu
+        run: |
+          cargo check --all-targets --target x86_64-unknown-linux-gnu
+          cargo check --all-targets --features avx512 --target x86_64-unknown-linux-gnu
 
       - name: Clippy
-        run: cargo clippy --all-targets --target x86_64-unknown-linux-gnu
+        run: |
+          cargo clippy --all-targets --target x86_64-unknown-linux-gnu
+          cargo clippy --all-targets --features avx512 --target x86_64-unknown-linux-gnu
+
+      # Without `+avx512f`, the feature `avx512` compiles the `avx512f` backend
+      # as that of the token `V4`, in its copies (`src/simd/token.rs`).
+      - name: Check and Clippy (--features avx512, target Haswell)
+        run: |
+          cargo check --all-targets --features avx512 --target x86_64-unknown-linux-gnu
+          cargo clippy --all-targets --features avx512 --target x86_64-unknown-linux-gnu
+        env:
+          RUSTFLAGS: -Ctarget-cpu=haswell -Dwarnings
 
   # Windows, with the MSVC toolchain. Cargo.toml gives the dev-dependencies on
   # `rug` and `gmp-mpfr-sys` only for 64-bit Linux and macOS, and the tests that

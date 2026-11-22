@@ -38,6 +38,9 @@ nom = []
 rug = []
 # Use the portable backend (src/simd/generic.rs) on every architecture.
 force-generic = []
+# Adds the token `V4` (AVX-512) to `fushimi::simd`; needs Rust 1.89, where the AVX-512 target
+# features are stable.
+avx512 = []
 # Not public API: exposes the SIMD primitives to the benchmarks in bench/.
 __bench = []
 
