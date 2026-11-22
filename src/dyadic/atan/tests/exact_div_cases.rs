@@ -110,9 +110,9 @@ fn check_case(y: f64, x: f64, quotient: Option<f64>, midpoint: Option<f64>) {
         // The `f64` after or before v, away from zero for y > 0 and toward it for y < 0.
         let step = |v: f64| {
             if y > 0.0 {
-                f64::next_up(v)
+                next_up(v)
             } else {
-                f64::next_down(v)
+                next_down(v)
             }
         };
         let ends = match (midpoint, tiny) {
@@ -372,8 +372,8 @@ fn exact_div_thresholds() {
             }
         }
     }
-    let q = f64::next_down(TINY_HYP);
-    assert_eq!(atan2_near(q, 1.0), f64::next_down(q));
+    let q = next_down(TINY_HYP);
+    assert_eq!(atan2_near(q, 1.0), next_down(q));
 
     let quotients = [
         (3.0 * pow2(-1074), 3.0, pow2(-1074)),
@@ -420,7 +420,7 @@ fn exact_div_thresholds() {
 //   x = 2^k and 3 2^k for the same k as q2.
 #[test]
 fn exact_div_midpoints() {
-    let x = f64::next_down(TWO_996);
+    let x = next_down(TWO_996);
     let ones = [
         (pow2(-1074), 2.0),
         (3.0 * pow2(-1074), 6.0),
@@ -453,7 +453,7 @@ fn exact_div_midpoints() {
             check_case(y, x, None, Some(f64::from_bits((m - 1) / 2)));
         }
     }
-    assert_eq!(f64::next_up(TWO_M1021).to_bits() & 1, 1);
+    assert_eq!(next_up(TWO_M1021).to_bits() & 1, 1);
     for q2 in around(TWO_M1021, 3) {
         let b = q2.to_bits();
         let (quotient, midpoint) = if b >= 1 << 53 {

@@ -8,6 +8,7 @@
 
 use super::*;
 use crate::dyadic::tests::Rng;
+use crate::next_float::{next_down, next_up};
 use crate::simd::HAS_FMA;
 use std::f64::consts::{FRAC_1_SQRT_2, SQRT_2};
 
@@ -77,7 +78,7 @@ fn check(i: usize, x: f64) {
         );
     } else {
         assert!(
-            lo.to_bits() == hi.to_bits() || f64::next_up(lo).to_bits() == hi.to_bits(),
+            lo.to_bits() == hi.to_bits() || next_up(lo).to_bits() == hi.to_bits(),
             "{}({:e}): {:e} and {:e} are neither equal nor adjacent",
             name,
             x,
@@ -102,8 +103,8 @@ fn around(x: f64, k: usize) -> Vec<f64> {
     let (mut a, mut b) = (x, x);
     let mut v = vec![x];
     for _ in 0..k {
-        a = f64::next_down(a);
-        b = f64::next_up(b);
+        a = next_down(a);
+        b = next_up(b);
         v.push(a);
         v.push(b);
     }
@@ -234,7 +235,7 @@ fn rules_at_their_thresholds() {
         for _ in 0..4 {
             check(i, x);
             check(i, -x);
-            x = f64::next_down(x);
+            x = next_down(x);
         }
         for x in special {
             check(i, x);
@@ -377,7 +378,7 @@ fn close_to_an_f64() {
             check(LOG2, 1.0 + y);
             if k >= 26 {
                 let f = y - y * y / 2.0;
-                expect(LN, 1.0 + y, f, f64::next_up(f));
+                expect(LN, 1.0 + y, f, next_up(f));
             } else {
                 check(LN, 1.0 + y);
             }
@@ -385,7 +386,7 @@ fn close_to_an_f64() {
         check(LOG2, 1.0 - y);
         if k >= 26 {
             let g = if k <= 51 { y + y * y / 2.0 } else { y };
-            expect(LN, 1.0 - y, f64::next_down(-g), -g);
+            expect(LN, 1.0 - y, next_down(-g), -g);
         } else {
             check(LN, 1.0 - y);
         }
@@ -397,7 +398,7 @@ fn close_to_an_f64() {
             let (lo, hi) = (log10(x, false), log10(x, true));
             let k = f64::from(k);
             assert!(
-                (lo == k && hi == f64::next_up(k)) || (lo == f64::next_down(k) && hi == k),
+                (lo == k && hi == next_up(k)) || (lo == next_down(k) && hi == k),
                 "log10({:e}): ({:e}, {:e}) is not k = {} and an `f64` next to it",
                 x,
                 lo,
@@ -407,11 +408,11 @@ fn close_to_an_f64() {
         }
     }
     for k in -1074..=1023 {
-        let (above, below) = (f64::next_up(pow2(k)), f64::next_down(pow2(k)));
+        let (above, below) = (next_up(pow2(k)), next_down(pow2(k)));
         if k >= -1022 && k.abs() >= 3 {
             let k = f64::from(k);
-            expect(LOG2, above, k, f64::next_up(k));
-            expect(LOG2, below, f64::next_down(k), k);
+            expect(LOG2, above, k, next_up(k));
+            expect(LOG2, below, next_down(k), k);
         } else {
             check(LOG2, above);
             check(LOG2, below);
@@ -804,7 +805,7 @@ fn table_and_reduction_edges() {
     let mut x = f64::MAX;
     for _ in 0..64 {
         args.push(x);
-        x = f64::next_down(x);
+        x = next_down(x);
     }
     for i in [LN, LOG2, LOG10] {
         for &x in &args {
@@ -1047,7 +1048,7 @@ fn ahyp_threshold_args() -> Vec<f64> {
     let mut x = f64::MAX;
     for _ in 0..16 {
         args.push(x);
-        x = f64::next_down(x);
+        x = next_down(x);
     }
     args
 }
@@ -1592,7 +1593,7 @@ mod mpfr {
         let mut x = f64::MAX;
         for _ in 0..64 {
             args.push(x);
-            x = f64::next_down(x);
+            x = next_down(x);
         }
         for _ in 0..4000 {
             args.push(any_positive(&mut rng));

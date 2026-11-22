@@ -60,11 +60,7 @@ fn check_pown_bounded(x: f64, n: i32) {
     if let Some(want) = bounded(f64::from(n) * ln(x)) {
         let what = format!("pown({:e}, {})", x, n);
         check_rounding(&what, pown(x, n, false), pown(x, n, true), "W", want);
-        let neg = if n % 2 == 0 {
-            want
-        } else {
-            -f64::next_up(want)
-        };
+        let neg = if n % 2 == 0 { want } else { -next_up(want) };
         let what = format!("pown({:e}, {})", -x, n);
         check_rounding(&what, pown(-x, n, false), pown(-x, n, true), "W", neg);
     }
@@ -83,18 +79,18 @@ fn binade_ends() -> Vec<f64> {
                 xs.push(if g == 1023 {
                     f64::MAX
                 } else {
-                    f64::next_down(pow2(g + 1))
+                    next_down(pow2(g + 1))
                 });
             }
         }
     }
     for j in [1, 2, 3, 10, 26, 51, 52] {
         let x = 1.0 + pow2(-j);
-        xs.extend([x, f64::next_down(x)]);
+        xs.extend([x, next_down(x)]);
     }
     for j in [1, 2, 3, 10, 26, 52, 53] {
         let x = 1.0 - pow2(-j);
-        xs.extend([x, f64::next_up(x), f64::next_down(x)]);
+        xs.extend([x, next_up(x), next_down(x)]);
     }
     xs.retain(|&x| x != 1.0);
     xs
@@ -171,8 +167,8 @@ fn rules_at_thresholds() {
     // (x, x + 2^-1074) and x^(1 + 2^-52) = x e^(-2^-52 |ln x|) in (x - 2^-1074, x), as
     // |ln x| < 745 and m 745 2^-52 < 1. MAX^(1 + 2^-52) = MAX e^(2^-52 ln MAX) is above
     // MAX (1 + 1.5e-13), and so above 2^1024 = MAX / (1 - 2^-53).
-    let below_one = f64::next_down(1.0);
-    let above_one = f64::next_up(1.0);
+    let below_one = next_down(1.0);
+    let above_one = next_up(1.0);
     for m in [1, 2, 3, 1000, (1 << 30) - 1, 1 << 30] {
         let x = f64::from_bits(m);
         check_pow(x, below_one);
@@ -182,7 +178,7 @@ fn rules_at_thresholds() {
         check_rounding(&what, lo, hi, "W", x);
         let what = format!("pow({:e}, 1 + 2^-52)", x);
         let (lo, hi) = (pow(x, above_one, false), pow(x, above_one, true));
-        check_rounding(&what, lo, hi, "W", f64::next_down(x));
+        check_rounding(&what, lo, hi, "W", next_down(x));
     }
     let (lo, hi) = (
         pow(f64::MAX, above_one, false),
@@ -195,9 +191,9 @@ fn rules_at_thresholds() {
         f64::from_bits((1 << 30) - 1),
         f64::from_bits((1 << 52) - 1),
         f64::MIN_POSITIVE,
-        f64::next_up(f64::MIN_POSITIVE),
+        next_up(f64::MIN_POSITIVE),
         pow2(-1000),
-        f64::next_down(f64::MAX),
+        next_down(f64::MAX),
         f64::MAX,
     ];
     for x in ends {

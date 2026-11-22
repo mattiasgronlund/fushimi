@@ -114,10 +114,10 @@ fn powers_of_two() {
                 if case % STRIDE != 0 {
                     continue;
                 }
-                for y in [f64::next_down(y), f64::next_up(y)] {
+                for y in [next_down(y), next_up(y)] {
                     check_pow_is(x, y, None);
                 }
-                for x in [f64::next_down(x), f64::next_up(x)] {
+                for x in [next_down(x), next_up(x)] {
                     if e >= -1022 {
                         seen.check(x, y, if y == 1.0 { Some(x) } else { None });
                     } else {
@@ -190,10 +190,10 @@ fn powers_of_odd_numbers() {
                     let want = q.and_then(|q| value(q, er * i64::from(m)));
                     seen.check(x, y, want);
                     check_pow_is(x, -y, None);
-                    for y in [f64::next_down(y), f64::next_up(y)] {
+                    for y in [next_down(y), next_up(y)] {
                         check_pow_is(x, y, None);
                     }
-                    for x in [f64::next_down(x), f64::next_up(x)] {
+                    for x in [next_down(x), next_up(x)] {
                         check_pow(x, y);
                     }
                 }

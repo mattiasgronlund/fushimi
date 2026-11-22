@@ -8,6 +8,7 @@
 
 use super::*;
 use crate::dyadic::tests::Rng;
+use crate::next_float::{next_down, next_up};
 use crate::simd::HAS_FMA;
 
 // 2^n, for n in [-1074, 1023].
@@ -24,8 +25,8 @@ fn around(x: f64, k: usize) -> Vec<f64> {
     let (mut a, mut b) = (x, x);
     let mut v = vec![x];
     for _ in 0..k {
-        a = f64::next_down(a);
-        b = f64::next_up(b);
+        a = next_down(a);
+        b = next_up(b);
         v.push(a);
         v.push(b);
     }
@@ -74,7 +75,7 @@ fn check_rounding(what: &str, lo: f64, hi: f64, rnd: &str, want: f64) {
     let same = |a: f64, b: f64| a.to_bits() == b.to_bits() || (a.is_nan() && b.is_nan());
     let ok = match rnd {
         "E" => same(lo, want) && same(hi, want),
-        "W" => same(lo, want) && same(hi, f64::next_up(want)),
+        "W" => same(lo, want) && same(hi, next_up(want)),
         "D" => same(lo, want),
         "U" => same(hi, want),
         "Z" => same(if want > 0.0 { lo } else { hi }, want),
@@ -94,7 +95,7 @@ fn check_pair(what: &str, lo: f64, hi: f64) {
         assert!(lo.is_nan() && hi.is_nan(), "{}: {:e} {:e}", what, lo, hi);
     } else {
         assert!(
-            lo.to_bits() == hi.to_bits() || f64::next_up(lo).to_bits() == hi.to_bits(),
+            lo.to_bits() == hi.to_bits() || next_up(lo).to_bits() == hi.to_bits(),
             "{}: {:e} and {:e} are neither equal nor adjacent",
             what,
             lo,
@@ -501,7 +502,7 @@ fn special_values() {
     for x in [inf, 0.0, 1.0, 2.0, 0.5, max, f64::MIN_POSITIVE, tiny] {
         xs.extend([x, -x]);
     }
-    let mut ys = vec![f64::NAN, f64::next_up(17.0)];
+    let mut ys = vec![f64::NAN, next_up(17.0)];
     for y in [
         inf,
         0.0,
@@ -689,10 +690,10 @@ fn exact_pair(rng: &mut Rng, i: usize) -> (f64, f64) {
 // (x, y) moved by one ulp of x or of y, at random.
 fn moved(rng: &mut Rng, (x, y): (f64, f64)) -> (f64, f64) {
     match rng.below(4) {
-        0 => (f64::next_up(x), y),
-        1 => (f64::next_down(x), y),
-        2 => (x, f64::next_up(y)),
-        _ => (x, f64::next_down(y)),
+        0 => (next_up(x), y),
+        1 => (next_down(x), y),
+        2 => (x, next_up(y)),
+        _ => (x, next_down(y)),
     }
 }
 
@@ -805,9 +806,9 @@ fn pown_case(name: &str, rng: &mut Rng) -> (f64, i32) {
             if name == "pnexact" {
                 (x, n)
             } else if rng.below(2) == 0 {
-                (f64::next_up(x), n)
+                (next_up(x), n)
             } else {
-                (f64::next_down(x), n)
+                (next_down(x), n)
             }
         }
         _ => unreachable!(),
@@ -1139,9 +1140,9 @@ fn small_copies_agree() {
             _ => {
                 let x = pow2(rng.below(2097) as i64 - 1073);
                 if rng.below(2) == 0 {
-                    f64::next_down(x)
+                    next_down(x)
                 } else {
-                    f64::next_up(x)
+                    next_up(x)
                 }
             }
         };

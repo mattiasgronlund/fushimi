@@ -28,6 +28,7 @@
 use super::*;
 use crate::dyadic::fast::{fast_counts, reset_fast_counts, set_fast_path};
 use crate::dyadic::tests::Rng;
+use crate::next_float::{next_down, next_up};
 use crate::simd::HAS_FMA;
 use std::cmp::Ordering;
 
@@ -303,8 +304,8 @@ fn around(x: f64, k: usize) -> Vec<f64> {
     let (mut a, mut b) = (x, x);
     let mut v = vec![x];
     for _ in 0..k {
-        a = f64::next_down(a);
-        b = f64::next_up(b);
+        a = next_down(a);
+        b = next_up(b);
         v.push(a);
         v.push(b);
     }
@@ -620,7 +621,7 @@ fn hypot_cut() {
             let pairs = [
                 (x, x * pow2(-(g as i64))),
                 (x, y),
-                (pow2(e), f64::next_down(pow2(e + 1 - g as i64))),
+                (pow2(e), next_down(pow2(e + 1 - g as i64))),
                 (tiny * pow2(g as i64), tiny),
             ];
             for (x, y) in pairs {
@@ -650,11 +651,11 @@ fn hypot_overflow() {
     assert!(nears.contains(&f64::MAX) && nears.contains(&f64::INFINITY));
     ys.extend(around(pow2(997), 2));
     ys.extend(around(pow2(998), 2));
-    ys.extend([1.0, f64::MAX / 2.0, f64::next_down(f64::MAX), f64::MAX]);
+    ys.extend([1.0, f64::MAX / 2.0, next_down(f64::MAX), f64::MAX]);
     for x in [
         f64::MAX,
-        f64::next_down(f64::MAX),
-        f64::next_down(f64::next_down(f64::MAX)),
+        next_down(f64::MAX),
+        next_down(next_down(f64::MAX)),
     ] {
         for &y in &ys {
             for (x, y) in [(x, y), (y, x), (-x, y), (x, -y)] {
@@ -1080,7 +1081,7 @@ fn fast_cbrt_declines_next_to_cubes() {
         for a in aa {
             let x = cube as f64 * pow2(3 * a);
             for x in [x, -x] {
-                for x in [f64::next_down(x), f64::next_up(x)] {
+                for x in [next_down(x), next_up(x)] {
                     if x == 0.0 {
                         continue;
                     }
@@ -1128,7 +1129,7 @@ fn fast_cbrt_near_two() {
         }
         if p >= pow2(-1021) {
             twos += 1;
-            let x = f64::next_down(p);
+            let x = next_down(p);
             let h = fast_cbrt::<HAS_FMA>(x).map(|(h, _, _)| h);
             assert_eq!(h, Some(2.0), "fast_cbrt({:e})", x);
             let fast = [
@@ -1365,10 +1366,10 @@ fn fast_hypot_declines_next_to_triples() {
     let (mut declined, mut failed, mut checked) = (0, 0, 0);
     for (x, y) in triples {
         let pairs = [
-            (f64::next_down(x), y),
-            (f64::next_up(x), y),
-            (x, f64::next_down(y)),
-            (x, f64::next_up(y)),
+            (next_down(x), y),
+            (next_up(x), y),
+            (x, next_down(y)),
+            (x, next_up(y)),
         ];
         for (x, y) in pairs {
             if let Some((d, f)) = check_hypot_exact(x, y) {
@@ -1399,7 +1400,7 @@ fn exact_arms() {
     assert_eq!(hl(fast_cbrt::<HAS_FMA>(27.0)), Some((1.5, 1)));
     assert_eq!(hl(fast_cbrt::<HAS_FMA>(-27.0)), Some((1.5, 1)));
     assert_eq!(hl(fast_cbrt::<HAS_FMA>(tiny)), Some((1.5, -357)));
-    let (h8, e8) = hl(fast_cbrt::<HAS_FMA>(f64::next_down(8.0))).unwrap();
+    let (h8, e8) = hl(fast_cbrt::<HAS_FMA>(next_down(8.0))).unwrap();
     assert_eq!(h8, 2.0);
     for (x, h, e, want) in [
         (27.0, 1.5, 1, Some(3.0)),
@@ -1412,14 +1413,14 @@ fn exact_arms() {
         // c = 1.5, whose cube is 27 / 8.
         (27.0, 1.5, 0, None),
         // The 35 low bits of the significand of h are not all zeros.
-        (27.0, f64::next_up(1.5), 1, None),
-        (27.0, f64::next_down(1.5), 1, None),
+        (27.0, next_up(1.5), 1, None),
+        (27.0, next_down(1.5), 1, None),
         // 28 = 7 2^2, whose odd part is not 3^3.
         (28.0, 1.5, 1, None),
         // 54 = 27 2, whose odd part is 3^3, but not its exponent 3 (-1 + 1).
         (54.0, 1.5, 1, None),
         // h = 2 at the `f64` below 8 (`fast_cbrt_near_two`), whose odd part is 2^53 - 1.
-        (f64::next_down(8.0), h8, e8, None),
+        (next_down(8.0), h8, e8, None),
     ] {
         assert_eq!(
             cbrt_exact(x, h, e).map(f64::to_bits),
@@ -1447,8 +1448,8 @@ fn exact_arms() {
             Some(5.0 * pow2(-1024)),
         ),
         // c next to 5.
-        (4.0, 3.0, f64::next_up(0.625), 3, None),
-        (4.0, 3.0, f64::next_down(0.625), 3, None),
+        (4.0, 3.0, next_up(0.625), 3, None),
+        (4.0, 3.0, next_down(0.625), 3, None),
         // c = 2, below big.
         (4.0, 3.0, 0.25, 3, None),
         // c = 4 and 6, whose lowest bits are above that of 3.
@@ -1479,17 +1480,17 @@ fn hypot_dd_range() {
     for (big, taken) in [
         (f64::MAX, false),
         (pow2(1023), false),
-        (f64::next_up(pow2(1022)), false),
+        (next_up(pow2(1022)), false),
         (pow2(1022), false),
-        (f64::next_down(pow2(1022)), true),
+        (next_down(pow2(1022)), true),
         (1.0, true),
-        (f64::next_up(f64::MIN_POSITIVE), true),
+        (next_up(f64::MIN_POSITIVE), true),
         (f64::MIN_POSITIVE, true),
-        (f64::next_down(f64::MIN_POSITIVE), false),
+        (next_down(f64::MIN_POSITIVE), false),
         (pow2(-1050), false),
         (pow2(-1074), false),
     ] {
-        for small in [big, f64::next_down(big), big * 0.5, big * pow2(-26)] {
+        for small in [big, next_down(big), big * 0.5, big * pow2(-26)] {
             if small > 0.0 {
                 assert_eq!(
                     hypot_dd::<HAS_FMA>(big, small).is_some(),
@@ -1515,7 +1516,7 @@ fn fast_hypot_gap_rule() {
     let mut ends = vec![f64::MAX];
     for n in -1073..=1023 {
         ends.push(pow2(n));
-        ends.push(f64::next_down(pow2(n)));
+        ends.push(next_down(pow2(n)));
     }
     let ends: Vec<(f64, i64)> = ends.into_iter().map(|v| (v, binade(v))).collect();
     let (mut far, mut subnormal_far) = (0, 0);
@@ -1546,7 +1547,7 @@ fn fast_hypot_gap_rule() {
                 let odd = hypot_odd(big, small);
                 let want = [Some(odd.to_f64(false)), Some(odd.to_f64(true)), Some(big)];
                 assert_eq!(fast, want, "{}", what);
-                assert_eq!(fast[1], Some(f64::next_up(big)), "{}", what);
+                assert_eq!(fast[1], Some(next_up(big)), "{}", what);
                 assert_eq!(odd.to_f64_near(), big, "{}", what);
             } else if hypot_dd::<HAS_FMA>(big, small).is_some() {
                 assert_eq!(tests.0 + tests.1, 3, "{}", what);

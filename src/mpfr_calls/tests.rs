@@ -38,6 +38,7 @@
 // `src/dyadic/exp/tests/levels.rs` and the other `levels.rs` force each level with `ziv_at`.
 
 use super::{kernel, mpfr};
+use crate::next_float::{next_down, next_up};
 use crate::{dyadic, DecInterval, Decoration, Interval};
 use std::{
     cell::Cell,
@@ -274,7 +275,7 @@ fn structured() -> Vec<f64> {
     ];
     let mut v: Vec<f64> = Vec::new();
     for x in base {
-        for y in [f64::next_down(x), x, f64::next_up(x)] {
+        for y in [next_down(x), x, next_up(x)] {
             for z in [y, -y] {
                 if !v.iter().any(|w| w.to_bits() == z.to_bits()) {
                     v.push(z);
@@ -345,11 +346,7 @@ impl Rng {
         let k = self.below(9) as i32 - 4;
         let mut y = x;
         for _ in 0..k.abs() {
-            y = if k > 0 {
-                f64::next_up(y)
-            } else {
-                f64::next_down(y)
-            };
+            y = if k > 0 { next_up(y) } else { next_down(y) };
         }
         y
     }
@@ -358,7 +355,7 @@ impl Rng {
     fn above(&mut self, x: f64) -> f64 {
         let mut y = x;
         for _ in 0..self.below(9) {
-            y = f64::next_up(y);
+            y = next_up(y);
         }
         y
     }

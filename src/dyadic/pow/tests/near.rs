@@ -95,7 +95,7 @@ fn tie(x: f64, y: f64, t: Tie) {
         let want = if n % 2 == 0 { t.want } else { -t.want };
         expect(&format!("pown({:e}, {})", -x, n), pown_near(-x, n), want);
     }
-    for z in [f64::next_down(x), f64::next_up(x)] {
+    for z in [next_down(x), next_up(x)] {
         check_pow(z, y);
         let mut nears = vec![(format!("pow({:e}, {:e})", z, y), pow_near(z, y))];
         if let Some(n) = n {

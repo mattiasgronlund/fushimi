@@ -10,6 +10,7 @@
 use super::*;
 use crate::dyadic::fast::{fast_counts, reset_fast_counts, set_fast_path};
 use crate::dyadic::tests::Rng;
+use crate::next_float::{next_down, next_up};
 use crate::simd::HAS_FMA;
 
 type Directed = fn(f64, bool) -> f64;
@@ -71,7 +72,7 @@ fn check_pair(name: &str, x: f64, lo: f64, hi: f64) {
         );
     } else {
         assert!(
-            lo.to_bits() == hi.to_bits() || f64::next_up(lo).to_bits() == hi.to_bits(),
+            lo.to_bits() == hi.to_bits() || next_up(lo).to_bits() == hi.to_bits(),
             "{}({:e}): {:e} and {:e} are neither equal nor adjacent",
             name,
             x,
@@ -128,8 +129,8 @@ fn around(x: f64, k: usize) -> Vec<f64> {
     let (mut a, mut b) = (x, x);
     let mut v = vec![x];
     for _ in 0..k {
-        a = f64::next_down(a);
-        b = f64::next_up(b);
+        a = next_down(a);
+        b = next_up(b);
         v.push(a);
         v.push(b);
     }
@@ -278,8 +279,8 @@ fn rules_at_their_thresholds() {
         (TAN, 6f64.cbrt() * pow2(-27)),
     ] {
         let tiny = |x: f64| if i == COS { 1.0 } else { x };
-        let below = f64::next_down(f64::next_down(f64::next_down(t)));
-        let above = f64::next_up(f64::next_up(f64::next_up(t)));
+        let below = next_down(next_down(next_down(t)));
+        let above = next_up(next_up(next_up(t)));
         let name = FUNCTIONS[i].0;
         assert_eq!(NEAR[i](below), tiny(below), "{}({:e})", name, below);
         assert_ne!(NEAR[i](above), tiny(above), "{}({:e})", name, above);
@@ -341,8 +342,8 @@ fn close_to_an_f64() {
             check_all(y);
         }
         let lo = 1.0 - i * i * pow2(-53);
-        expect(COS, x, lo, f64::next_up(lo));
-        expect(COS, -x, lo, f64::next_up(lo));
+        expect(COS, x, lo, next_up(lo));
+        expect(COS, -x, lo, next_up(lo));
     }
     for j in 1..=60 {
         let x = 3.0 * pow2(-j);
@@ -352,10 +353,10 @@ fn close_to_an_f64() {
         if (15..=25).contains(&j) {
             let s = x - 9.0 * pow2(-3 * j - 1);
             let t = x + 9.0 * pow2(-3 * j);
-            expect(SIN, x, s, f64::next_up(s));
-            expect(SIN, -x, -f64::next_up(s), -s);
-            expect(TAN, x, t, f64::next_up(t));
-            expect(TAN, -x, -f64::next_up(t), -t);
+            expect(SIN, x, s, next_up(s));
+            expect(SIN, -x, -next_up(s), -s);
+            expect(TAN, x, t, next_up(t));
+            expect(TAN, -x, -next_up(t), -t);
         }
     }
 }
@@ -390,7 +391,7 @@ fn short_dyadics() {
         for y in [x, -x] {
             assert_eq!(
                 (cos(y, false), cos(y, true)),
-                (lo, f64::next_up(lo)),
+                (lo, next_up(lo)),
                 "cos({:e})",
                 y
             );
@@ -477,12 +478,7 @@ fn small_rules_near_their_centres() {
         let lo = 1.0 - m * m * pow2(-53);
         for y in [x, -x] {
             let got = (cos_small(y.abs(), false), cos_small(y.abs(), true));
-            assert_eq!(
-                got,
-                (Some(lo), Some(f64::next_up(lo))),
-                "cos_small({:e})",
-                y
-            );
+            assert_eq!(got, (Some(lo), Some(next_up(lo))), "cos_small({:e})", y);
         }
     }
     for e in 15..=25 {
@@ -490,17 +486,11 @@ fn small_rules_near_their_centres() {
         let s = x - 9.0 * pow2(-3 * e - 1);
         let t = x + 9.0 * pow2(-3 * e);
         let got = [false, true].map(|up| [x, -x].map(|y| sin_small(y, up)));
-        let want = [
-            [Some(s), Some(-f64::next_up(s))],
-            [Some(f64::next_up(s)), Some(-s)],
-        ];
+        let want = [[Some(s), Some(-next_up(s))], [Some(next_up(s)), Some(-s)]];
         assert_eq!(got, want, "sin_small({:e})", x);
         let got = [false, true].map(|up| [x, -x].map(|y| tan_small(y, up)));
         let want = if e >= 16 {
-            [
-                [Some(t), Some(-f64::next_up(t))],
-                [Some(f64::next_up(t)), Some(-t)],
-            ]
+            [[Some(t), Some(-next_up(t))], [Some(next_up(t)), Some(-t)]]
         } else {
             [[None; 2]; 2]
         };
@@ -1124,7 +1114,7 @@ fn reduction_edges() {
             "{x:e}"
         );
         assert!(
-            fast_reduce(f64::next_down(x.abs()).copysign(x)).is_some(),
+            fast_reduce(next_down(x.abs()).copysign(x)).is_some(),
             "{x:e}"
         );
         for y in around(x, 3) {
@@ -1298,7 +1288,7 @@ fn big_edge_args() -> Vec<f64> {
     let mut x = f64::MAX;
     v.push(x);
     for _ in 0..3 {
-        x = f64::next_down(x);
+        x = next_down(x);
         v.push(x);
     }
     v.extend(NEAR_STEPS.iter().map(|&(x, _)| x));
@@ -1780,7 +1770,7 @@ mod mpfr {
         v.extend(exact_rh().into_iter().map(|(_, x)| x));
         let mut x = LIMIT;
         for _ in 0..3 {
-            x = f64::next_down(x);
+            x = next_down(x);
             v.push(x);
         }
         v

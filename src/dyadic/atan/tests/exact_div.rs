@@ -218,7 +218,7 @@ fn exact_div_random() {
 // has x on both sides of 2^996.
 #[test]
 fn exact_div_same_map() {
-    let edges = [1.0, f64::next_up(1.0), 1.5, f64::next_down(2.0)];
+    let edges = [1.0, next_up(1.0), 1.5, next_down(2.0)];
     let mantissa = |rng: &mut Rng| {
         if rng.below(8) == 0 {
             edges[rng.below(4) as usize]

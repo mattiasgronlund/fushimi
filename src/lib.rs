@@ -45,6 +45,8 @@ mod integer;
 mod limbs;
 mod mpfr_calls;
 mod nat;
+#[cfg(test)]
+mod next_float;
 mod numeric;
 mod overlap;
 mod parse;
