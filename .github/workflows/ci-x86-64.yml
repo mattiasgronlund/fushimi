@@ -45,6 +45,37 @@ jobs:
       - name: Test
         run: cargo test --release
 
+      # `V4::try_new` (`src/simd/token.rs`) returns a token only if the CPU has
+      # each of these target features, named here as in /proc/cpuinfo, where
+      # sse3 is `pni` and lzcnt is `abm`.
+      - name: Does the CPU have the target features of `V4`?
+        id: v4
+        shell: bash
+        run: |
+          flags=" $(grep --max-count=1 '^flags' /proc/cpuinfo) "
+          for f in avx avx2 avx512bw avx512cd avx512dq avx512f avx512vl bmi1 bmi2 \
+                   f16c fma abm movbe popcnt pni sse4_1 sse4_2 ssse3; do
+            if [[ "$flags" != *" $f "* ]]; then
+              echo "The CPU does not have $f."
+              exit 1
+            fi
+          done
+        continue-on-error: true
+
+      # The tests `v4`, `dec_v4`, `classes_v4` and `differential_v4` print
+      # "skipped" and pass where `V4::try_new` returns `None`. On a CPU with the
+      # target features of `V4`, this step shows that they run.
+      - name: V4 tests run, not skipped
+        if: ${{ steps.v4.outcome == 'success' }}
+        shell: bash
+        run: |
+          cargo test --release --lib v4 -- --nocapture 2>&1 | tee v4.log
+          grep --quiet --extended-regexp '^running [1-9][0-9]* tests?$' v4.log
+          if grep --quiet skipped v4.log; then
+            echo "A test of V4 was skipped."
+            exit 1
+          fi
+
       - name: Test (target AVX-512F)
         run: cargo test --release
         if: ${{ steps.avx512f.outcome == 'success' }}
