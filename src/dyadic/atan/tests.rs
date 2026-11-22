@@ -1213,7 +1213,7 @@ fn check2_stages(y: f64, x: f64) {
 // The random argument `n` of the function `i` in `fast_path_agrees_with_kernel` and
 // `copies_agree`: for even `n`, of any exponent, and otherwise of a moderate magnitude.
 fn random_arg(rng: &mut Rng, i: usize, n: u32) -> f64 {
-    if n.is_multiple_of(2) {
+    if n % 2 == 0 {
         // Of any exponent, from the bits of a positive finite `f64`, in [0, 1) for asin and
         // acos, with a random sign.
         let bits = match i {
@@ -1236,7 +1236,7 @@ fn random_arg(rng: &mut Rng, i: usize, n: u32) -> f64 {
 // `copies_agree`: for even `n`, both of any exponent with random signs, and otherwise at
 // y = q x, rounded, for a q of magnitude in [2^-60, 2^61), in a random quadrant.
 fn random_args2(rng: &mut Rng, n: u32) -> (f64, f64) {
-    if n.is_multiple_of(2) {
+    if n % 2 == 0 {
         (
             random_sign(rng) * f64::from_bits(rng.below(0x7ff0_0000_0000_0000)),
             random_sign(rng) * f64::from_bits(rng.below(0x7ff0_0000_0000_0000)),
@@ -1395,7 +1395,7 @@ fn check2_copies(y: f64, x: f64) {
 // is replaced by the `f64` next to it, toward +∞ or toward -∞, as `midpoint_quotients` also
 // does.
 fn tiny_quotient_args(rng: &mut Rng, n: u32) -> (f64, f64) {
-    let (y, x) = if n.is_multiple_of(2) {
+    let (y, x) = if n % 2 == 0 {
         let bits = uniform(rng, 1, 52) as u32;
         // Below 2^-1022 the bits of an `f64` are the integer y / 2^-1074.
         (f64::from_bits(odd(rng, bits)), log_uniform(rng, 0, 59))

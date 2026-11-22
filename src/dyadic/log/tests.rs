@@ -616,7 +616,7 @@ fn fast_path_agrees_with_kernel() {
 // finite `f64`, subnormals included, at an even n, and one within 2^-8 of 1 at an odd n, with a
 // random sign for asinh and atanh.
 fn fast_path_arg(rng: &mut Rng, i: usize, n: usize) -> f64 {
-    let x = if n.is_multiple_of(2) {
+    let x = if n % 2 == 0 {
         any_positive(rng)
     } else {
         1.0 + (rng.below(1 << 53) as f64 / (1u64 << 53) as f64 - 0.5) / 128.0
@@ -971,7 +971,7 @@ fn in_range(rng: &mut Rng, a: f64, b: f64, log: bool) -> f64 {
 // d of any exponent. The first branch of acosh, whose arguments all have the exponent of 1,
 // takes 1 + d for a d uniform or of any exponent in [2^-52, 2^-8) instead.
 fn ahyp_arg(rng: &mut Rng, a: f64, b: f64, n: usize) -> f64 {
-    let log = !n.is_multiple_of(3);
+    let log = n % 3 != 0;
     loop {
         let t = if a == 1.0 {
             1.0 + in_range(rng, pow2(-52), b - 1.0, log)

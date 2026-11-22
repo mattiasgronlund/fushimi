@@ -217,7 +217,7 @@ jobs:
 
       - uses: actions-rs/toolchain@v1
         with:
-          toolchain: 1.89.0
+          toolchain: 1.85.0
           profile: minimal
 
       # For `cargo +stable` below: GitHub's runner images come with a stable
@@ -280,7 +280,7 @@ jobs:
         run: cargo +stable --config 'resolver.incompatible-rust-versions="fallback"' generate-lockfile
 
       - name: Check (MSRV)
-        run: cargo +1.89.0 check --all-targets
+        run: cargo +1.85.0 check --all-targets
 
   coverage:
     runs-on: ubuntu-latest
@@ -326,7 +326,7 @@ jobs:
 
       - uses: actions-rs/toolchain@v1
         with:
-          toolchain: 1.89.0
+          toolchain: 1.85.0
           override: true
           profile: minimal
 
@@ -337,10 +337,14 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      # No step in this job sets `-Ctarget-feature=+avx512f`, with which
-      # `src/simd/x86_64.rs` selects the `avx512f` backend: the `avx512f` job
-      # checks and lints that backend on 1.89, the MSRV, in every run; its tests
-      # run only in the `build` job, on nightly, when the runner has AVX-512F.
+      # No step in this job sets `-Ctarget-feature=+avx512f`: before 1.89 rustc
+      # does not report `avx512f` to `cfg(target_feature)`, so `src/simd/x86_64.rs`
+      # would select the `fma` backend, which `Check` checks already. Nor does a
+      # step enable the feature `avx512`, which needs 1.89. The `avx512f` job
+      # checks and lints that backend, and the feature, on 1.89 in every run; its
+      # tests run only on a runner with AVX-512F: as the build's backend in the
+      # `build` job, on nightly, and as that of `V4` there and in the `baseline`
+      # job.
       - name: Check
         run: cargo check --all-targets
 
@@ -353,9 +357,11 @@ jobs:
       - name: Check (--no-default-features)
         run: cargo check --no-default-features --all-targets
 
-  # This job checks and lints the `avx512f` backend on 1.89, the MSRV, as the
-  # build's backend and, with the feature `avx512`, as that of the token `V4`.
-  # It runs nothing built with `+avx512f`, so the runner needs no AVX-512F.
+  # This job checks and lints the `avx512f` backend as the build's backend and,
+  # with the feature `avx512`, as that of the token `V4`. It runs on 1.89, not on
+  # the MSRV, 1.85: 1.89 is the first stable Rust with the AVX-512 target
+  # features, which both need. It runs nothing built with `+avx512f`, so the
+  # runner needs no AVX-512F.
   avx512f:
     runs-on: ubuntu-latest
 

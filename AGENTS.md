@@ -10,6 +10,13 @@ CI runs with RUSTFLAGS="-Ctarget-cpu=haswell -Dwarnings", so warnings are errors
 - cargo check --no-default-features --all-targets
 - cargo rustc --lib --all-features --profile check -- --cfg docsrs   (the docs.rs configuration must compile)
 - rocq/check-sites.sh   (as in ci-rocq.yml; if it fails, update what its message names)
+- cargo +1.85.0 check --all-targets   (the MSRV, as CI's `msrv` job; first copy any Cargo.lock
+  aside and run cargo +stable --config 'resolver.incompatible-rust-versions="fallback"' generate-lockfile)
+- cargo +1.89.0 check --all-targets --features avx512 --target x86_64-unknown-linux-gnu, and the
+  same with clippy, with and without -Ctarget-feature=+avx512f   (the feature `avx512` needs Rust
+  1.89, as CI's `avx512f` job)
+Cargo before 1.91 ignores `build.build-dir`, so the last two build in CARGO_TARGET_DIR (default
+`target/`).
 If the machine has AVX-512F, also run clippy and tests with -Ctarget-cpu=native
 (CI compiles every level's backend in every run, but tests `avx512f` only when its
 runner has AVX-512F). Repeat everything with any new feature flags enabled.
