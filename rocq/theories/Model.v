@@ -1287,19 +1287,29 @@ Definition dy_R (x : dyadic) : R :=
 (** [Dyadic::ZERO] *)
 Definition dy_zero (n : nat) : dyadic := {| dy_neg := false; dy_exp := 0; dy_m := repeat 0 n |}.
 
-(** [fn low_bits_nonzero(x: &[u64], k: u64) -> bool] *)
+(** [fn low_bits_nonzero(x: &[u64], k: u64) -> bool], where
+    [x.get(..j).unwrap_or(x)] is [firstn j x]. *)
 Definition low_bits_nonzero (x : list Z) (k : Z) : bool :=
   existsb (fun l => negb (l =? 0)) (firstn (Z.to_nat (k / 64)) x)
   || negb (Z.land (Limbs.limb x (Z.to_nat (k / 64))) (Z.shiftl 1 (k mod 64) - 1) =? 0).
 
 (** [fn round<N>(neg: bool, x: &[u64], e: i64, sticky: bool, up: bool)],
-    where [sh] is computed without a check, as it cannot overflow. *)
+    where [sh] is computed without a check, as it cannot overflow, nor can
+    [j + N + 1], for [j = (sh / 64) as usize], which is [Z.to_nat (sh / 64)].
+    [x.get(j..j + N + 1)] is [Some (firstn (n + 1) (skipn j x))] if
+    [j + n + 1 <= length x], and [None] otherwise. [DyRound.v] proves it,
+    with [shr_into_window] of [Limbs.v] for the window. *)
 Definition round (n : nat) (neg : bool) (x : list Z) (e : Z) (sticky up : bool)
   : option dyadic :=
   let l := Limbs.bit_len x in
   if l =? 0 then Some (dy_zero n) else
   let sh := l - 64 * Z.of_nat n in
-  let m := if 0 <=? sh then Limbs.shr_into n x sh else Limbs.shl_into n x (- sh) in
+  let m :=
+    if 0 <=? sh then
+      let j := Z.to_nat (sh / 64) in
+      if (j + n + 1 <=? length x)%nat then Limbs.shr_into n (firstn (n + 1) (skipn j x)) (sh mod 64)
+      else Limbs.shr_into n x sh
+    else Limbs.shl_into n x (- sh) in
   let* exp := checked_i 64 (e + sh) in
   let dropped := sticky || ((0 <? sh) && low_bits_nonzero x sh) in
   if dropped && negb (Bool.eqb up neg) then

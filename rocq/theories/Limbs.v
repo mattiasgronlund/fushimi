@@ -831,6 +831,25 @@ Proof.
       rewrite EW, !Z.div_div by lia. f_equal. ring.
 Qed.
 
+(** [shr_into] reads only the limbs [sh / 64] to [sh / 64 + n] of [x]:
+    shifting the window of those [n + 1] limbs by [sh mod 64] bits gives
+    the same limbs, whatever the length of [x]. *)
+Lemma shr_into_window :
+  forall n x sh,
+  Limbs.shr_into n (firstn (n + 1) (skipn (Z.to_nat (sh / 64)) x)) (sh mod 64) =
+  Limbs.shr_into n x sh.
+Proof.
+  intros n x sh. unfold Limbs.shr_into. cbv zeta.
+  assert (Hs : 0 <= sh mod 64 < 64) by (apply Z.mod_pos_bound; lia).
+  rewrite (Z.div_small (sh mod 64) 64 Hs), Z.mod_mod by lia. cbn [Z.to_nat skipn].
+  apply map_ext_in. intros i Hi. apply in_seq in Hi. cbv beta.
+  (* Limbs [i] and [i + 1] of the window are those of [x] from limb [sh / 64]. *)
+  unfold Limbs.limb. rewrite !nth_firstn.
+  rewrite (proj2 (Nat.ltb_lt i (n + 1))) by lia.
+  rewrite (proj2 (Nat.ltb_lt (S i) (n + 1))) by lia.
+  reflexivity.
+Qed.
+
 Lemma div_rem_limb_from_correct :
   forall x d,
   limbs_ok x -> 0 < d < 2 ^ 64 ->

@@ -595,6 +595,12 @@ intros n neg x e sticky up t Hn Hx Ht He.
 pose proof (dprec_bounds n Hn) as Hp.
 pose proof (Z.pow_pos_nonneg 2 (dprec n - 1) ltac:(lia) ltac:(lia)) as Hp1.
 unfold Dyadic.round. cbv zeta.
+(* Where [x] has the [n + 1] limbs that [shr_into] reads, shifting only
+   them gives the same limbs, so both arms are [Limbs.shr_into n x sh]. *)
+rewrite shr_into_window.
+lazymatch goal with
+| |- context [if ?b then ?m else ?m] => replace (if b then m else m) with m by (destruct b; reflexivity)
+end.
 rewrite bit_len_correct by exact Hx.
 change (64 * Z.of_nat n) with (dprec n).
 pose proof (val_nonneg x Hx) as HX0.

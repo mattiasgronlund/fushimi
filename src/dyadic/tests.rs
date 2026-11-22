@@ -847,6 +847,125 @@ fn mul_into_writes_every_limb() {
     }
 }
 
+// `low_bits_nonzero(x, k)` is whether one of the bits of `x` below bit `k` is set, each bit read
+// on its own, for `x` of 0 to 5 limbs, with one bit set at each place and with random limbs,
+// and for k at and next to each limb edge, up to past the end of `x`, and at `u64::MAX`.
+#[test]
+fn low_bits_nonzero_reads_every_low_bit() {
+    let mut rng = Rng(10);
+    for len in 0..=5 {
+        let mut ks = vec![u64::MAX];
+        for i in 0..=len as u64 + 1 {
+            ks.extend([64 * i, 64 * i + 1, 64 * i + 63]);
+        }
+        let mut xs: Vec<Vec<u64>> = (0..64 * len)
+            .map(|b| {
+                let mut x = vec![0; len];
+                x[b / 64] = 1 << (b % 64);
+                x
+            })
+            .collect();
+        xs.extend((0..64).map(|_| (0..len).map(|_| rng.limb()).collect()));
+        for x in &xs {
+            for &k in &ks {
+                let want =
+                    (0..k.min(64 * len as u64)).any(|b| x[(b / 64) as usize] >> (b % 64) & 1 != 0);
+                assert_eq!(low_bits_nonzero(x, k), want, "x = {:x?}, k = {}", x, k);
+            }
+        }
+    }
+}
+
+// `round` as it was before it shifted only the window of N + 1 limbs: the shift of all of `x`.
+fn round_by_full_shift<const N: usize>(
+    neg: bool,
+    x: &[u64],
+    e: i64,
+    sticky: bool,
+    up: bool,
+) -> Dyadic<N> {
+    let l = limbs::bit_len(x);
+    if l == 0 {
+        return Dyadic::ZERO;
+    }
+    let p = 64 * N as u64;
+    let sh = l as i64 - p as i64;
+    let mut m = [0; N];
+    if sh >= 0 {
+        limbs::shr_into(&mut m, x, sh as u64);
+    } else {
+        limbs::shl_into(&mut m, x, sh.unsigned_abs());
+    }
+    let mut exp = e.checked_add(sh).expect("exponent overflow");
+    let dropped = sticky || (sh > 0 && low_bits_nonzero(x, sh as u64));
+    if dropped && up != neg && limbs::add_assign(&mut m, &[1]) {
+        m[N - 1] = 1 << 63;
+        exp = exp.checked_add(1).expect("exponent overflow");
+    }
+    Dyadic { neg, exp, m }
+}
+
+// `round::<N>` gives what the shift of all of `x` gives, on `x` of N - 1 to N + 3, 2 N + 3 and
+// 8 N + 2 limbs, whose top limb has its top bit set (where, from N limbs up, the window of N + 1
+// limbs is past the end of `x`), or another top bit, or is 0, whose limbs below the top N are
+// random, or 0, or 0 but for bit 0, and with `sticky`, `up` and `neg` each way, `sticky` only
+// where `x` has at least 64 N bits.
+fn round_as_full_shift<const N: usize>(rng: &mut Rng) {
+    for len in [N - 1, N, N + 1, N + 2, N + 3, 2 * N + 3, 8 * N + 2] {
+        for top in ["top bit", "other top bit", "0"] {
+            for low in ["random", "0", "bit 0"] {
+                for _ in 0..4 {
+                    let mut x: Vec<u64> = (0..len).map(|_| rng.limb()).collect();
+                    if let Some(t) = x.last_mut() {
+                        *t = match top {
+                            "top bit" => *t | 1 << 63,
+                            "other top bit" => *t >> (1 + rng.below(63)) | 1,
+                            _ => 0,
+                        };
+                    }
+                    if low != "random" {
+                        x[..len.saturating_sub(N)].fill(0);
+                    }
+                    if low == "bit 0" && len > N {
+                        x[0] = 1;
+                    }
+                    let e = rng.below(401) as i64 - 200;
+                    for sticky in [false, true] {
+                        if sticky && limbs::bit_len(&x) < 64 * N as u64 {
+                            continue;
+                        }
+                        for up in [false, true] {
+                            for neg in [false, true] {
+                                assert_eq!(
+                                    round::<N>(neg, &x, e, sticky, up),
+                                    round_by_full_shift::<N>(neg, &x, e, sticky, up),
+                                    "N = {}, x = {:x?}, e = {}, sticky = {}, up = {}, neg = {}",
+                                    N,
+                                    x,
+                                    e,
+                                    sticky,
+                                    up,
+                                    neg
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn round_is_the_full_shift() {
+    round_as_full_shift::<1>(&mut Rng(21));
+    round_as_full_shift::<2>(&mut Rng(22));
+    round_as_full_shift::<3>(&mut Rng(23));
+    round_as_full_shift::<4>(&mut Rng(24));
+    round_as_full_shift::<8>(&mut Rng(28));
+    round_as_full_shift::<64>(&mut Rng(64));
+}
+
 #[test]
 fn f64_round_trip() {
     for x in [0.0, -0.0, 1.0, -3.5, f64::MAX, f64::MIN, 5e-324, -2.2e-308] {

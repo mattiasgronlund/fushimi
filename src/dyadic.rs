@@ -141,7 +141,13 @@ fn with_buf<const N: usize, R>(len: usize, f: impl FnOnce(&mut [u64]) -> R) -> R
 fn low_bits_nonzero(x: &[u64], k: u64) -> bool {
     let j = usize::try_from(k / 64).unwrap_or(usize::MAX);
     let s = k % 64;
-    x.iter().take(j).any(|&l| l != 0) || x.get(j).copied().unwrap_or(0) & ((1 << s) - 1) != 0
+    // The first `j` limbs of `x`, or all of them if it has fewer. `any` on this slice is a plain
+    // loop that stops at the first nonzero limb, where on `x.iter().take(j)` it kept the count of
+    // `Take` as well: there the logarithms and the inverse hyperbolic functions took 240 to 473
+    // more instructions per call on CORE-MATH's hard cases, in a crate that links `cr`, built
+    // for haswell, cachegrind chase=no (2026-11-22, against e9e5ae5).
+    let low = x.get(..j).unwrap_or(x);
+    low.iter().any(|&l| l != 0) || x.get(j).copied().unwrap_or(0) & ((1 << s) - 1) != 0
 }
 
 // The `Dyadic<N>` that `(-1)^neg * (x + t) * 2^e` rounds to toward +∞ if `up`, and toward -∞
@@ -160,7 +166,19 @@ fn round<const N: usize>(neg: bool, x: &[u64], e: i64, sticky: bool, up: bool) -
     let sh = l as i64 - p as i64;
     let mut m = [0; N];
     if sh >= 0 {
-        limbs::shr_into(&mut m, x, sh as u64);
+        // `shr_into` reads limbs j to j + N of `x`, for j = sh / 64, a limb past the end being 0.
+        // Where all of them are in `x`, it gets only those N + 1 limbs, and the shift within a
+        // limb, so that its reads are in a window of known length. j + N is floor(l / 64), at
+        // most x.len(), so that `j + N + 1` does not overflow, and the window is past the end
+        // of `x` only where l = 64 x.len(). The logarithms and the inverse hyperbolic functions
+        // took 527 to 1,062 more instructions per call on CORE-MATH's hard cases with the shift
+        // of all of `x`, in a crate that links `cr`, built for haswell, cachegrind chase=no
+        // (2026-11-22, against e9e5ae5).
+        let j = (sh / 64) as usize;
+        match x.get(j..j + N + 1) {
+            Some(w) => limbs::shr_into(&mut m, w, sh as u64 % 64),
+            None => limbs::shr_into(&mut m, x, sh as u64),
+        }
     } else {
         limbs::shl_into(&mut m, x, sh.unsigned_abs());
     }
