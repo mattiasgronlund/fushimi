@@ -1413,18 +1413,18 @@ Fixpoint isqrt_loop (fuel : nat) (n : nat) (x s : list Z) (first : bool) : optio
       else isqrt_loop f n x y false
   end.
 
-(** [fn isqrt(s, x, scratch)], returning [s], where [l - 63] is checked,
-    [!((1 << 11) - 1)] is [2 ^ 64 - 2 ^ 11] and [u as f64] is [of_u64]. *)
+(** [fn isqrt(s, x, scratch)], returning [s], where [l - 63] and [k - 21]
+    are checked, [!((1 << 11) - 1)] is [2 ^ 64 - 2 ^ 11] and [u as f64] is
+    [of_u64]. *)
 Definition isqrt (n : nat) (x : list Z) : option (list Z) :=
   let* l63 := checked_u 64 (Limbs.bit_len x - 63) in
   let k := l63 / 2 in
   let t := Limbs.shr_into 1 x (2 * k) in
   let u := Z.land (Limbs.limb t 0) (2 ^ 64 - 2 ^ 11) in
   let c :=
-    Z.shiftr
-      (Z.lor (Z.land (to_bits (fsqrt (of_u64 u))) (Z.shiftl 1 52 - 1)) (Z.shiftl 1 52))
-      21 in
-  isqrt_loop (Z.to_nat (Limbs.val x) + 2) n x (Limbs.shl_into (S n) (c :: nil) k) true.
+    Z.lor (Z.land (to_bits (fsqrt (of_u64 u))) (Z.shiftl 1 52 - 1)) (Z.shiftl 1 52) in
+  let* k21 := checked_u 64 (k - 21) in
+  isqrt_loop (Z.to_nat (Limbs.val x) + 2) n x (Limbs.shl_into (S n) (c :: nil) k21) true.
 
 (** [a.sqrt(up)], where [exp.rem_euclid(2)] and [exp.div_euclid(2)] are
     [exp mod 2] and [exp / 2], and the [i64] subtraction, which cannot

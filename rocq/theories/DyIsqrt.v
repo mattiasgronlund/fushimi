@@ -13,12 +13,12 @@ Open Scope list_scope.
 
 (** ** The seed *)
 
-(** The seed [c] is the implicit bit of an [f64] above the top 31 bits of
-    its fraction, so [2^31 <= c < 2^32] whatever the bits [b] of the square
+(** The seed [c] is the implicit bit of an [f64] above the 52 bits of its
+    fraction, so [2^52 <= c < 2^53] whatever the bits [b] of the square
     root are. *)
 Lemma seed_bounds :
   forall b,
-  2 ^ 31 <= Z.shiftr (Z.lor (Z.land b (Z.shiftl 1 52 - 1)) (Z.shiftl 1 52)) 21 < 2 ^ 32.
+  2 ^ 52 <= Z.lor (Z.land b (Z.shiftl 1 52 - 1)) (Z.shiftl 1 52) < 2 ^ 53.
 Proof.
   intros b.
   change (Z.shiftl 1 52 - 1) with (Z.ones 52).
@@ -26,8 +26,7 @@ Proof.
   assert (Hm : 0 <= b mod 2 ^ 52 < 2 ^ 52) by (apply Z.mod_pos_bound; lia).
   change (Z.shiftl 1 52) with (1 * 2 ^ 52).
   rewrite Z.lor_comm, lor_low by lia.
-  rewrite Z.shiftr_div_pow2 by lia.
-  split; [apply Z.div_le_lower_bound | apply Z.div_lt_upper_bound]; lia.
+  lia.
 Qed.
 
 (** ** Newton's step on integers *)
@@ -232,25 +231,29 @@ Proof.
   rewrite (bit_len_correct x Hx).
   rewrite (checked_u_ok 64 (nat_bits (Limbs.val x) - 63)) by lia.
   cbv beta iota zeta.
+  (* [k = (l - 63) / 2] is [N - 32] for [l = 2 N] and [N - 31] for
+     [l = 2 N + 1], so the shift [k - 21] is [N - 53] or [N - 52], at least
+     11. *)
+  rewrite (checked_u_ok 64 ((nat_bits (Limbs.val x) - 63) / 2 - 21))
+    by (destruct Hl as [-> | ->]; Z.div_mod_to_equations; lia).
+  cbv beta iota.
   match goal with
   | |- context [Limbs.shl_into (S n) (?c :: nil) ?k] =>
       remember c as c0 eqn:Hc0; remember k as k0 eqn:Hk0
   end.
-  assert (Hc : 2 ^ 31 <= c0 < 2 ^ 32) by (rewrite Hc0; apply seed_bounds).
-  (* [k = (l - 63) / 2] is [N - 32] for [l = 2 N] and [N - 31] for
-     [l = 2 N + 1]. *)
-  assert (Hk : k0 = N - 32 \/ k0 = N - 31).
+  assert (Hc : 2 ^ 52 <= c0 < 2 ^ 53) by (rewrite Hc0; apply seed_bounds).
+  assert (Hk : k0 = N - 53 \/ k0 = N - 52).
   { rewrite Hk0. destruct Hl as [-> | ->]; Z.div_mod_to_equations; lia. }
   clear Hc0 Hk0.
-  (* The seed [s0 = c 2^k] is in [[2^(N - 1), 2^(N + 1))]. *)
+  (* The seed [s0 = c 2^(k - 21)] is in [[2^(N - 1), 2^(N + 1))]. *)
   assert (Hk1 : 0 <= k0) by lia.
   assert (Pk : 0 < 2 ^ k0) by (apply Z.pow_pos_nonneg; lia).
   assert (A1 : 2 ^ (N - 1) = 2 ^ (N - 1 - k0) * 2 ^ k0).
   { rewrite <- Z.pow_add_r by lia. f_equal. lia. }
   assert (A2 : 2 ^ (N + 1) = 2 ^ (N + 1 - k0) * 2 ^ k0).
   { rewrite <- Z.pow_add_r by lia. f_equal. lia. }
-  assert (B1 : 2 ^ (N - 1 - k0) <= 2 ^ 31) by (apply Z.pow_le_mono_r; lia).
-  assert (B2 : 2 ^ 32 <= 2 ^ (N + 1 - k0)) by (apply Z.pow_le_mono_r; lia).
+  assert (B1 : 2 ^ (N - 1 - k0) <= 2 ^ 52) by (apply Z.pow_le_mono_r; lia).
+  assert (B2 : 2 ^ 53 <= 2 ^ (N + 1 - k0)) by (apply Z.pow_le_mono_r; lia).
   assert (Hcs : 2 ^ (N - 1) <= c0 * 2 ^ k0 < 2 ^ (N + 1)).
   { rewrite A1, A2. split.
     - apply Z.mul_le_mono_nonneg_r; lia.

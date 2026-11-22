@@ -2,6 +2,12 @@
 
 Items marked with ⚠️ are breaking changes.
 
+## Unreleased
+
+### Changed
+
+- Made the integer square root of the multi-precision kernel start Newton's iteration from all 53 bits of the significand of the `f64` square root of the top bits of its argument, where it started from the top 32 of them, with the same results as before, which the proof in Rocq of the integer square root covers. The kernel takes its square root, and so the integer square root, in Ziv's strategy for asin x, acos x, asinh x, acosh x and tan x, and for atan x and atan2(y, x) where it halves the argument of the arctangent, and hypot(x, y) takes the integer square root where its fast path cannot decide the rounding and the exponents of x and y differ by less than 27. In a crate that links `fushimi::cr`, built for Haswell, a call on the hard-to-round cases of CORE-MATH that the tests use now takes 28.11 fewer instructions rounded to nearest and 79.09 fewer rounded toward -∞ or +∞ for `atan`, 80.18 and 61.67 fewer for `atan2`, 153.60 and 364.36 fewer for `asin`, 218.65 and 322.72 fewer for `acos`, 288.03 and 135.89 fewer for `tan`, 41.81 and 119.79 fewer for `hypot`, 466.33 to 754.73 fewer for `asinh` and 739.36 to 754.46 fewer for `acosh`, or 0.23 to 9.85 % of its instructions, and one of `Interval::asin` and of `Interval::acos` on a point interval 728.71 and 645.45 fewer, as counted with cachegrind (with `--vex-guest-chase=no`), and built for the default `x86-64` or for `x86-64-v2`, at each of two starts of the stack 16 bytes apart, on a CPU with FMA or without, 28.95 to 781.15 fewer. In each of these builds, every other set of arguments counted, of these functions and of `exp`, `ln`, `log2`, `log10`, `atanh`, `sin`, `cos`, `cbrt` and `sqrt`, takes as many instructions as before, to 0.01 per call, or up to 1.47 fewer, and built for Haswell, so does every set of `exp2`, `exp10`, `sinh`, `cosh`, `tanh`, `pow` and `powi`, which do not take the square root of the kernel.
+
 ## v0.1.0 - 2026-11-22
 
 The first release of fushimi, a fork of inari v2.0.0; the entries below are the changes since inari v2.0.0.

@@ -538,23 +538,31 @@ fn isqrt(s: &mut [u64], x: &[u64], scratch: &mut [u64]) {
     let (y, rest) = scratch.split_at_mut(s.len());
     let (q, rest) = rest.split_at_mut(x.len());
     let (r, rest) = rest.split_at_mut(s.len());
-    // The seed: c, the top 32 bits of the significand of sqrt(u), for u the top bits t = x >> 2k
-    // of `x` with their low 11 bits cleared, so that 2^31 <= c < 2^32 and c * 2^k is near
-    // sqrt(x). `x` has l = 128 n or 128 n + 1 bits, and 2k is l - 63 or l - 64, so
-    // 2^62 <= t < 2^64 and 2^(64 n - 1) <= c * 2^k < 2^(64 n + 1). u has at most 53
-    // significant bits, so `u as f64` is exact, and u <= 2^64 - 2^11, whose square root rounds
-    // below 2^32. `t as f64` would round each t >= 2^64 - 2^10 up to 2^64, whose square root
-    // 2^32 has no fraction bits, which would make c = 2^31 and c * 2^k near sqrt(x) / 2, from
-    // which the iteration takes about 5 more steps. Only 2^31 <= c < 2^32 matters for the
-    // result, which the bits of `c` ensure whatever `sqrt` returns: its 52 bits of fraction
-    // under the implicit bit, shifted to 32 bits.
+    // The seed: c * 2^(k - 21), for c the 53 bits of the significand of sqrt(u) with the
+    // implicit bit, and u the top bits t = x >> 2k of `x` with their low 11 bits cleared. `x` has
+    // l = 128 n or 128 n + 1 bits, and 2k is l - 63 or l - 64, so 2^62 <= t < 2^64. u has at
+    // most 53 significant bits, so `u as f64` is exact, and u <= 2^64 - 2^11, whose square root
+    // rounds below 2^32, so that the `f64` square root of u is c * 2^-21 and c * 2^(k - 21) is
+    // near sqrt(x). `t as f64` would round each t >= 2^64 - 2^10 up to 2^64, whose square root
+    // 2^32 has no fraction bits, which would make c = 2^52 and the seed near sqrt(x) / 2. Only
+    // 2^52 <= c < 2^53 matters for the result, which the bits of `c` ensure whatever `sqrt`
+    // returns: its 52 bits of fraction under the implicit bit. Then
+    // 2^(64 n - 1) <= c * 2^(k - 21) < 2^(64 n + 1), and `k - 21` does not wrap, as l >= 128
+    // gives k >= 32. More bits can save a step, as the error of the first step is about the
+    // square of the seed's: a step from s = r (1 + e), for r = sqrt(x), gives about
+    // r (1 + e^2 / 2), and the seed is within 2^-51 of sqrt(x), relative. On CORE-MATH's hard
+    // cases of `hypot` rounded toward -∞ or +∞, an `isqrt` took 3.00 steps on average from the
+    // top 32 of these bits, where it takes 2.33 from all 53, and atan, atan2, asin, acos, asinh,
+    // acosh, tan and hypot took 28 to 755 more instructions per call on their hard cases from
+    // the 32 bits, in a crate that links `cr`, built for haswell, cachegrind chase=no
+    // (2026-11-22, against e9e5ae5).
     let l = limbs::bit_len(x);
     let k = (l - 63) / 2;
     let mut t = [0];
     limbs::shr_into(&mut t, x, 2 * k);
     let u = t[0] & !((1 << 11) - 1);
-    let c = (((u as f64).sqrt().to_bits() & ((1 << 52) - 1)) | 1 << 52) >> 21;
-    limbs::shl_into(s, &[c], k);
+    let c = ((u as f64).sqrt().to_bits() & ((1 << 52) - 1)) | 1 << 52;
+    limbs::shl_into(s, &[c], k - 21);
     // Newton's iteration for floor(sqrt(x)) (Zimmermann, Karatsuba Square Root, INRIA RR-3805,
     // 1999, and Brent and Zimmermann, Modern Computer Arithmetic, 1.5.1):
     // y = floor((s + floor(x / s)) / 2). The first step makes y >= isqrt(x) from any s > 0 (by
