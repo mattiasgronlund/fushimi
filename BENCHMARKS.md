@@ -478,7 +478,7 @@ around `vsqrtsd`, `sqrt1_ru/throughput` was 8.65 ns and interval `sqrt/P` was
 ### x86-64 with AVX and FMA
 
 The `fma` backend applies the method of `sse42` — the fast paths of `generic`
-computed on both lanes at once, with the few inputs whose checks fail in either
+computed on both lanes at once, with the inputs whose checks fail in either
 lane recomputed by `generic` — to a target that has an FMA. The FMA makes
 TwoProduct and the remainders of division and of the square root one instruction
 each instead of Dekker's algorithm, and widens their exactness hypotheses enough
