@@ -11,7 +11,13 @@
     [fast_reduce_big] ([FastTrigBig.v]) knows the fraction F = x 4096/π
     - N within 2^-126, which is relative at |F| >= 2^-61 4096/π, and [F]
     is normalized before its 106 bits are taken. It is the same with an
-    FMA ([fast_reduce_band_big_fma]). *)
+    FMA ([fast_reduce_band_big_fma]).
+
+    [fast_reduce_band_big] is the [Band n a lo] of [fast_reduce_big_band],
+    the one reduction that the fast paths run above 2^16, followed by
+    [fast_reduce_band_win]. The proofs read it as [band_big_old], the two
+    in one function as [Model.v] had them before, which [band_big_eq]
+    shows to be the same. *)
 
 From Stdlib Require Import ZArith Reals Lra Lia.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
@@ -280,12 +286,13 @@ cbn [bpow radix_val radix2] in *.
 lra.
 Qed.
 
-(** The integers of [fast_reduce_band_big] up to [zh] and [zl], named as
-    in [Model.v], where both tests pass: [x] is finite with [|x| >=
-    2^16], [x = sg X] for the sign [sg] of [x], [X/u = N + A 2^-128 + τ]
-    with [N mod 8192 = n] ([band_int]), [X] is at least 2^-61 and at most
-    [u/2 (1 + 2^-24)] away from [N u] ([band_dist], as [n mod 2048 = 0]),
-    and [zh 2^53 + zl] is [A 2^s / 2^22] rounded down ([band_norm], as
+(** The integers of [band_big_old] (below) up to [v], named as there,
+    and [zh] and [zl], the integers that its [fh] and [fl] convert, where
+    both tests pass: [x] is finite with [|x| >= 2^16], [x = sg X] for
+    the sign [sg] of [x], [X/u = N + A 2^-128 + τ] with [N mod 8192 = n]
+    ([band_int]), [X] is at least 2^-61 and at most [u/2 (1 + 2^-24)]
+    away from [N u] ([band_dist], as [n mod 2048 = 0]), and
+    [zh 2^53 + zl] is [A 2^s / 2^22] rounded down ([band_norm], as
     [|A| >= 2^77] puts [a] at least 2^13 away from 0). *)
 Local Lemma band_big_chain :
   forall x,
@@ -368,6 +375,100 @@ split; [exact EN |]. split; [exact Ex |]. split; [exact EX |].
 split; [exact Ht |]. split; [exact Hd | exact Ez].
 Qed.
 
+(** [fast_reduce_band_big] in one function, as [Model.v] wrote it before
+    the code split it into [fast_reduce_big_band], which stops at [Band n
+    a lo], and [fast_reduce_band_win], the steps after [lo]. It is kept
+    so that the proofs of [fast_reduce_band_big_correct] and
+    [fast_reduce_band_big_fma] stay as they were but for one line, which
+    rewrites [fast_reduce_band_big] into it ([band_big_eq], at every
+    [fma] and [x]) and unfolds it. *)
+Local Definition band_big_old (fma : bool) (x : f64) : option (Z * f64 * f64 * f64) :=
+  (let b := Z.land (to_bits x) (2^63 - 1) in
+  let be := Z.shiftr b 52 in
+  if negb ((1039 <=? be) && (be <=? 2046)) then None else
+  let m := Z.lor (Z.land b (2^52 - 1)) (2^52) in
+  let k := be - 1011 in
+  let p1 := m * DyadicTrig.big_w k 1 in
+  let p0 := m * DyadicTrig.big_w k 2 in
+  let c := Z.shiftr p0 64 + p1 mod 2^64 in
+  let r1 := c mod 2^64 in
+  let r2 := (m * DyadicTrig.big_w k 0 + Z.shiftr p1 64 + Z.shiftr c 64) mod 2^64 in
+  let n := Z.shiftr ((r2 + 2^50) mod 2^64) 51 in
+  if negb (Z.land n 2047 =? 0) then None else
+  let a0 := Z.lor (Z.shiftl r2 13 mod 2^64) (Z.shiftr r1 51) in
+  let a := if a0 <? 2^63 then a0 else a0 - 2^64 in
+  let lo := Z.lor (Z.shiftl r1 13 mod 2^64) (Z.shiftr (p0 mod 2^64) 51) in
+  let s := leading_zeros 64 (Z.lxor a (Z.shiftr a 63)) - 1 in
+  let t0 := Z.lor (Z.shiftl a0 s mod 2^64) (Z.shiftr (Z.shiftr lo 1) (63 - s)) in
+  let t := if t0 <? 2^63 then t0 else t0 - 2^64 in
+  let v := Z.shiftl lo s mod 2^64 in
+  let fh := mul (DyadicTrig.of_i64 (Z.shiftr t 11)) (from_bits (Z.shiftl (970 - s) 52)) in
+  let fl := mul (DyadicTrig.of_i64 (Z.lor (Z.shiftl (Z.land t 2047) 42) (Z.shiftr v 22)))
+                (from_bits (Z.shiftl (917 - s) 52)) in
+  let '(n, fh, fl) :=
+    if lt x zero then (Z.land (- n) 8191, opp fh, opp fl) else (n, fh, fl) in
+  let uh := add (from_bits DyadicTrig.U1) (from_bits DyadicTrig.U2) in
+  let '(rh, rl) := DyadicTrig.fast_mul fma fh fl uh (from_bits DyadicTrig.U3) in
+  Some (n, rh, rl, add rh rl))%Z.
+
+(** The bits [a mod 2^64] of the [i64] [a] that [fast_reduce_band_win]
+    shifts are the [u64] [a0] that [band_big_old] shifts. *)
+Local Lemma band_a_bits :
+  forall a0, (0 <= a0 < 2 ^ 64)%Z ->
+  ((if (a0 <? 2 ^ 63)%Z then a0 else (a0 - 2 ^ 64)%Z) mod 2 ^ 64 = a0)%Z.
+Proof.
+intros a0 H. destruct (a0 <? 2 ^ 63)%Z.
+- apply Z.mod_small. exact H.
+- replace (a0 - 2 ^ 64)%Z with (a0 + (-1) * 2 ^ 64)%Z by ring.
+  rewrite Z_mod_plus_full. apply Z.mod_small. exact H.
+Qed.
+
+(** [fast_reduce_band_big] is [band_big_old]: the range test is the same
+    ([big_range] of [FastTrigBig.v]), the test of [n mod 2048] gives
+    [None] on both sides where it fails, and where it passes,
+    [fast_reduce_band_win] runs the steps of [band_big_old] after [lo] on
+    the bits [a mod 2^64 = a0] of [a] ([band_a_bits], as [a0] is in
+    [[0, 2^64)] by [band_int]). *)
+Local Lemma band_big_eq :
+  forall fma x, DyadicTrig.fast_reduce_band_big fma x = band_big_old fma x.
+Proof.
+intros fma x.
+unfold DyadicTrig.fast_reduce_band_big, DyadicTrig.fast_reduce_big_band,
+  DyadicTrig.fast_reduce_band_win, band_big_old.
+pose proof (big_decode x) as D. pose proof (big_range x) as RT.
+cbv zeta. cbv zeta in D, RT.
+set (b := Z.land (to_bits x) (2 ^ 63 - 1)%Z) in *.
+set (be := Z.shiftr b 52) in *.
+rewrite RT. clear RT.
+(* The range test: [No] gives [None], as [band_big_old] does. *)
+destruct (negb ((1039 <=? be) && (be <=? 2046)))%Z eqn:G; cbv beta iota; [reflexivity |].
+apply Bool.negb_false_iff in G.
+destruct (D G) as (_ & Hbe & Hm & _). clear D.
+set (m := Z.lor (Z.land b (2 ^ 52 - 1)) (2 ^ 52)%Z) in *.
+pose proof (band_int m be) as BI. cbv zeta in BI.
+set (k := (be - 1011)%Z) in *.
+set (p0 := (m * DyadicTrig.big_w k 2)%Z) in *.
+set (p1 := (m * DyadicTrig.big_w k 1)%Z) in *.
+set (c := (Z.shiftr p0 64 + p1 mod 2 ^ 64)%Z) in *.
+set (r1 := (c mod 2 ^ 64)%Z) in *.
+set (r2 := ((m * DyadicTrig.big_w k 0 + Z.shiftr p1 64 + Z.shiftr c 64) mod 2 ^ 64)%Z) in *.
+set (nn := Z.shiftr ((r2 + 2 ^ 50) mod 2 ^ 64)%Z 51) in *.
+set (a0 := Z.lor (Z.shiftl r2 13 mod 2 ^ 64)%Z (Z.shiftr r1 51)) in *.
+set (a := if (a0 <? 2 ^ 63)%Z then a0 else (a0 - 2 ^ 64)%Z) in *.
+destruct (BI Hm Hbe) as (Ha0 & _). clear BI.
+(* The test of [n mod 2048]: [negb] of [band_big_old] needs [delta]. *)
+destruct (Z.land nn 2047 =? 0)%Z; cbv beta iota delta [negb].
+- (* [Band n a lo]: the same steps, on [a mod 2^64 = a0] *)
+  assert (Ea : (a mod 2 ^ 64 = a0)%Z) by exact (band_a_bits a0 Ha0).
+  rewrite Ea.
+  destruct (lt x zero); cbv beta iota;
+    destruct (DyadicTrig.fast_mul fma _ _ _ _) as (p, q); reflexivity.
+- (* [Red] or [No], and [None] *)
+  destruct (lt x zero); cbv beta iota;
+    destruct (DyadicTrig.fast_mul fma _ _ _ _) as (p, q); cbv beta iota;
+    destruct (lt (fabs p) _); reflexivity.
+Qed.
+
 Theorem fast_reduce_band_big_correct :
   forall x n rh rl rr,
   DyadicTrig.fast_reduce_band_big false x = Some (n, rh, rl, rr) ->
@@ -381,7 +482,7 @@ Theorem fast_reduce_band_big_correct :
   Rabs (B2R rl) <= bpow radix2 (-24) * Rabs (B2R rh).
 Proof.
 intros x n rh rl rr H.
-unfold DyadicTrig.fast_reduce_band_big in H.
+rewrite band_big_eq in H. unfold band_big_old in H.
 pose proof (band_big_chain x) as C.
 cbv zeta in H, C.
 set (b := Z.land (to_bits x) (2 ^ 63 - 1)%Z) in *.
@@ -479,7 +580,7 @@ Theorem fast_reduce_band_big_fma :
   forall x, DyadicTrig.fast_reduce_band_big true x = DyadicTrig.fast_reduce_band_big false x.
 Proof.
 intros x.
-unfold DyadicTrig.fast_reduce_band_big.
+rewrite !band_big_eq. unfold band_big_old.
 pose proof (band_big_chain x) as C.
 cbv zeta. cbv zeta in C.
 set (b := Z.land (to_bits x) (2 ^ 63 - 1)%Z) in *.

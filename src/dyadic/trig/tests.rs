@@ -1358,6 +1358,104 @@ fn big_random() {
     }
 }
 
+// The range test of `fast_reduce_big_band`, the one comparison of be - 1039, wrapping, with 1007,
+// for the biased exponent be, at the ends of its range [1039, 2046] and past them, both signs of
+// each: be = 0, where be - 1039 wraps, at 0, 2^-1074 and the largest subnormal; 1038 at 2^15 and
+// 2^16 - 2^-37, the `f64` below `LIMIT`; 1039 at `LIMIT` and the `f64` above it; 2046 at 2^1023
+// and `f64::MAX`; and 2047 at ∞ and at NaN: `f64::NAN`, the NaN of payload 1 and the one of the
+// largest payload. At each of these x, `fast_reduce_big` or `fast_reduce_band_big`, never both,
+// takes x if it is finite with |x| >= `LIMIT`, and neither does otherwise (`check_big` also
+// checks `fast_reduce_any`). The fast paths of sin, cos and tan take the first before any
+// rounding test (`answered`), and decline the infinities and the NaNs (`declined`), which their
+// entries settle before the fast path. sin, cos and tan at each x, in each rounding, are as
+// `check_fast` checks them, against MPFR where the tests have it.
+#[test]
+fn big_range_ends() {
+    let args = [
+        0.0,
+        f64::from_bits(1),
+        f64::from_bits((1 << 52) - 1),
+        pow2(15),
+        next_down(LIMIT),
+        LIMIT,
+        next_up(LIMIT),
+        pow2(1023),
+        f64::MAX,
+        f64::INFINITY,
+        f64::NAN,
+        f64::from_bits(0x7ff0_0000_0000_0001),
+        f64::from_bits(u64::MAX >> 1),
+    ];
+    for x in args {
+        for y in [x, -x] {
+            let big = check_big(y);
+            let band = fast_reduce_band_big::<HAS_FMA>(y).is_some();
+            let in_range = y.is_finite() && y.abs() >= LIMIT;
+            assert!(
+                !(big && band) && (big || band) == in_range,
+                "{y:e}: fast_reduce_big takes it: {big}, fast_reduce_band_big: {band}"
+            );
+            assert!(
+                if in_range {
+                    answered(y)
+                } else {
+                    y.is_finite() || declined(y)
+                },
+                "{y:e}"
+            );
+            for i in [SIN, COS, TAN] {
+                check_fast(i, y);
+            }
+        }
+    }
+}
+
+// The four n of the band above `LIMIT`, n = N mod 8192 in {0, 2048, 4096, 6144}, at x and -x,
+// in the lowest binade above `LIMIT`, [2^16, 2^17), in that of the integers in [2^52, 2^53) and
+// in the highest, [2^1023, 2^1024): for each n, the first x = m 2^(be - 1075) of random m at
+// which `fast_reduce_band_big` takes x with that n. At -x it gives (-n) mod 8192 and rh, rl and
+// rr negated, bit for bit, as `fast_reduce_band_win` negates fh and fl and the roundings of
+// `fast_mul` are symmetric, and `fast_reduce_big` takes neither. The fast paths of sin, cos and
+// tan take both before any rounding test (`answered`), and sin, cos and tan at both, in each
+// rounding, are as `check_fast` checks them, against MPFR where the tests have it.
+// `band_big_random` in `tests/band.rs` takes 2 such x at every biased exponent, but does not
+// require each n at each sign.
+#[test]
+fn band_big_quadrants() {
+    let mut rng = Rng(1071);
+    for be in [1039, 1075, 2046] {
+        let mut found = [None; 4];
+        for _ in 0..1 << 18 {
+            let x = from_parts(be, (1 << 52) + u128::from(rng.below(1 << 52)));
+            if let Some((n, ..)) = fast_reduce_band_big::<HAS_FMA>(x) {
+                found[usize::try_from(n / 2048).unwrap()].get_or_insert(x);
+                if found.iter().all(Option::is_some) {
+                    break;
+                }
+            }
+        }
+        for (q, x) in found.into_iter().enumerate() {
+            let x = x.unwrap_or_else(|| panic!("biased exponent {be}: no x with n = {}", 2048 * q));
+            let (n, rh, rl, rr) = fast_reduce_band_big::<HAS_FMA>(x).unwrap();
+            assert_eq!(
+                reduction_bits(fast_reduce_band_big::<HAS_FMA>(-x)),
+                reduction_bits(Some(((-n) & 8191, -rh, -rl, -rr))),
+                "{:e}",
+                -x
+            );
+            for y in [x, -x] {
+                assert!(
+                    fast_reduce_big::<HAS_FMA>(y).is_none() && answered(y),
+                    "{y:e}"
+                );
+                for i in [SIN, COS, TAN] {
+                    check_fast(i, y);
+                }
+            }
+        }
+    }
+}
+
 // RN(π/2 - RN(π/2)), the part of π/2 below `FRAC_PI_2`.
 const HALF_PI_LO: f64 = 6.123233995736766e-17;
 

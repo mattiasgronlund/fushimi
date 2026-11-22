@@ -5289,10 +5289,10 @@ Definition inv2pi (j : Z) : Z := nth (Z.to_nat j) INV2PI 0.
     as [DyadicLog.of_i64]. *)
 Definition of_i64 (k : Z) : f64 := binary_normalize 53 1024 _ _ mode_NE k 0 false.
 
-(** The closure [w] of [fn fast_reduce_big] at [k] = [be - 1011] and [j],
-    where [i] = [k >> 6] and [f] = [k & 63] are [Z.shiftr] and [Z.land],
-    [<<] of a [u64] drops the bits above 64, and [INV2PI[i + j]] and
-    [INV2PI[i + j + 1]] are [inv2pi], as [k] is at most 1035 and [j] at
+(** The closure [w] of [fn fast_reduce_big_band] at [k] = [be - 1011] and
+    [j], where [i] = [k >> 6] and [f] = [k & 63] are [Z.shiftr] and
+    [Z.land], [<<] of a [u64] drops the bits above 64, and [INV2PI[i + j]]
+    and [INV2PI[i + j + 1]] are [inv2pi], as [k] is at most 1035 and [j] at
     most 2, so that [i + j + 1] is at most 19. *)
 Definition big_w (k j : Z) : Z :=
   let i := Z.shiftr k 6 in
@@ -5300,23 +5300,43 @@ Definition big_w (k j : Z) : Z :=
   Z.lor (Z.shiftl (inv2pi (i + j)) f mod 2^64)
         (Z.shiftr (Z.shiftr (inv2pi (i + j + 1)) 1) (63 - f)).
 
-(** [fn fast_reduce_big(x: f64) -> Option<(i64, f64, f64, f64)>], where
-    the [u64] and [u128] values are integers, [u64::MAX >> 1] is [2^63 -
-    1], [(be - 1011) as usize] is [be - 1011], which is in [28, 1035]
-    there, [p1 & u128::from(u64::MAX)] and [c as u64] are [mod 2^64], as
-    are [wrapping_mul], [wrapping_add] and [r2 << 13], [(p1 >> 64) as u64]
-    and [(c >> 64) as u64] are [Z.shiftr], as both are below 2^64, [as
-    i64] of [r2.wrapping_add(1 << 50) >> 51], which is below 2^13, keeps
-    its value, [as i64] of a [u64] [v] is [v - 2^64] for [v >= 2^63], [a
-    >> 11] of an [i64] is [Z.shiftr], which rounds toward -∞ as Rust's
-    does, [as f64] of an [i64] and [as i64 as f64] of a [u64] below 2^53
-    are [of_i64], [(-n) & 8191] is [Z.land (- n) 8191], [x < 0.0] is [lt
-    x zero], [f64::from_bits(U1) + f64::from_bits(U2)] is [add] and
-    [rh.abs()] is [fabs rh]. [FastTrigBig.v] proves it. *)
-Definition fast_reduce_big (fma : bool) (x : f64) : option (Z * f64 * f64 * f64) :=
+(** [enum BigRed { Red(i64, f64, f64, f64), Band(i64, i64, u64), No }],
+    what [fast_reduce_big_band] finds at an [x]: the reduction [Red n rh
+    rl rr] of [fast_reduce_big], or, where [n mod 2048 = 0], [Band n a lo]
+    with [n] and the 128 bits [a 2^64 + lo] of the window below those of
+    [n], from which [fast_reduce_band_win] reduces [x], or [No]. Each
+    [i64] and the [u64] is an integer, as in [fast_reduce_big_band]: [a]
+    is the [i64] value, in [-2^63, 2^63), and [lo] the [u64] value, in
+    [0, 2^64). [FastTrigBig.v], [FastTrigBandBig.v] and [FastTrigCore.v]
+    take it apart. *)
+Inductive BigRed : Type := Red (n : Z) (rh rl rr : f64) | Band (n a lo : Z) | No.
+
+(** [fn fast_reduce_big_band(x: f64) -> BigRed], where the [u64] and
+    [u128] values are integers, [u64::MAX >> 1] is [2^63 - 1],
+    [be.wrapping_sub(1039) > 1007] of the [u64] [be] is [1007 <? (be -
+    1039) mod 2^64], which for [be] in [0, 2^11), as here, is [negb
+    ((1039 <=? be) && (be <=? 2046))] ([big_range] of [FastTrigBig.v]),
+    [(be - 1011) as usize] is [be - 1011], which is in [28, 1035] there,
+    [p1 & u128::from(u64::MAX)] and [c as u64] are [mod 2^64], as are
+    [wrapping_mul], [wrapping_add], [r2 << 13] and [r1 << 13], [(p1 >> 64)
+    as u64] and [(c >> 64) as u64] are [Z.shiftr], as both are below
+    2^64, [as i64] of [r2.wrapping_add(1 << 50) >> 51], which is below
+    2^13, keeps its value, [as i64] of a [u64] [v] is [v - 2^64] for [v >=
+    2^63], [p0 as u64] is [p0 mod 2^64], [a >> 11] of an [i64] is
+    [Z.shiftr], which rounds toward -∞ as Rust's does, [as f64] of an
+    [i64] and [as i64 as f64] of a [u64] below 2^53 are [of_i64], [(-n) &
+    8191] is [Z.land (- n) 8191], [x < 0.0] is [lt x zero],
+    [f64::from_bits(U1) + f64::from_bits(U2)] is [add], [rh.abs()] is
+    [fabs rh], and each [return] is the value of an [if] whose [else]
+    holds the rest. [FastTrigBig.v] proves it through [fast_reduce_big]
+    and in [fast_reduce_big_band_fma], and [FastTrigBandBig.v] through
+    [fast_reduce_band_big]. [FastTrigCore.v] reads its [Red] and [Band]
+    as [Some]s of [fast_reduce_big] and [fast_reduce_band_big], for
+    [fast_sin] and the others. *)
+Definition fast_reduce_big_band (fma : bool) (x : f64) : BigRed :=
   let b := Z.land (to_bits x) (2^63 - 1) in
   let be := Z.shiftr b 52 in
-  if negb ((1039 <=? be) && (be <=? 2046)) then None else
+  if 1007 <? (be - 1039) mod 2^64 then No else
   let m := Z.lor (Z.land b (2^52 - 1)) (2^52) in
   let k := be - 1011 in
   let p1 := m * big_w k 1 in
@@ -5325,57 +5345,67 @@ Definition fast_reduce_big (fma : bool) (x : f64) : option (Z * f64 * f64 * f64)
   let r1 := c mod 2^64 in
   let r2 := (m * big_w k 0 + Z.shiftr p1 64 + Z.shiftr c 64) mod 2^64 in
   let n := Z.shiftr ((r2 + 2^50) mod 2^64) 51 in
-  if Z.land n 2047 =? 0 then None else
   let a0 := Z.lor (Z.shiftl r2 13 mod 2^64) (Z.shiftr r1 51) in
   let a := if a0 <? 2^63 then a0 else a0 - 2^64 in
+  if Z.land n 2047 =? 0 then
+    Band n a (Z.lor (Z.shiftl r1 13 mod 2^64) (Z.shiftr (p0 mod 2^64) 51))
+  else
   let fh := mul (of_i64 (Z.shiftr a 11)) (from_bits 0x3ca0000000000000) in
   let fl := mul (of_i64 (Z.land (Z.shiftr r1 9) (2^53 - 1))) (from_bits 0x3950000000000000) in
   let '(n, fh, fl) :=
     if lt x zero then (Z.land (- n) 8191, opp fh, opp fl) else (n, fh, fl) in
   let uh := add (from_bits U1) (from_bits U2) in
   let '(rh, rl) := fast_mul fma fh fl uh (from_bits U3) in
-  if lt (fabs rh) (from_bits 0x3be0000000000000) then None
-  else Some (n, rh, rl, add rh rl).
+  if lt (fabs rh) (from_bits 0x3be0000000000000) then No
+  else Red n rh rl (add rh rl).
 
-(** [fn fast_reduce_any(x: f64) -> Option<(i64, f64, f64, f64)>].
-    [FastTrigBig.v] proves it. *)
+(** [fn fast_reduce_big(x: f64) -> Option<(i64, f64, f64, f64)>], which is
+    [#[cfg(test)]] in Rust: the reduction alone of [fast_reduce_big_band],
+    which the tests check, where the [_] of the [match] is the [Band] and
+    the [No]. [FastTrigBig.v] proves it: [fast_reduce_big_correct] and
+    [fast_reduce_big_fma] are stated of it. [FastTrigCore.v] unfolds it,
+    to read a [Red] of [fast_reduce_big_band] as its [Some]. *)
+Definition fast_reduce_big (fma : bool) (x : f64) : option (Z * f64 * f64 * f64) :=
+  match fast_reduce_big_band fma x with
+  | Red n rh rl rr => Some (n, rh, rl, rr)
+  | _ => None
+  end.
+
+(** [fn fast_reduce_any(x: f64) -> Option<(i64, f64, f64, f64)>] with [fn
+    fast_reduce_any_band(x: f64) -> BigRed] inlined into it, both
+    [#[cfg(test)]] in Rust: the [Red] that [fast_reduce_any_band] makes of
+    a [Some r] of [fast_reduce] is [Some r] again, and its arm
+    [fast_reduce_big_band] under the [match] of [fast_reduce_any] is
+    [fast_reduce_big]. [FastTrigBig.v] proves it. [FastTrigCore.v] proves
+    [fast_sin] and the others through it: a [Some] of [fast_reduce], and a
+    [Red] of [fast_reduce_big_band] where [fast_reduce] gives [None], are
+    reductions of it. *)
 Definition fast_reduce_any (fma : bool) (x : f64) : option (Z * f64 * f64 * f64) :=
   match fast_reduce x with
   | Some r => Some r
   | None => fast_reduce_big fma x
   end.
 
-(** [fn fast_reduce_band_big(x: f64) -> Option<(i64, f64, f64, f64)>],
-    whose steps up to [n] are those of [fast_reduce_big], where [p0 as
-    u64] is [p0 mod 2^64], [<<] of a [u64] drops the bits above 64, [a ^
-    (a >> 63)] of an [i64] is [Z.lxor] and [Z.shiftr], which give the
-    same integer, at least 0, [leading_zeros()] of it is [leading_zeros
-    64], [- 1] of that cannot overflow, as it is at least 1, [a << s] of
-    an [i64] is [<<] of its bits [a0], which keeps [as i64] of a [u64],
-    [|] of an [i64] and [as i64] of a [u64] is [Z.lor] of their bits, [t &
-    2047] of an [i64] is [Z.land], [as u64] of it keeps its value, [<< 42]
-    of it cannot drop a bit, as it is below 2^53, [u64::from(970 - s) <<
-    52] is [Z.shiftl], as [s] is at most 63, [as f64] of a [u64] below
-    2^53 is [of_i64], and the rest is as in [fast_reduce_big].
-    [FastTrigBandBig.v] proves it. *)
-Definition fast_reduce_band_big (fma : bool) (x : f64) : option (Z * f64 * f64 * f64) :=
-  let b := Z.land (to_bits x) (2^63 - 1) in
-  let be := Z.shiftr b 52 in
-  if negb ((1039 <=? be) && (be <=? 2046)) then None else
-  let m := Z.lor (Z.land b (2^52 - 1)) (2^52) in
-  let k := be - 1011 in
-  let p1 := m * big_w k 1 in
-  let p0 := m * big_w k 2 in
-  let c := Z.shiftr p0 64 + p1 mod 2^64 in
-  let r1 := c mod 2^64 in
-  let r2 := (m * big_w k 0 + Z.shiftr p1 64 + Z.shiftr c 64) mod 2^64 in
-  let n := Z.shiftr ((r2 + 2^50) mod 2^64) 51 in
-  if negb (Z.land n 2047 =? 0) then None else
-  let a0 := Z.lor (Z.shiftl r2 13 mod 2^64) (Z.shiftr r1 51) in
-  let a := if a0 <? 2^63 then a0 else a0 - 2^64 in
-  let lo := Z.lor (Z.shiftl r1 13 mod 2^64) (Z.shiftr (p0 mod 2^64) 51) in
+(** [fn fast_reduce_band_win(n: i64, a: i64, lo: u64, x: f64) -> (i64,
+    f64, f64, f64)], the steps of [fast_reduce_band_big] after [lo], from
+    the [Band n a lo] of [fast_reduce_big_band] at [x], where [a ^ (a >>
+    63)] of an [i64] is [Z.lxor] and [Z.shiftr], which give the same
+    integer, at least 0, [leading_zeros()] of it is [leading_zeros 64], [-
+    1] of that cannot overflow, as it is at least 1, [a << s] of an [i64]
+    is [<<] of its bits [a mod 2^64], which keeps [as i64] of a [u64], [<<]
+    of a [u64] drops the bits above 64, [|] of an [i64] and [as i64] of a
+    [u64] is [Z.lor] of their bits, [as i64] of a [u64] [v] is [v - 2^64]
+    for [v >= 2^63], [t >> 11] of an [i64] is [Z.shiftr], [t & 2047] of
+    an [i64] is [Z.land], [as u64] of it keeps its value, [<< 42] of it
+    cannot drop a bit, as it is below 2^53, [u64::from(970 - s) << 52] is
+    [Z.shiftl], as [s] is at most 63, [as f64] of an [i64] and of a [u64]
+    below 2^53 is [of_i64], and the rest is as in [fast_reduce_big_band].
+    [FastTrigBandBig.v] proves it through [fast_reduce_band_big], whose
+    theorems [FastTrigCore.v] applies to it in [fast_band_big] and
+    [fast_tan_band_big]. *)
+Definition fast_reduce_band_win (fma : bool) (n a lo : Z) (x : f64) : Z * f64 * f64 * f64 :=
   let s := leading_zeros 64 (Z.lxor a (Z.shiftr a 63)) - 1 in
-  let t0 := Z.lor (Z.shiftl a0 s mod 2^64) (Z.shiftr (Z.shiftr lo 1) (63 - s)) in
+  let t0 := Z.lor (Z.shiftl (a mod 2^64) s mod 2^64) (Z.shiftr (Z.shiftr lo 1) (63 - s)) in
   let t := if t0 <? 2^63 then t0 else t0 - 2^64 in
   let v := Z.shiftl lo s mod 2^64 in
   let fh := mul (of_i64 (Z.shiftr t 11)) (from_bits (Z.shiftl (970 - s) 52)) in
@@ -5385,7 +5415,21 @@ Definition fast_reduce_band_big (fma : bool) (x : f64) : option (Z * f64 * f64 *
     if lt x zero then (Z.land (- n) 8191, opp fh, opp fl) else (n, fh, fl) in
   let uh := add (from_bits U1) (from_bits U2) in
   let '(rh, rl) := fast_mul fma fh fl uh (from_bits U3) in
-  Some (n, rh, rl, add rh rl).
+  (n, rh, rl, add rh rl).
+
+(** [fn fast_reduce_band_big(x: f64) -> Option<(i64, f64, f64, f64)>],
+    which is [#[cfg(test)]] in Rust: [fast_reduce_big_band] and
+    [fast_reduce_band_win] composed, which the tests check, where the [_]
+    of the [match] is the [Red] and the [No]. [FastTrigBandBig.v] proves
+    it: [fast_reduce_band_big_correct] and [fast_reduce_band_big_fma] are
+    stated of it. [FastTrigCore.v] unfolds it, to read the
+    [fast_reduce_band_win] of a [Band n a lo] of [fast_reduce_big_band] as
+    its [Some]. *)
+Definition fast_reduce_band_big (fma : bool) (x : f64) : option (Z * f64 * f64 * f64) :=
+  match fast_reduce_big_band fma x with
+  | Band n a lo => Some (fast_reduce_band_win fma n a lo x)
+  | _ => None
+  end.
 
 (** [f64::from_bits(r[k])] of [fast_sc], for a row [r] of [SC] read with
     [sc] and [k] from 0 to 3, the only indices that [fast_sc] takes. It
@@ -5454,22 +5498,20 @@ Definition fast_band_eval (q : Z) (rh rl rr : f64) : f64 * f64 :=
   if Z.land q 2 =? 0 then (h, l) else (opp h, opp l).
 
 (** [fn fast_band(n: i64, s: i64, rh: f64, rl: f64) -> (f64, f64)] and [fn
-    fast_band_big(x: f64, s: i64) -> Option<(f64, f64)>], where [n >> 11]
-    is [Z.shiftr], as in [fast_quad], and [?] is a [match]. Each calls
-    its body, [fast_band_body] or [fast_band_big_body], which these
-    transcribe, or, in a build with [cfg(fushimi_kernel_dispatch)] and with
-    [FMA] false, [fast_band_dekker] or [fast_band_big_dekker], which call
-    that body with [false]. [FastTrigCore.v] proves them, with [fast_sin]
-    and the others. *)
+    fast_band_big(n: i64, a: i64, lo: u64, x: f64, s: i64) -> (f64, f64)],
+    where [n >> 11] is [Z.shiftr], as in [fast_quad]. Each calls its body,
+    [fast_band_body] or [fast_band_big_body], which these transcribe, or,
+    in a build with [cfg(fushimi_kernel_dispatch)] and with [FMA] false,
+    [fast_band_dekker] or [fast_band_big_dekker], which call that body
+    with [false]. [FastTrigCore.v] proves them, with [fast_sin] and the
+    others. *)
 Definition fast_band (fma : bool) (n s : Z) (rh rl : f64) : f64 * f64 :=
   let '(rh, rl, rr) := fast_band_reduce fma n rh rl in
   fast_band_eval (Z.shiftr n 11 + s) rh rl rr.
 
-Definition fast_band_big (fma : bool) (x : f64) (s : Z) : option (f64 * f64) :=
-  match fast_reduce_band_big fma x with
-  | Some (n, rh, rl, rr) => Some (fast_band_eval (Z.shiftr n 11 + s) rh rl rr)
-  | None => None
-  end.
+Definition fast_band_big (fma : bool) (n a lo : Z) (x : f64) (s : Z) : f64 * f64 :=
+  let '(n, rh, rl, rr) := fast_reduce_band_win fma n a lo x in
+  fast_band_eval (Z.shiftr n 11 + s) rh rl rr.
 
 (** [fn fast_quad(n: i64, s: i64, rh: f64, rl: f64, rr: f64) ->
     Option<(f64, f64)>], where [n & 2047], [n >> 11], [q & 1] and [q & 2]
@@ -5489,17 +5531,31 @@ Definition fast_quad (fma : bool) (n s : Z) (rh rl rr : f64) : option (f64 * f64
     Some (if Z.land q 2 =? 0 then (h, l) else (opp h, opp l)).
 
 (** [fn fast_sin(x: f64) -> Option<(f64, f64)>] and [fn fast_cos(t: f64) ->
-    Option<(f64, f64)>]. [FastTrigCore.v] proves them. *)
+    Option<(f64, f64)>], where the [match] that gives [(n, rh, rl, rr)] to
+    [fast_quad] is a [match] whose arms are its [return]s and [fast_quad]
+    of the reduction, and the arm [Some((0, ..))], ahead of [Some(r)], is
+    [n =? 0] in the arm [Some (n, rh, rl, rr)]. [FastTrigCore.v] proves
+    them. *)
 Definition fast_sin (fma : bool) (x : f64) : option (f64 * f64) :=
-  match fast_reduce_any fma x with
+  match fast_reduce x with
   | Some (n, rh, rl, rr) => if n =? 0 then Some (fast_sin0 x) else fast_quad fma n 0 rh rl rr
-  | None => fast_band_big fma x 0
+  | None =>
+    match fast_reduce_big_band fma x with
+    | Red n rh rl rr => fast_quad fma n 0 rh rl rr
+    | Band n a lo => Some (fast_band_big fma n a lo x 0)
+    | No => None
+    end
   end.
 
 Definition fast_cos (fma : bool) (t : f64) : option (f64 * f64) :=
-  match fast_reduce_any fma t with
+  match fast_reduce t with
   | Some (n, rh, rl, rr) => if n =? 0 then Some (fast_cos0 t) else fast_quad fma n 1 rh rl rr
-  | None => fast_band_big fma t 1
+  | None =>
+    match fast_reduce_big_band fma t with
+    | Red n rh rl rr => fast_quad fma n 1 rh rl rr
+    | Band n a lo => Some (fast_band_big fma n a lo t 1)
+    | No => None
+    end
   end.
 
 (** [fn fast_div(nh: f64, nl: f64, dh: f64, dl: f64) -> (f64, f64)].
@@ -5520,41 +5576,46 @@ Definition fast_band_tan (fma : bool) (n : Z) (rh rl rr : f64) : f64 * f64 :=
   else let '(h, l) := fast_div fma ch cl sh sl in (opp h, opp l).
 
 (** [fn fast_tan_band(n: i64, rh: f64, rl: f64) -> (f64, f64)] and [fn
-    fast_tan_band_big(x: f64) -> Option<(f64, f64)>], where [?] is a
-    [match]. Each calls its body, [fast_tan_band_body] or
-    [fast_tan_band_big_body], or its copy without an FMA, as [fast_band]
-    does. [FastTrigCore.v] proves them, with [fast_tan]. *)
+    fast_tan_band_big(n: i64, a: i64, lo: u64, x: f64) -> (f64, f64)].
+    Each calls its body, [fast_tan_band_body] or [fast_tan_band_big_body],
+    or its copy without an FMA, as [fast_band] does. [FastTrigCore.v]
+    proves them, with [fast_tan]. *)
 Definition fast_tan_band (fma : bool) (n : Z) (rh rl : f64) : f64 * f64 :=
   let '(rh, rl, rr) := fast_band_reduce fma n rh rl in
   fast_band_tan fma n rh rl rr.
 
-Definition fast_tan_band_big (fma : bool) (x : f64) : option (f64 * f64) :=
-  match fast_reduce_band_big fma x with
-  | Some (n, rh, rl, rr) => Some (fast_band_tan fma n rh rl rr)
-  | None => None
-  end.
+Definition fast_tan_band_big (fma : bool) (n a lo : Z) (x : f64) : f64 * f64 :=
+  let '(n, rh, rl, rr) := fast_reduce_band_win fma n a lo x in
+  fast_band_tan fma n rh rl rr.
 
-(** [fn fast_tan(x: f64) -> Option<(f64, f64)>], where [n & 2048] is
-    [Z.land n 2048], and the rest is as in [fast_quad]. [FastTrigCore.v]
-    proves it. *)
+(** [fn fast_tan(x: f64) -> Option<(f64, f64)>], where the [match] is as
+    in [fast_sin], the steps after it, which Rust writes once, are [quad]
+    of the [(n, rh, rl, rr)] that it gives, [n & 2048] is [Z.land n 2048],
+    and the rest is as in [fast_quad]. [FastTrigCore.v] proves it. *)
 Definition fast_tan (fma : bool) (x : f64) : option (f64 * f64) :=
-  match fast_reduce_any fma x with
-  | None => fast_tan_band_big fma x
+  let quad (n : Z) (rh rl rr : f64) :=
+    let i := Z.land n 2047 in
+    if i =? 0 then Some (fast_tan_band fma n rh rl)
+    else if eq rh zero then None
+    else
+      let '(sh, sl, ch, cl) := fast_sc fma i in
+      let '(s0, s1) := fast_eval fma sh sl ch cl rh rl rr in
+      let '(c0, c1) := fast_eval fma ch cl sh sl (opp rh) (opp rl) (opp rr) in
+      Some (if Z.land n 2048 =? 0 then fast_div fma s0 s1 c0 c1
+            else let '(h, l) := fast_div fma c0 c1 s0 s1 in (opp h, opp l)) in
+  match fast_reduce x with
   | Some (n, rh, rl, rr) =>
     if n =? 0 then
       let '(sh, sl) := fast_sin0 x in
       let '(ch, cl) := fast_cos0 x in
       Some (fast_div fma sh sl ch cl)
-    else
-      let i := Z.land n 2047 in
-      if i =? 0 then Some (fast_tan_band fma n rh rl)
-      else if eq rh zero then None
-      else
-        let '(sh, sl, ch, cl) := fast_sc fma i in
-        let '(s0, s1) := fast_eval fma sh sl ch cl rh rl rr in
-        let '(c0, c1) := fast_eval fma ch cl sh sl (opp rh) (opp rl) (opp rr) in
-        Some (if Z.land n 2048 =? 0 then fast_div fma s0 s1 c0 c1
-              else let '(h, l) := fast_div fma c0 c1 s0 s1 in (opp h, opp l))
+    else quad n rh rl rr
+  | None =>
+    match fast_reduce_big_band fma x with
+    | Red n rh rl rr => quad n rh rl rr
+    | Band n a lo => Some (fast_tan_band_big fma n a lo x)
+    | No => None
+    end
   end.
 
 (** [fn fast_unscale(h: f64, l: f64) -> (f64, f64, i64)], where

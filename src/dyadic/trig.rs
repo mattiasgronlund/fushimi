@@ -106,9 +106,10 @@
 // reduction with rh + rl within 2^-74 |ρ| of ρ, in place of the absolute bounds of
 // `fast_reduce` and `fast_reduce_big`: below `LIMIT`, `fast_band` and `fast_tan_band` refine
 // that of `fast_reduce` with the exact error of n U3 and a fourth part `U4` of u
-// (`fast_band_reduce`), and above it, `fast_band_big` and `fast_tan_band_big` recompute the
-// window of `fast_reduce_big` and read the fraction ρ/u that it gives from its leading bit
-// rather than from 2^-1 (`fast_reduce_band_big`). sin x and cos t are then ±sin ρ or ±cos ρ,
+// (`fast_band_reduce`), and above it, `fast_band_big` and `fast_tan_band_big` take the window of
+// `fast_reduce_big` where it ends at n (`fast_reduce_big_band`) and read the fraction ρ/u that it
+// gives from its leading bit rather than from 2^-1 (`fast_reduce_band_win`; the tests check the
+// two composed, `fast_reduce_band_big`). sin x and cos t are then ±sin ρ or ±cos ρ,
 // which it evaluates by their Taylor polynomials (`fast_band_sin` and `fast_cos0`), and tan x
 // is tan ρ or -1/tan ρ, from their quotient (`fast_band_tan`). Elsewhere i u + ρ lies in
 // [u/2 (1 - 2^-24), π/2 - u/2 (1 - 2^-24)], where sin and cos are above 2^-12, and the error of
@@ -597,18 +598,50 @@ fn fast_mul<const FMA: bool>(ah: f64, al: f64, bh: f64, bl: f64) -> (f64, f64) {
 // with x = N u + ρ for an integer N and n = N mod 8192, in [0, 8191], which is all that
 // `fast_quad` and `fast_tan` read of an n other than 0, as 8192 u = 2π: a reduction of Payne
 // and Hanek [Payne-Hanek], in integers, by the bits of 1/(2π) in `INV2PI`. `None` for any other
-// x, NaN included, where n mod 2048 = 0, which `fast_reduce_band_big` reduces, and where
-// |rh| < 2^-65.
+// x, NaN included, where n mod 2048 = 0, which `fast_reduce_band_win` reduces from the window
+// that `fast_reduce_big_band` hands it, and where |rh| < 2^-65.
 // `rocq/theories/FastTrigBig.v` proves these bounds (`fast_reduce_big_correct`).
-// Always inlined, into `fast_reduce_any`, whose comment gives the count of the two attributes.
-#[inline(always)]
+// `fast_reduce_big_band` is the code; this is its reduction alone, which the tests check.
+#[cfg(test)]
 fn fast_reduce_big<const FMA: bool>(x: f64) -> Option<(i64, f64, f64, f64)> {
+    match fast_reduce_big_band::<FMA>(x) {
+        BigRed::Red(n, rh, rl, rr) => Some((n, rh, rl, rr)),
+        _ => None,
+    }
+}
+
+// What `fast_reduce_big_band` finds at an x: the reduction (n, rh, rl, rr) of `fast_reduce_big`,
+// or, where n mod 2048 = 0, n and the 128 bits a 2^64 + lo of R below those of n, from which
+// `fast_reduce_band_win` reduces x, or neither.
+enum BigRed {
+    Red(i64, f64, f64, f64),
+    Band(i64, i64, u64),
+    No,
+}
+
+// `fast_reduce_big`, which hands its window to `fast_band_big` and `fast_tan_band_big` where
+// n mod 2048 = 0, so that they do not compute it again from x.
+// Always inlined, into `fast_sin`, `fast_cos` and `fast_tan`, which take the arm of `fast_reduce`
+// and then the arms of this in a `match`. Before row 177 that `match` was `fast_reduce_any`, of
+// `fast_reduce` and `fast_reduce_big`, both always inlined; in row 121 it had been
+// `fast_reduce(x).or_else(|| fast_reduce_big(x))` with neither attribute, which LLVM kept out of
+// line with the two inlined into it. With the `match` and both attributes, `sin`, `cos` and `tan`
+// took 13 to 25, 18 to 38 and 19 to 24 fewer instructions per call, in each rounding, over 4,096
+// calls on each of five sets of arguments: uniform in [0.1, 10) and [-10, 10), of either sign
+// with a magnitude log-uniform in [2^-30, 2^1024) and in [2^60, 2^1024), and the function's hard
+// cases in `src/cr/tests/mpfr/hard_cases.wc`, taken in turn, in a crate that links `cr`
+// (cachegrind, row 121). With `or_else` and both attributes, `Option::or_else` stayed out of
+// line, and in the release build of the tests the three took 24 to 31 more instructions per
+// call on the first two sets than with neither attribute.
+#[inline(always)]
+fn fast_reduce_big_band<const FMA: bool>(x: f64) -> BigRed {
     // |x| = m 2^e, with m in [2^52, 2^53) and e = be - 1075 for the biased exponent be, which
-    // is in [1039, 2046] for a finite |x| >= 2^16.
+    // is in [1039, 2046] for a finite |x| >= 2^16. be - 1039, wrapping, is above 2046 - 1039 =
+    // 1007 for any other be: one comparison.
     let b = x.to_bits() & (u64::MAX >> 1);
     let be = b >> 52;
-    if !(1039..=2046).contains(&be) {
-        return None;
+    if be.wrapping_sub(1039) > 1007 {
+        return BigRed::No;
     }
     let m = (b & ((1 << 52) - 1)) | (1 << 52);
     // |x| / (2π) = m 2^e / (2π): the bits of 1/(2π) down to 2^-e give an integer times m,
@@ -621,20 +654,28 @@ fn fast_reduce_big<const FMA: bool>(x: f64) -> Option<(i64, f64, f64, f64)> {
     let w = |j: usize| (INV2PI[i + j] << f) | ((INV2PI[i + j + 1] >> 1) >> (63 - f));
     // R = m W mod 2^192 = r2 2^128 + r1 2^64 + r0 from the three products; r0 is only the low
     // half of m w(2), whose high half carries into r1 and r2.
-    // m w(1) comes before m w(2), here and in `fast_reduce_band_big`, whose products LLVM shares
-    // with these where both are inlined. The x86-64 `mul` takes one factor in rax and writes its
-    // product to rdx:rax. In this order the low half of m w(2), which `fast_reduce_band_big`
-    // reads, stays in rax and that of m w(1) is copied out of it instead, and w(1) and w(2) are
-    // formed with one copy of a limb of `INV2PI` fewer. In the `fma_copy` of `sin`, `cos` and
-    // `tan` built for x86-64 or x86-64-v2, the steps from the test |x| >= `LIMIT` to the test of
-    // n mod 2048 then take one instruction fewer, net one `mov`, than with m w(2) first. Each of
-    // the three, in each rounding, then takes 0.95, 1.00 and 0.49 fewer instructions per call
-    // over 4,096 calls of either sign with a magnitude log-uniform in [2^-30, 2^1024), in
+    // m w(1) comes before m w(2). The x86-64 `mul` takes one factor in rax and writes its
+    // product to rdx:rax. In this order the low half of m w(2), which the band reads into lo,
+    // stays in rax and that of m w(1) is copied out of it instead, and w(1) and w(2) are formed
+    // with one copy of a limb of `INV2PI` fewer. In row 144, when `fast_reduce_band_big` still
+    // computed the window and these products again from x, in the same order, and LLVM shared
+    // its products with these where both were inlined, the steps from the test |x| >= `LIMIT` to
+    // the test of n mod 2048 in the `fma_copy` of `sin`, `cos` and `tan` built for x86-64 or
+    // x86-64-v2 took one instruction fewer, net one `mov`, than with m w(2) first. Each of the
+    // three, in each rounding, then took 0.95, 1.00 and 0.49 fewer instructions per call over
+    // 4,096 calls of either sign with a magnitude log-uniform in [2^-30, 2^1024), in
     // [2^60, 2^1024) and in [2^-1074, 2^1024), 0.99 and 0.47 fewer on the `f64`s nearest to the
     // multiples of π/2 with an exponent from 0 to 1023 and from 0 to 29, and 0.54 to 0.67 fewer
     // on its hard cases, in a crate that links `cr` (cachegrind, row 144). The Dekker copy then
-    // takes 0.02 to 0.47 fewer on the last three sets and as many as before, or at most 0.001
-    // fewer, on the others, and the haswell build as many as before on each set.
+    // took 0.02 to 0.47 fewer on the last three sets and as many as before, or at most 0.001
+    // fewer, on the others, and the haswell build as many as before on each set. Since row 177
+    // the band takes a and lo from here (`BigRed::Band`) and computes none of this again. As
+    // LLVM had shared the products in the `fma_copy` built for x86-64, the three take only 0.95
+    // to 1.18 fewer instructions per call there on the `f64`s nearest to the multiples of π/2
+    // with an exponent from 0 to 29, nearly half of them 2^16 or more in magnitude, against
+    // 32.87 to 35.53 fewer built for haswell, where the band is out of line, in a crate that
+    // links `cr` (cachegrind chase=no, row 177; the counts include the one comparison of be
+    // above and the test of n = 0 in the arm of `fast_reduce` alone, `fast_sin`).
     let p1 = u128::from(m) * u128::from(w(1));
     let p0 = u128::from(m) * u128::from(w(2));
     let c = (p0 >> 64) + (p1 & u128::from(u64::MAX));
@@ -647,13 +688,14 @@ fn fast_reduce_big<const FMA: bool>(x: f64) -> Option<(i64, f64, f64, f64)> {
     // R 2^-179 rounded to an integer, ties up, mod 8192, from r2 alone, as the bits below it
     // cannot carry into the sum, and F = R 2^-179 - that integer, in [-1/2, 1/2), is the rest.
     let n = (r2.wrapping_add(1 << 50) >> 51) as i64;
-    if n & 2047 == 0 {
-        return None;
-    }
     // a is the 64 bits of R below those of n, F 2^64 rounded down, as an `i64`, which is
     // negative where F is. fh = (a >> 11) 2^-53 and fl, the next 53 bits of R times 2^-106, are
     // exact, and F - fh - fl is in [0, 2^-106).
     let a = ((r2 << 13) | (r1 >> 51)) as i64;
+    if n & 2047 == 0 {
+        // lo is the next 64 bits of R, from r1 and r0, the low half of m w(2).
+        return BigRed::Band(n, a, (r1 << 13) | ((p0 as u64) >> 51));
+    }
     let fh = (a >> 11) as f64 * f64::from_bits(0x3ca0000000000000);
     let fl = ((r1 >> 9) & ((1 << 53) - 1)) as i64 as f64 * f64::from_bits(0x3950000000000000);
     // For x < 0, x = (-N) u - ρ.
@@ -668,31 +710,32 @@ fn fast_reduce_big<const FMA: bool>(x: f64) -> Option<(i64, f64, f64, f64)> {
     let uh = f64::from_bits(U1) + f64::from_bits(U2);
     let (rh, rl) = fast_mul::<FMA>(fh, fl, uh, f64::from_bits(U3));
     if rh.abs() < f64::from_bits(0x3be0000000000000) {
-        return None;
+        return BigRed::No;
     }
-    Some((n, rh, rl, rh + rl))
+    BigRed::Red(n, rh, rl, rh + rl)
 }
 
-// The reduction of `fast_reduce` for |x| < `LIMIT` and of `fast_reduce_big` for the others.
-// As `fast_reduce_big` never gives an n with n mod 2048 = 0, n = 0 comes only from
-// `fast_reduce`, where |x| <= u/2 (1 + 2^-24), as `fast_sin`, `fast_cos` and `fast_tan` take it.
-// `rocq/theories/FastTrigBig.v` proves it (`fast_reduce_any_correct`).
-// Always inlined, as is `fast_reduce_big`. This was `fast_reduce(x).or_else(||
-// fast_reduce_big(x))` with neither attribute, which LLVM kept out of line with the two inlined
-// into it. With the `match` and both attributes, `sin`, `cos` and `tan` take 13 to 25, 18 to 38
-// and 19 to 24 fewer instructions per call, in each rounding, over 4,096 calls on each of five
-// sets of arguments: uniform in [0.1, 10) and [-10, 10), of either sign with a magnitude
-// log-uniform in [2^-30, 2^1024) and in [2^60, 2^1024), and the function's hard cases in
-// `src/cr/tests/mpfr/hard_cases.wc`, taken in turn, in a crate that links `cr` (cachegrind,
-// row 121). With
-// `or_else` and both attributes, `Option::or_else` stayed out of line, and in the release build
-// of the tests the three took 24 to 31 more instructions per call on the first two sets than
-// with neither attribute.
-#[inline(always)]
-fn fast_reduce_any<const FMA: bool>(x: f64) -> Option<(i64, f64, f64, f64)> {
+// The reduction of `fast_reduce` for |x| < `LIMIT` and of `fast_reduce_big_band` for the others.
+// As `fast_reduce_big_band` never gives a `BigRed::Red` with n mod 2048 = 0, n = 0 comes only
+// from `fast_reduce`, where |x| <= u/2 (1 + 2^-24), as `fast_sin`, `fast_cos` and `fast_tan`
+// take it. They take these two arms themselves, so that they test n = 0 in the arm of
+// `fast_reduce` alone; this is what the tests check. `rocq/theories/FastTrigBig.v` proves it of
+// the reduction alone, `fast_reduce_any` (`fast_reduce_any_correct`). The comment of
+// `fast_reduce_big_band` gives the count of the `match` from row 121.
+#[cfg(test)]
+fn fast_reduce_any_band<const FMA: bool>(x: f64) -> BigRed {
     match fast_reduce(x) {
-        Some(r) => Some(r),
-        None => fast_reduce_big::<FMA>(x),
+        Some((n, rh, rl, rr)) => BigRed::Red(n, rh, rl, rr),
+        None => fast_reduce_big_band::<FMA>(x),
+    }
+}
+
+// The reduction alone of `fast_reduce_any_band`, which the tests check.
+#[cfg(test)]
+fn fast_reduce_any<const FMA: bool>(x: f64) -> Option<(i64, f64, f64, f64)> {
+    match fast_reduce_any_band::<FMA>(x) {
+        BigRed::Red(n, rh, rl, rr) => Some((n, rh, rl, rr)),
+        _ => None,
     }
 }
 
@@ -705,38 +748,28 @@ fn fast_reduce_any<const FMA: bool>(x: f64) -> Option<(i64, f64, f64, f64)> {
 // those of `fast_reduce_big`, and so are their integers. F, R 2^-179 less the integer nearest it
 // as in `fast_reduce_big`, is then read from the first bit after its sign rather than from 2^-1:
 // 106 of the 128 bits of R below those of n. The last 13 of those 128 come from the low limb r0
-// of R, which `fast_reduce_big` does not read. `rocq/theories/FastTrigBandBig.v` proves these
-// bounds (`fast_reduce_band_big_correct`).
-#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
+// of R, which `fast_reduce_big_band` reads only for the band. `rocq/theories/FastTrigBandBig.v`
+// proves these bounds (`fast_reduce_band_big_correct`).
+// `fast_reduce_big_band` and `fast_reduce_band_win` are the code; this is the two composed, which
+// the tests check.
+#[cfg(test)]
 fn fast_reduce_band_big<const FMA: bool>(x: f64) -> Option<(i64, f64, f64, f64)> {
-    let b = x.to_bits() & (u64::MAX >> 1);
-    let be = b >> 52;
-    if !(1039..=2046).contains(&be) {
-        return None;
+    match fast_reduce_big_band::<FMA>(x) {
+        BigRed::Band(n, a, lo) => Some(fast_reduce_band_win::<FMA>(n, a, lo, x)),
+        _ => None,
     }
-    let m = (b & ((1 << 52) - 1)) | (1 << 52);
-    let k = (be - 1011) as usize;
-    let (i, f) = (k >> 6, k & 63);
-    let w = |j: usize| (INV2PI[i + j] << f) | ((INV2PI[i + j + 1] >> 1) >> (63 - f));
-    let p1 = u128::from(m) * u128::from(w(1));
-    let p0 = u128::from(m) * u128::from(w(2));
-    let c = (p0 >> 64) + (p1 & u128::from(u64::MAX));
-    let r1 = c as u64;
-    let r2 = m
-        .wrapping_mul(w(0))
-        .wrapping_add((p1 >> 64) as u64)
-        .wrapping_add((c >> 64) as u64);
-    let n = (r2.wrapping_add(1 << 50) >> 51) as i64;
-    if n & 2047 != 0 {
-        return None;
-    }
+}
+
+// The steps of `fast_reduce_band_big` after lo: it starts from the n, a and lo of
+// `fast_reduce_big_band` at x, `BigRed::Band(n, a, lo)`, rather than from x, and reads only the
+// sign of x.
+#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
+fn fast_reduce_band_win<const FMA: bool>(n: i64, a: i64, lo: u64, x: f64) -> (i64, f64, f64, f64) {
     // a 2^64 + lo = A, the 128 bits of R below those of n, F 2^128 rounded down, with a an `i64`,
     // as in `fast_reduce_big`, and lo the next 64 bits, from r1 and r0, the low half of m w(2).
     // s is the number of bits below the sign bit of a that repeat it, at most 49, as
     // |F| >= 2^-61/u > 2^-50.7 gives |a| > 2^13. t 2^64 + v = A 2^s, with 2^62 <= |t| <= 2^63;
     // `>> 1 >> (63 - s)` is `>> (64 - s)`, which is not defined at s = 0.
-    let a = ((r2 << 13) | (r1 >> 51)) as i64;
-    let lo = (r1 << 13) | ((p0 as u64) >> 51);
     let s = (a ^ (a >> 63)).leading_zeros() - 1;
     let t = (a << s) | (((lo >> 1) >> (63 - s)) as i64);
     let v = lo << s;
@@ -752,7 +785,7 @@ fn fast_reduce_band_big<const FMA: bool>(x: f64) -> Option<(i64, f64, f64, f64)>
     };
     let uh = f64::from_bits(U1) + f64::from_bits(U2);
     let (rh, rl) = fast_mul::<FMA>(fh, fl, uh, f64::from_bits(U3));
-    Some((n, rh, rl, rh + rl))
+    (n, rh, rl, rh + rl)
 }
 
 // (sh, sl, ch, cl) with sh + sl and ch + cl sin and cos of i u, for i in [1, 2047], from the
@@ -908,31 +941,31 @@ fn fast_band_body<const FMA: bool>(n: i64, s: i64, rh: f64, rl: f64) -> (f64, f6
 }
 
 // sin(x + s π/2) as h + l, as `fast_band`, for the x where `fast_reduce_big` declines x as
-// n mod 2048 = 0, from the reduction of `fast_reduce_band_big`, and `None` at any other x, such
-// as those where it declines x as |rh| < 2^-65, NaN and the infinities. Out of line, and inlined
-// in `fma_copy`, as `fast_band`.
+// n mod 2048 = 0, from the reduction of `fast_reduce_band_win`. It takes the
+// `BigRed::Band(n, a, lo)` of `fast_reduce_big_band` at x, rather than x alone. Out of line, and
+// inlined in `fma_copy`, as `fast_band`.
 #[cfg_attr(not(fushimi_kernel_dispatch), inline(never))]
 #[cfg_attr(fushimi_kernel_dispatch, inline(always))]
-fn fast_band_big<const FMA: bool>(x: f64, s: i64) -> Option<(f64, f64)> {
+fn fast_band_big<const FMA: bool>(n: i64, a: i64, lo: u64, x: f64, s: i64) -> (f64, f64) {
     #[cfg(fushimi_kernel_dispatch)]
     if !FMA {
-        return fast_band_big_dekker(x, s);
+        return fast_band_big_dekker(n, a, lo, x, s);
     }
-    fast_band_big_body::<FMA>(x, s)
+    fast_band_big_body::<FMA>(n, a, lo, x, s)
 }
 
 // The copy of `fast_band_big` without an FMA in a build with the dispatch.
 #[cfg(fushimi_kernel_dispatch)]
 #[inline(never)]
-fn fast_band_big_dekker(x: f64, s: i64) -> Option<(f64, f64)> {
-    fast_band_big_body::<false>(x, s)
+fn fast_band_big_dekker(n: i64, a: i64, lo: u64, x: f64, s: i64) -> (f64, f64) {
+    fast_band_big_body::<false>(n, a, lo, x, s)
 }
 
 // The body of `fast_band_big`, which `rocq/theories/Model.v` transcribes as `fast_band_big`.
 #[inline(always)]
-fn fast_band_big_body<const FMA: bool>(x: f64, s: i64) -> Option<(f64, f64)> {
-    let (n, rh, rl, rr) = fast_reduce_band_big::<FMA>(x)?;
-    Some(fast_band_eval((n >> 11) + s, rh, rl, rr))
+fn fast_band_big_body<const FMA: bool>(n: i64, a: i64, lo: u64, x: f64, s: i64) -> (f64, f64) {
+    let (n, rh, rl, rr) = fast_reduce_band_win::<FMA>(n, a, lo, x);
+    fast_band_eval((n >> 11) + s, rh, rl, rr)
 }
 
 // sin(x + s π/2) as h + l, from the reduction (n, rh, rl, rr) of x with n != 0, and `None`
@@ -969,29 +1002,33 @@ fn fast_quad<const FMA: bool>(n: i64, s: i64, rh: f64, rl: f64, rr: f64) -> Opti
 // 107).
 #[inline(always)]
 fn fast_sin<const FMA: bool>(x: f64) -> Option<(f64, f64)> {
-    let (n, rh, rl, rr) = match fast_reduce_any::<FMA>(x) {
+    // n = 0 comes only from `fast_reduce`, as `fast_reduce_big_band` gives no `BigRed::Red` with
+    // n mod 2048 = 0, so it is tested in that arm alone, as in `fast_cos` and `fast_tan`.
+    let (n, rh, rl, rr) = match fast_reduce(x) {
+        Some((0, ..)) => return Some(fast_sin0(x)),
         Some(r) => r,
-        None => return fast_band_big::<FMA>(x, 0),
+        None => match fast_reduce_big_band::<FMA>(x) {
+            BigRed::Red(n, rh, rl, rr) => (n, rh, rl, rr),
+            BigRed::Band(n, a, lo) => return Some(fast_band_big::<FMA>(n, a, lo, x, 0)),
+            BigRed::No => return None,
+        },
     };
-    if n == 0 {
-        Some(fast_sin0(x))
-    } else {
-        fast_quad::<FMA>(n, 0, rh, rl, rr)
-    }
+    fast_quad::<FMA>(n, 0, rh, rl, rr)
 }
 
 // cos t as h + l, as `fast_sin` does sin x, for t = |x| (`fast_cos_correct`).
 #[inline(always)]
 fn fast_cos<const FMA: bool>(t: f64) -> Option<(f64, f64)> {
-    let (n, rh, rl, rr) = match fast_reduce_any::<FMA>(t) {
+    let (n, rh, rl, rr) = match fast_reduce(t) {
+        Some((0, ..)) => return Some(fast_cos0(t)),
         Some(r) => r,
-        None => return fast_band_big::<FMA>(t, 1),
+        None => match fast_reduce_big_band::<FMA>(t) {
+            BigRed::Red(n, rh, rl, rr) => (n, rh, rl, rr),
+            BigRed::Band(n, a, lo) => return Some(fast_band_big::<FMA>(n, a, lo, t, 1)),
+            BigRed::No => return None,
+        },
     };
-    if n == 0 {
-        Some(fast_cos0(t))
-    } else {
-        fast_quad::<FMA>(n, 1, rh, rl, rr)
-    }
+    fast_quad::<FMA>(n, 1, rh, rl, rr)
 }
 
 // (nh + nl) / (dh + dl) as h + l, h = RN(h + l): qh = RN(nh / dh), and the remainder
@@ -1051,27 +1088,27 @@ fn fast_tan_band_body<const FMA: bool>(n: i64, rh: f64, rl: f64) -> (f64, f64) {
 // `fast_band`.
 #[cfg_attr(not(fushimi_kernel_dispatch), inline(never))]
 #[cfg_attr(fushimi_kernel_dispatch, inline(always))]
-fn fast_tan_band_big<const FMA: bool>(x: f64) -> Option<(f64, f64)> {
+fn fast_tan_band_big<const FMA: bool>(n: i64, a: i64, lo: u64, x: f64) -> (f64, f64) {
     #[cfg(fushimi_kernel_dispatch)]
     if !FMA {
-        return fast_tan_band_big_dekker(x);
+        return fast_tan_band_big_dekker(n, a, lo, x);
     }
-    fast_tan_band_big_body::<FMA>(x)
+    fast_tan_band_big_body::<FMA>(n, a, lo, x)
 }
 
 // The copy of `fast_tan_band_big` without an FMA in a build with the dispatch.
 #[cfg(fushimi_kernel_dispatch)]
 #[inline(never)]
-fn fast_tan_band_big_dekker(x: f64) -> Option<(f64, f64)> {
-    fast_tan_band_big_body::<false>(x)
+fn fast_tan_band_big_dekker(n: i64, a: i64, lo: u64, x: f64) -> (f64, f64) {
+    fast_tan_band_big_body::<false>(n, a, lo, x)
 }
 
 // The body of `fast_tan_band_big`, which `rocq/theories/Model.v` transcribes as
 // `fast_tan_band_big`.
 #[inline(always)]
-fn fast_tan_band_big_body<const FMA: bool>(x: f64) -> Option<(f64, f64)> {
-    let (n, rh, rl, rr) = fast_reduce_band_big::<FMA>(x)?;
-    Some(fast_band_tan::<FMA>(n, rh, rl, rr))
+fn fast_tan_band_big_body<const FMA: bool>(n: i64, a: i64, lo: u64, x: f64) -> (f64, f64) {
+    let (n, rh, rl, rr) = fast_reduce_band_win::<FMA>(n, a, lo, x);
+    fast_band_tan::<FMA>(n, rh, rl, rr)
 }
 
 // tan x as h + l, as `fast_sin` does sin x: sin and cos from the same reduction and `fast_sc`,
@@ -1080,24 +1117,28 @@ fn fast_tan_band_big_body<const FMA: bool>(x: f64) -> Option<(f64, f64)> {
 // Always inlined, into `tan_dir_fast` and `fast_tan_near`. Before row 177 it had no attribute
 // in the builds without the dispatch, and the one for haswell kept it out of line, with all of
 // `tan_dir_with` in one function. `tan` then took 4.4 to 12.5 more instructions per call than
-// now over 4,096 calls uniform in [0.1, 10), [-10, 10) and [-π/4, π/4), of either sign with a
-// magnitude log-uniform in [2^-30, 2^1024), [2^60, 2^1024) and [2^-1074, 2^1024), on the
-// `f64`s nearest to the multiples of π/2 and, rounded to nearest, on the `f64`s nearest to
-// 2^-26, and 9.1 to 10.6 more on its hard cases in `src/cr/tests/mpfr/hard_cases.wc`, but
-// rounded down or up only 1 more on the `f64`s nearest to 2^-26, which its rules decide (a
-// crate that links `cr`, built for haswell, cachegrind chase=no, row 177). Rounded to nearest,
-// that is the inlining alone; rounded down or up, the split into `tan_dir_fast` too, which
-// says what that costs.
+// with the attribute over 4,096 calls uniform in [0.1, 10), [-10, 10) and [-π/4, π/4), of
+// either sign with a magnitude log-uniform in [2^-30, 2^1024), [2^60, 2^1024) and
+// [2^-1074, 2^1024), on the `f64`s nearest to the multiples of π/2 and, rounded to nearest, on
+// the `f64`s nearest to 2^-26, and 9.1 to 10.6 more on its hard cases in
+// `src/cr/tests/mpfr/hard_cases.wc`, but rounded down or up only 1 more on the `f64`s nearest
+// to 2^-26, which its rules decide (a crate that links `cr`, built for haswell, cachegrind
+// chase=no, row 177, at e9e5ae5). Rounded to nearest, that is the inlining alone; rounded down
+// or up, the split into `tan_dir_fast` too, which says what that costs.
 #[inline(always)]
 fn fast_tan<const FMA: bool>(x: f64) -> Option<(f64, f64)> {
-    let (n, rh, rl, rr) = match fast_reduce_any::<FMA>(x) {
+    let (n, rh, rl, rr) = match fast_reduce(x) {
+        Some((0, ..)) => {
+            let ((sh, sl), (ch, cl)) = (fast_sin0(x), fast_cos0(x));
+            return Some(fast_div::<FMA>(sh, sl, ch, cl));
+        }
         Some(r) => r,
-        None => return fast_tan_band_big::<FMA>(x),
+        None => match fast_reduce_big_band::<FMA>(x) {
+            BigRed::Red(n, rh, rl, rr) => (n, rh, rl, rr),
+            BigRed::Band(n, a, lo) => return Some(fast_tan_band_big::<FMA>(n, a, lo, x)),
+            BigRed::No => return None,
+        },
     };
-    if n == 0 {
-        let ((sh, sl), (ch, cl)) = (fast_sin0(x), fast_cos0(x));
-        return Some(fast_div::<FMA>(sh, sl, ch, cl));
-    }
     let i = n & 2047;
     if i == 0 {
         return Some(fast_tan_band::<FMA>(n, rh, rl));

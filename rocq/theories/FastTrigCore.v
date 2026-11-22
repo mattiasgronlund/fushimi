@@ -4,18 +4,21 @@
     return [(h, l)] at an [x] with [|x| >= 2^-27], [h + l] is sin x, cos x
     or tan x within a relative 2^-71, 2^-71 and [3 * 2^-71], with [h =
     RN(h + l)] and [2^-1000 <= |h| <= 2^1000] ([fast_sin_correct] and the
-    others): with [n = 2048 q + i] from [DyadicTrig.fast_reduce_any]
-    ([FastTrigReduce.v] below 2^16, [FastTrigBig.v] above), x = 2π k + q
-    π/2 + i π/4096 + ρ for an integer [k], and sin x and cos x are [±]
+    others): with [n = 2048 q + i] from [DyadicTrig.fast_reduce] below
+    2^16 ([FastTrigReduce.v]) or from the [Red] of
+    [DyadicTrig.fast_reduce_big_band] above ([FastTrigBig.v]), x = 2π k +
+    q π/2 + i π/4096 + ρ for an integer [k], and sin x and cos x are [±]
     [fast_eval] at [j = i] and ρ, or at [j = 2048 - i] and [-ρ]. In the
     band, where [i = 0] and [n <> 0], ρ is at least 2^-61 in magnitude
-    while the error of [fast_reduce_any] is absolute, so
+    while the error of the reduction is absolute, so
     [DyadicTrig.fast_band] refines ρ to a relative 2^-74 below 2^16
-    ([FastTrigBandRed.v]), and [DyadicTrig.fast_band_big] recomputes it
-    above ([FastTrigBandBig.v]), where [fast_reduce_big] declines the
-    band; sin x and cos x are then [±] sin ρ or [±] cos ρ, and tan x is
-    tan ρ or -cot ρ ([FastTrigBandEval.v]). They return the same with and
-    without an FMA ([fast_sin_fma] and the others). *)
+    ([FastTrigBandRed.v]). Above 2^16, [fast_reduce_big_band] gives the
+    band as [Band n a lo] instead, with the bits of the window below those
+    of [n], from which [DyadicTrig.fast_band_big] computes ρ to a relative
+    2^-74 ([fast_reduce_band_win], [FastTrigBandBig.v]). Sin x and cos x
+    are then [±] sin ρ or [±] cos ρ, and tan x is tan ρ or -cot ρ
+    ([FastTrigBandEval.v]). They return the same with and without an FMA
+    ([fast_sin_fma] and the others). *)
 
 From Stdlib Require Import ZArith Reals Lra Lia.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
@@ -405,9 +408,13 @@ Qed.
 
 (** ** The quadrant *)
 
-(** What [fast_reduce_any] gives where [fast_quad] and [fast_tan] go on:
-    [n = 2048 q + i] with [1 <= i <= 2047], and the premises of
-    [eval_both] at ρ = x - 2π j - n π/4096 for an integer [j].
+(** What [fast_reduce_any] gives where [fast_quad] and the steps of
+    [fast_tan] go on: [n = 2048 q + i] with [1 <= i <= 2047], and the
+    premises of [eval_both] at ρ = x - 2π j - n π/4096 for an integer [j].
+    [fast_reduce_any] is the tests' merge of [fast_reduce] and
+    [fast_reduce_big], the [Red] of [fast_reduce_big_band], which
+    [fast_sin] and the others take in turn ([any_reduce] and [any_red]
+    below).
     [fast_reduce_any_correct] gives an [N] equal to [n] modulo 8192 and the
     bounds at ρ = x - N π/4096; with [N - n = 8192 j], N π/4096 is 2π j +
     n π/4096. *)
@@ -476,6 +483,67 @@ split; [exact (pair_out h l v _ Fh Fl Hrn Hk Hy' Hw) |].
 destruct (pair_opp h l v _ Fh Fl Hrn Hy') as (Fh' & Fl' & Hrn' & Hy'').
 rewrite <- (Rabs_Ropp v) in Hy'', Hw.
 exact (pair_out (opp h) (opp l) (- v) _ Fh' Fl' Hrn' Hk Hy'' Hw).
+Qed.
+
+(** [fast_sin] and the others match [fast_reduce] first and then
+    [fast_reduce_big_band]. A [Some] of [fast_reduce], and a [Red] of
+    [fast_reduce_big_band] where [fast_reduce] gives [None], are
+    reductions of [fast_reduce_any], which the lemmas here take, and at a
+    [Band n a lo], [fast_reduce_band_big] is [fast_reduce_band_win] of
+    [n], [a] and [lo]. *)
+Local Lemma any_reduce :
+  forall fma x r, DyadicTrig.fast_reduce x = Some r -> DyadicTrig.fast_reduce_any fma x = Some r.
+Proof. intros fma x r R. unfold DyadicTrig.fast_reduce_any. rewrite R. reflexivity. Qed.
+
+Local Lemma any_red :
+  forall fma x n rh rl rr, DyadicTrig.fast_reduce x = None ->
+  DyadicTrig.fast_reduce_big_band fma x = DyadicTrig.Red n rh rl rr ->
+  DyadicTrig.fast_reduce_any fma x = Some (n, rh, rl, rr).
+Proof.
+intros fma x n rh rl rr R B.
+unfold DyadicTrig.fast_reduce_any, DyadicTrig.fast_reduce_big. rewrite R, B. reflexivity.
+Qed.
+
+(** At [Red], [n mod 2048 <> 0], so [n <> 0] ([fast_reduce_big_correct]). *)
+Local Lemma red_n0 :
+  forall x n rh rl rr, DyadicTrig.fast_reduce_big_band false x = DyadicTrig.Red n rh rl rr ->
+  n <> 0%Z.
+Proof.
+intros x n rh rl rr B.
+assert (R : DyadicTrig.fast_reduce_big false x = Some (n, rh, rl, rr))
+  by (unfold DyadicTrig.fast_reduce_big; rewrite B; reflexivity).
+destruct (fast_reduce_big_correct x n rh rl rr R) as (_ & _ & _ & L & _).
+intros ->. apply L. reflexivity.
+Qed.
+
+Local Lemma band_some :
+  forall fma x n a lo, DyadicTrig.fast_reduce_big_band fma x = DyadicTrig.Band n a lo ->
+  DyadicTrig.fast_reduce_band_big fma x = Some (DyadicTrig.fast_reduce_band_win fma n a lo x).
+Proof. intros fma x n a lo B. unfold DyadicTrig.fast_reduce_band_big. rewrite B. reflexivity. Qed.
+
+(** [fast_reduce_big_band] with and without an FMA gives the same arm,
+    with the same reduction at [Red] and the same result of
+    [fast_reduce_band_win] at [Band] ([fast_reduce_big_fma] and
+    [fast_reduce_band_big_fma]). *)
+Local Lemma big_band_fma :
+  forall x,
+  match DyadicTrig.fast_reduce_big_band true x, DyadicTrig.fast_reduce_big_band false x with
+  | DyadicTrig.Red n rh rl rr, DyadicTrig.Red n' rh' rl' rr' =>
+    (n, rh, rl, rr) = (n', rh', rl', rr')
+  | DyadicTrig.Band n a lo, DyadicTrig.Band n' a' lo' =>
+    DyadicTrig.fast_reduce_band_win true n a lo x =
+    DyadicTrig.fast_reduce_band_win false n' a' lo' x
+  | DyadicTrig.No, DyadicTrig.No => True
+  | _, _ => False
+  end.
+Proof.
+intros x.
+pose proof (fast_reduce_big_fma x) as E1. pose proof (fast_reduce_band_big_fma x) as E2.
+unfold DyadicTrig.fast_reduce_big in E1. unfold DyadicTrig.fast_reduce_band_big in E2.
+destruct (DyadicTrig.fast_reduce_big_band true x) as [n rh rl rr | n a lo |];
+  destruct (DyadicTrig.fast_reduce_big_band false x) as [n' rh' rl' rr' | n' a' lo' |];
+  cbn beta iota in E1, E2 |- *; try discriminate; try exact I.
+all: apply some_eq; assumption.
 Qed.
 
 (** A reduction of [fast_reduce_any] at a multiple of 2048 comes from
@@ -590,24 +658,26 @@ destruct (Z.land n 2047 =? 0)%Z eqn:Ei.
     destruct (Z.land (Z.shiftr n 11 + s) 2 =? 0); injection Q as Eh El; subst; assumption.
 Qed.
 
-(** [fast_band_big] at [s] gives sin (x + s π/2): [fast_reduce_band_big]
-    gives the premises of [band_quad] at ρ = x - N π/4096. *)
+(** [fast_band_big] at [s] gives sin (x + s π/2), from the [Band n a lo]
+    of [fast_reduce_big_band] at [x]: [fast_reduce_band_big] gives the
+    premises of [band_quad] at ρ = x - N π/4096 for the window of
+    [fast_reduce_band_win] that [fast_band_big] evaluates. *)
 Lemma band_big_quad :
-  forall x s h l,
-  DyadicTrig.fast_band_big false x s = Some (h, l) ->
+  forall x n a lo s h l,
+  DyadicTrig.fast_reduce_big_band false x = DyadicTrig.Band n a lo ->
+  DyadicTrig.fast_band_big false n a lo x s = (h, l) ->
   is_finite h = true /\ is_finite l = true /\ B2R h = RN (B2R h + B2R l) /\
   bpow radix2 (-1000) <= Rabs (B2R h) <= bpow radix2 1000 /\
   Rabs (sin (B2R x + IZR s * (PI / 2)) - (B2R h + B2R l)) <=
     bpow radix2 (-71) * Rabs (sin (B2R x + IZR s * (PI / 2))).
 Proof.
-intros x s h l F. unfold DyadicTrig.fast_band_big in F.
-destruct (DyadicTrig.fast_reduce_band_big false x) as [[[[n rh] rl] rr] |] eqn:R;
-  [| discriminate F].
-cbn beta iota in F. apply some_eq in F.
-destruct (fast_reduce_band_big_correct x n rh rl rr R)
+intros x n a lo s h l B F. unfold DyadicTrig.fast_band_big in F.
+pose proof (band_some false x n a lo B) as R.
+destruct (DyadicTrig.fast_reduce_band_win false n a lo x) as [[[nw rh] rl] rr].
+destruct (fast_reduce_band_big_correct x nw rh rl rr R)
   as (_ & _ & _ & L & Frh & Frl & Frr & Err & N & Nm & Hrho & Erho & Hrl).
 subst rr.
-exact (band_quad x n s (N / 8192) rh rl (add rh rl) _ h l L (big_rho x N n Nm) Frh Frl Frr
+exact (band_quad x nw s (N / 8192) rh rl (add rh rl) _ h l L (big_rho x N nw Nm) Frh Frl Frr
   (rr_rn rh rl Frh Frl Frr) Hrho Erho Hrl F).
 Qed.
 
@@ -646,10 +716,9 @@ Theorem fast_sin_correct :
   Rabs (sin (B2R x) - (B2R h + B2R l)) <= bpow radix2 (-71) * Rabs (sin (B2R x)).
 Proof.
 intros x h l Fx Hx F. unfold DyadicTrig.fast_sin in F.
-destruct (DyadicTrig.fast_reduce_any false x) as [[[[n rh] rl] rr] |] eqn:R.
+destruct (DyadicTrig.fast_reduce x) as [[[[n rh] rl] rr] |] eqn:R0.
 - destruct (n =? 0)%Z eqn:N0.
   + apply Z.eqb_eq in N0. subst n.
-    pose proof (proj1 (fast_reduce_any_correct x 0 rh rl rr R) eq_refl) as R0.
     destruct (fast_reduce_correct x 0 rh rl rr R0) as (_ & _ & _ & _ & _ & _ & _ & _ & Erho & _).
     rewrite Rmult_0_l, Rminus_0_r in Erho.
     pose proof (fast_sin0_correct x Fx (conj Hx Erho)) as S0.
@@ -659,11 +728,18 @@ destruct (DyadicTrig.fast_reduce_any false x) as [[[[n rh] rl] rr] |] eqn:R.
     pose proof (sin_small (B2R x) (conj Hx (n0_small _ Erho))) as Hs.
     exact (pair_out h l _ _ Fh Fl Hrn k71 Er (small_range _ Hs)).
   + apply Z.eqb_neq in N0.
-    pose proof (quad_correct x n rh rl rr 0 h l R N0 F) as Qc.
+    pose proof (quad_correct x n rh rl rr 0 h l (any_reduce false x _ R0) N0 F) as Qc.
     rewrite Rmult_0_l, Rplus_0_r in Qc. exact Qc.
-- (* the band above 2^16 *)
-  pose proof (band_big_quad x 0 h l F) as Qc.
-  rewrite Rmult_0_l, Rplus_0_r in Qc. exact Qc.
+- (* above 2^16 *)
+  destruct (DyadicTrig.fast_reduce_big_band false x) as [n rh rl rr | n a lo |] eqn:B.
+  + pose proof (quad_correct x n rh rl rr 0 h l (any_red false x n rh rl rr R0 B)
+      (red_n0 x n rh rl rr B) F) as Qc.
+    rewrite Rmult_0_l, Rplus_0_r in Qc. exact Qc.
+  + (* the band *)
+    apply some_eq in F.
+    pose proof (band_big_quad x n a lo 0 h l B F) as Qc.
+    rewrite Rmult_0_l, Rplus_0_r in Qc. exact Qc.
+  + discriminate F.
 Qed.
 
 Theorem fast_cos_correct :
@@ -675,10 +751,9 @@ Theorem fast_cos_correct :
   Rabs (cos (B2R t) - (B2R h + B2R l)) <= bpow radix2 (-71) * Rabs (cos (B2R t)).
 Proof.
 intros t h l Ft Ht F. unfold DyadicTrig.fast_cos in F.
-destruct (DyadicTrig.fast_reduce_any false t) as [[[[n rh] rl] rr] |] eqn:R.
+destruct (DyadicTrig.fast_reduce t) as [[[[n rh] rl] rr] |] eqn:R0.
 - destruct (n =? 0)%Z eqn:N0.
   + apply Z.eqb_eq in N0. subst n.
-    pose proof (proj1 (fast_reduce_any_correct t 0 rh rl rr R) eq_refl) as R0.
     destruct (fast_reduce_correct t 0 rh rl rr R0) as (_ & _ & _ & _ & _ & _ & _ & _ & Erho & _).
     rewrite Rmult_0_l, Rminus_0_r in Erho.
     pose proof (fast_cos0_correct t Ft (conj Ht Erho)) as C0.
@@ -694,15 +769,24 @@ destruct (DyadicTrig.fast_reduce_any false t) as [[[[n rh] rl] rr] |] eqn:R.
       lra. }
     exact (pair_out h l _ _ Fh Fl Hrn k71 Er2 (small_range _ Hc')).
   + apply Z.eqb_neq in N0.
-    pose proof (quad_correct t n rh rl rr 1 h l R N0 F) as Qc.
+    pose proof (quad_correct t n rh rl rr 1 h l (any_reduce false t _ R0) N0 F) as Qc.
     replace (sin (B2R t + 1 * (PI / 2))) with (cos (B2R t)) in Qc
       by (rewrite cos_sin; f_equal; ring).
     exact Qc.
-- (* the band above 2^16 *)
-  pose proof (band_big_quad t 1 h l F) as Qc.
-  replace (sin (B2R t + 1 * (PI / 2))) with (cos (B2R t)) in Qc
-    by (rewrite cos_sin; f_equal; ring).
-  exact Qc.
+- (* above 2^16 *)
+  destruct (DyadicTrig.fast_reduce_big_band false t) as [n rh rl rr | n a lo |] eqn:B.
+  + pose proof (quad_correct t n rh rl rr 1 h l (any_red false t n rh rl rr R0 B)
+      (red_n0 t n rh rl rr B) F) as Qc.
+    replace (sin (B2R t + 1 * (PI / 2))) with (cos (B2R t)) in Qc
+      by (rewrite cos_sin; f_equal; ring).
+    exact Qc.
+  + (* the band *)
+    apply some_eq in F.
+    pose proof (band_big_quad t n a lo 1 h l B F) as Qc.
+    replace (sin (B2R t + 1 * (PI / 2))) with (cos (B2R t)) in Qc
+      by (rewrite cos_sin; f_equal; ring).
+    exact Qc.
+  + discriminate F.
 Qed.
 
 (** The constant of [fast_tan_correct], and the range of its quotients. *)
@@ -774,6 +858,106 @@ assert (T : tan (B2R x) = tan (IZR (Z.shiftr n 11) * (PI / 2) + rho)).
 rewrite T, tan_quad by assumption. exact B.
 Qed.
 
+(** [tan_steps] is the local [quad] of [DyadicTrig.fast_tan]: the steps
+    after the reduction, which [fast_tan] takes at the nonzero [n] of
+    [fast_reduce] and at the [Red] of [fast_reduce_big_band]. [tan_quad_eq]
+    checks by [reflexivity] that it is that [quad]. *)
+Local Definition tan_steps (fma : bool) (n : Z) (rh rl rr : f64) : option (f64 * f64) :=
+  let i := Z.land n 2047 in
+  if (i =? 0)%Z then Some (DyadicTrig.fast_tan_band fma n rh rl)
+  else if eq rh zero then None
+  else
+    let '(sh, sl, ch, cl) := DyadicTrig.fast_sc fma i in
+    let '(s0, s1) := DyadicTrig.fast_eval fma sh sl ch cl rh rl rr in
+    let '(c0, c1) := DyadicTrig.fast_eval fma ch cl sh sl (opp rh) (opp rl) (opp rr) in
+    Some (if (Z.land n 2048 =? 0)%Z then DyadicTrig.fast_div fma s0 s1 c0 c1
+          else let '(h, l) := DyadicTrig.fast_div fma c0 c1 s0 s1 in (opp h, opp l)).
+
+Local Lemma tan_quad_eq :
+  forall fma x,
+  DyadicTrig.fast_tan fma x =
+  match DyadicTrig.fast_reduce x with
+  | Some (n, rh, rl, rr) =>
+    if (n =? 0)%Z then
+      let '(sh, sl) := DyadicTrig.fast_sin0 x in
+      let '(ch, cl) := DyadicTrig.fast_cos0 x in
+      Some (DyadicTrig.fast_div fma sh sl ch cl)
+    else tan_steps fma n rh rl rr
+  | None =>
+    match DyadicTrig.fast_reduce_big_band fma x with
+    | DyadicTrig.Red n rh rl rr => tan_steps fma n rh rl rr
+    | DyadicTrig.Band n a lo => Some (DyadicTrig.fast_tan_band_big fma n a lo x)
+    | DyadicTrig.No => None
+    end
+  end.
+Proof. reflexivity. Qed.
+
+(** [tan_steps] gives tan x, for a nonzero [n] of a reduction of
+    [fast_reduce_any]. *)
+Local Lemma tan_steps_correct :
+  forall x n rh rl rr h l,
+  DyadicTrig.fast_reduce_any false x = Some (n, rh, rl, rr) -> n <> 0%Z ->
+  tan_steps false n rh rl rr = Some (h, l) ->
+  is_finite h = true /\ is_finite l = true /\ B2R h = RN (B2R h + B2R l) /\
+  bpow radix2 (-1000) <= Rabs (B2R h) <= bpow radix2 1000 /\
+  Rabs (tan (B2R x) - (B2R h + B2R l)) <= 3 * bpow radix2 (-71) * Rabs (tan (B2R x)).
+Proof.
+intros x n rh rl rr h l R N0 F. unfold tan_steps in F. cbv zeta in F.
+destruct (Z.land n 2047 =? 0)%Z eqn:Ei.
+- (* the band below 2^16: [fast_band_reduce] refines ρ = x - n π/4096 *)
+  apply Z.eqb_eq in Ei. apply some_eq in F.
+  pose proof (reduce_any_band x n rh rl rr R Ei) as R0.
+  pose proof (fast_band_reduce_correct x n rh rl rr R0 Ei N0) as BR.
+  unfold DyadicTrig.fast_tan_band in F.
+  destruct (DyadicTrig.fast_band_reduce false n rh rl) as [[sh sl] sr].
+  destruct BR as (Fsh & Fsl & Fsr & Esr & Hrho & Err & Hsl). subst sr.
+  assert (E0 : B2R x - IZR n * (PI / 4096) = B2R x - IZR 0 * (2 * PI) - IZR n * (PI / 4096))
+    by ring.
+  exact (band_tan_out x n 0 sh sl (add sh sl) _ h l Ei E0 Fsh Fsl Fsr
+    (rr_rn sh sl Fsh Fsl Fsr) Hrho Err Hsl F).
+- destruct (eq rh zero) eqn:Ez; [discriminate F |].
+  destruct (quad_setup x n rh rl rr R Ei Ez)
+    as (Hi & Sn & Frh & Frl & Frr & Hrr & Hrl & Hrh & j & Hrho & Err).
+  (* sin and cos have period 2π, so tan x = tan (x - 2π j). *)
+  assert (T : tan (B2R x) = tan (B2R x - IZR j * (2 * PI))).
+  { unfold tan. rewrite (tp_sin_sub (B2R x) j), (tp_cos_sub (B2R x) j).
+    replace (2 * IZR j * PI) with (IZR j * (2 * PI)) by ring. reflexivity. }
+  rewrite T. clear T.
+  set (z := B2R x - IZR j * (2 * PI)) in *.
+  pose proof (eval_both _ rh rl rr _ Hi Frh Frl Frr Hrr Hrho Err Hrl Hrh) as EB.
+  set (y := IZR (Z.land n 2047) * (PI / 4096) + (z - IZR n * (PI / 4096))) in EB.
+  assert (A : tan z = tan (IZR (Z.shiftr n 11) * (PI / 2) + y))
+    by (unfold y; f_equal; rewrite Sn; field).
+  rewrite A. clear A.
+  revert F EB. destruct (DyadicTrig.fast_sc false (Z.land n 2047)) as [[[sh sl] ch] cl].
+  intros F (Sy & Cy & E1 & E2).
+  pose proof (bpow_gt_0 radix2 (-13)).
+  rewrite tan_quad by lra.
+  rewrite land_2048_eqb in F.
+  assert (L : bpow radix2 (-28) <= bpow radix2 (-13)) by (apply bpow_le; lia).
+  assert (Sy' : bpow radix2 (-28) <= Rabs (sin y) <= 1) by (rewrite Rabs_pos_eq; lra).
+  assert (Cy' : bpow radix2 (-28) <= Rabs (cos y) <= 1) by (rewrite Rabs_pos_eq; lra).
+  revert F E1 E2. destruct (DyadicTrig.fast_eval false sh sl ch cl rh rl rr) as [s0 s1].
+  destruct (DyadicTrig.fast_eval false ch cl sh sl (opp rh) (opp rl) (opp rr)) as [c0 c1].
+  intros F (Fs0 & Fs1 & Hs0 & Es) (Fc0 & Fc1 & Hc0 & Ec).
+  assert (Es' : Rabs (B2R s0 + B2R s1 - sin y) <= bpow radix2 (-71) * Rabs (sin y))
+    by (rewrite (Rabs_pos_eq (sin y)) by lra; exact Es).
+  assert (Ec' : Rabs (B2R c0 + B2R c1 - cos y) <= bpow radix2 (-71) * Rabs (cos y))
+    by (rewrite (Rabs_pos_eq (cos y)) by lra; exact Ec).
+  revert F. destruct (Z.land (Z.shiftr n 11) 1 =? 0)%Z; intros F.
+  + pose proof (fast_div_correct s0 s1 c0 c1 _ _ Fs0 Fs1 Fc0 Fc1 Hs0 Hc0 Sy' Cy Es' Ec) as D.
+    revert F D. destruct (DyadicTrig.fast_div false s0 s1 c0 c1) as [h0 l0].
+    intros F (Fh & Fl & Hrn & Er). injection F as <- <-.
+    exact (pair_out h0 l0 _ _ Fh Fl Hrn k3 Er (quot_range _ _ Sy' Cy)).
+  + pose proof (fast_div_correct c0 c1 s0 s1 _ _ Fc0 Fc1 Fs0 Fs1 Hc0 Hs0 Cy' Sy Ec' Es) as D.
+    revert F D. destruct (DyadicTrig.fast_div false c0 c1 s0 s1) as [h0 l0].
+    intros F (Fh & Fl & Hrn & Er). injection F as <- <-.
+    destruct (pair_opp h0 l0 _ _ Fh Fl Hrn Er) as (Fh' & Fl' & Hrn' & Er').
+    rewrite <- (Rabs_Ropp (cos y / sin y)) in Er'.
+    pose proof (quot_range _ _ Cy' Sy) as Q. rewrite <- Rabs_Ropp in Q.
+    exact (pair_out (opp h0) (opp l0) _ _ Fh' Fl' Hrn' k3 Er' Q).
+Qed.
+
 Theorem fast_tan_correct :
   forall x h l,
   is_finite x = true -> bpow radix2 (-27) <= Rabs (B2R x) ->
@@ -782,92 +966,43 @@ Theorem fast_tan_correct :
   bpow radix2 (-1000) <= Rabs (B2R h) <= bpow radix2 1000 /\
   Rabs (tan (B2R x) - (B2R h + B2R l)) <= 3 * bpow radix2 (-71) * Rabs (tan (B2R x)).
 Proof.
-intros x h l Fx Hx F. unfold DyadicTrig.fast_tan in F.
-destruct (DyadicTrig.fast_reduce_any false x) as [[[[n rh] rl] rr] |] eqn:R.
-2: { (* the band above 2^16 *)
-  unfold DyadicTrig.fast_tan_band_big in F.
-  destruct (DyadicTrig.fast_reduce_band_big false x) as [[[[n rh] rl] rr] |] eqn:B;
-    [| discriminate F].
-  cbn beta iota in F. apply some_eq in F.
-  destruct (fast_reduce_band_big_correct x n rh rl rr B)
-    as (_ & _ & _ & L & Frh & Frl & Frr & Err & N & Nm & Hrho & Erho & Hrl).
-  subst rr.
-  exact (band_tan_out x n (N / 8192) rh rl (add rh rl) _ h l L (big_rho x N n Nm) Frh Frl Frr
-    (rr_rn rh rl Frh Frl Frr) Hrho Erho Hrl F). }
-destruct (n =? 0)%Z eqn:N0.
-- (* n = 0: tan x = sin x / cos x from fast_sin0 and fast_cos0 *)
-  apply Z.eqb_eq in N0. subst n.
-  pose proof (proj1 (fast_reduce_any_correct x 0 rh rl rr R) eq_refl) as R0.
-  destruct (fast_reduce_correct x 0 rh rl rr R0) as (_ & _ & _ & _ & _ & _ & _ & _ & Erho & _).
-  rewrite Rmult_0_l, Rminus_0_r in Erho.
-  pose proof (fast_sin0_correct x Fx (conj Hx Erho)) as S0.
-  pose proof (fast_cos0_correct x Fx (conj Hx Erho)) as C0.
-  pose proof (sin_small (B2R x) (conj Hx (n0_small _ Erho))) as Hs.
-  pose proof (cos_small (B2R x) (n0_small _ Erho)) as Hc.
-  assert (Hc' : bpow radix2 (-13) <= cos (B2R x) <= 1).
-  { assert (bpow radix2 (-13) <= / 2) by (cbn [bpow radix_val radix2 Z.pow_pos Z.opp]; lra).
-    lra. }
-  revert F S0 C0. destruct (DyadicTrig.fast_sin0 x) as [sh sl].
-  destruct (DyadicTrig.fast_cos0 x) as [ch cl].
-  intros F (Fsh & Fsl & Hsrn & Es) (Fch & Fcl & Hcrn & Ec).
-  pose proof (fast_div_correct sh sl ch cl _ _ Fsh Fsl Fch Fcl Hsrn Hcrn Hs Hc' Es Ec) as D.
-  revert F D. destruct (DyadicTrig.fast_div false sh sl ch cl) as [h0 l0].
-  intros F (Fh & Fl & Hrn & Er). injection F as <- <-.
-  unfold tan. exact (pair_out h0 l0 _ _ Fh Fl Hrn k3 Er (quot_range _ _ Hs Hc')).
-- cbv zeta in F.
-  destruct (Z.land n 2047 =? 0)%Z eqn:Ei.
-  + (* the band below 2^16: [fast_band_reduce] refines ρ = x - n π/4096 *)
-    apply Z.eqb_eq in Ei. apply Z.eqb_neq in N0. apply some_eq in F.
-    pose proof (reduce_any_band x n rh rl rr R Ei) as R0.
-    pose proof (fast_band_reduce_correct x n rh rl rr R0 Ei N0) as BR.
-    unfold DyadicTrig.fast_tan_band in F.
-    destruct (DyadicTrig.fast_band_reduce false n rh rl) as [[sh sl] sr].
-    destruct BR as (Fsh & Fsl & Fsr & Esr & Hrho & Err & Hsl). subst sr.
-    assert (E0 : B2R x - IZR n * (PI / 4096) = B2R x - IZR 0 * (2 * PI) - IZR n * (PI / 4096))
-      by ring.
-    exact (band_tan_out x n 0 sh sl (add sh sl) _ h l Ei E0 Fsh Fsl Fsr
-      (rr_rn sh sl Fsh Fsl Fsr) Hrho Err Hsl F).
-  + destruct (eq rh zero) eqn:Ez; [discriminate F |].
-    destruct (quad_setup x n rh rl rr R Ei Ez)
-      as (Hi & Sn & Frh & Frl & Frr & Hrr & Hrl & Hrh & j & Hrho & Err).
-    (* sin and cos have period 2π, so tan x = tan (x - 2π j). *)
-    assert (T : tan (B2R x) = tan (B2R x - IZR j * (2 * PI))).
-    { unfold tan. rewrite (tp_sin_sub (B2R x) j), (tp_cos_sub (B2R x) j).
-      replace (2 * IZR j * PI) with (IZR j * (2 * PI)) by ring. reflexivity. }
-    rewrite T. clear T.
-    set (z := B2R x - IZR j * (2 * PI)) in *.
-    pose proof (eval_both _ rh rl rr _ Hi Frh Frl Frr Hrr Hrho Err Hrl Hrh) as EB.
-    set (y := IZR (Z.land n 2047) * (PI / 4096) + (z - IZR n * (PI / 4096))) in EB.
-    assert (A : tan z = tan (IZR (Z.shiftr n 11) * (PI / 2) + y))
-      by (unfold y; f_equal; rewrite Sn; field).
-    rewrite A. clear A.
-    revert F EB. destruct (DyadicTrig.fast_sc false (Z.land n 2047)) as [[[sh sl] ch] cl].
-    intros F (Sy & Cy & E1 & E2).
-    pose proof (bpow_gt_0 radix2 (-13)).
-    rewrite tan_quad by lra.
-    rewrite land_2048_eqb in F.
-    assert (L : bpow radix2 (-28) <= bpow radix2 (-13)) by (apply bpow_le; lia).
-    assert (Sy' : bpow radix2 (-28) <= Rabs (sin y) <= 1) by (rewrite Rabs_pos_eq; lra).
-    assert (Cy' : bpow radix2 (-28) <= Rabs (cos y) <= 1) by (rewrite Rabs_pos_eq; lra).
-    revert F E1 E2. destruct (DyadicTrig.fast_eval false sh sl ch cl rh rl rr) as [s0 s1].
-    destruct (DyadicTrig.fast_eval false ch cl sh sl (opp rh) (opp rl) (opp rr)) as [c0 c1].
-    intros F (Fs0 & Fs1 & Hs0 & Es) (Fc0 & Fc1 & Hc0 & Ec).
-    assert (Es' : Rabs (B2R s0 + B2R s1 - sin y) <= bpow radix2 (-71) * Rabs (sin y))
-      by (rewrite (Rabs_pos_eq (sin y)) by lra; exact Es).
-    assert (Ec' : Rabs (B2R c0 + B2R c1 - cos y) <= bpow radix2 (-71) * Rabs (cos y))
-      by (rewrite (Rabs_pos_eq (cos y)) by lra; exact Ec).
-    revert F. destruct (Z.land (Z.shiftr n 11) 1 =? 0)%Z; intros F.
-    * pose proof (fast_div_correct s0 s1 c0 c1 _ _ Fs0 Fs1 Fc0 Fc1 Hs0 Hc0 Sy' Cy Es' Ec) as D.
-      revert F D. destruct (DyadicTrig.fast_div false s0 s1 c0 c1) as [h0 l0].
-      intros F (Fh & Fl & Hrn & Er). injection F as <- <-.
-      exact (pair_out h0 l0 _ _ Fh Fl Hrn k3 Er (quot_range _ _ Sy' Cy)).
-    * pose proof (fast_div_correct c0 c1 s0 s1 _ _ Fc0 Fc1 Fs0 Fs1 Hc0 Hs0 Cy' Sy Ec' Es) as D.
-      revert F D. destruct (DyadicTrig.fast_div false c0 c1 s0 s1) as [h0 l0].
-      intros F (Fh & Fl & Hrn & Er). injection F as <- <-.
-      destruct (pair_opp h0 l0 _ _ Fh Fl Hrn Er) as (Fh' & Fl' & Hrn' & Er').
-      rewrite <- (Rabs_Ropp (cos y / sin y)) in Er'.
-      pose proof (quot_range _ _ Cy' Sy) as Q. rewrite <- Rabs_Ropp in Q.
-      exact (pair_out (opp h0) (opp l0) _ _ Fh' Fl' Hrn' k3 Er' Q).
+intros x h l Fx Hx F. rewrite tan_quad_eq in F.
+destruct (DyadicTrig.fast_reduce x) as [[[[n rh] rl] rr] |] eqn:R0.
+- destruct (n =? 0)%Z eqn:N0.
+  + (* n = 0: tan x = sin x / cos x from fast_sin0 and fast_cos0 *)
+    apply Z.eqb_eq in N0. subst n.
+    destruct (fast_reduce_correct x 0 rh rl rr R0) as (_ & _ & _ & _ & _ & _ & _ & _ & Erho & _).
+    rewrite Rmult_0_l, Rminus_0_r in Erho.
+    pose proof (fast_sin0_correct x Fx (conj Hx Erho)) as S0.
+    pose proof (fast_cos0_correct x Fx (conj Hx Erho)) as C0.
+    pose proof (sin_small (B2R x) (conj Hx (n0_small _ Erho))) as Hs.
+    pose proof (cos_small (B2R x) (n0_small _ Erho)) as Hc.
+    assert (Hc' : bpow radix2 (-13) <= cos (B2R x) <= 1).
+    { assert (bpow radix2 (-13) <= / 2) by (cbn [bpow radix_val radix2 Z.pow_pos Z.opp]; lra).
+      lra. }
+    revert F S0 C0. destruct (DyadicTrig.fast_sin0 x) as [sh sl].
+    destruct (DyadicTrig.fast_cos0 x) as [ch cl].
+    intros F (Fsh & Fsl & Hsrn & Es) (Fch & Fcl & Hcrn & Ec).
+    pose proof (fast_div_correct sh sl ch cl _ _ Fsh Fsl Fch Fcl Hsrn Hcrn Hs Hc' Es Ec) as D.
+    revert F D. destruct (DyadicTrig.fast_div false sh sl ch cl) as [h0 l0].
+    intros F (Fh & Fl & Hrn & Er). injection F as <- <-.
+    unfold tan. exact (pair_out h0 l0 _ _ Fh Fl Hrn k3 Er (quot_range _ _ Hs Hc')).
+  + apply Z.eqb_neq in N0.
+    exact (tan_steps_correct x n rh rl rr h l (any_reduce false x _ R0) N0 F).
+- (* above 2^16 *)
+  destruct (DyadicTrig.fast_reduce_big_band false x) as [n rh rl rr | n a lo |] eqn:B.
+  + exact (tan_steps_correct x n rh rl rr h l (any_red false x n rh rl rr R0 B)
+      (red_n0 x n rh rl rr B) F).
+  + (* the band: [fast_reduce_band_big] gives the premises of [band_tan_out] *)
+    apply some_eq in F. unfold DyadicTrig.fast_tan_band_big in F.
+    pose proof (band_some false x n a lo B) as R.
+    destruct (DyadicTrig.fast_reduce_band_win false n a lo x) as [[[nw rh] rl] rr].
+    destruct (fast_reduce_band_big_correct x nw rh rl rr R)
+      as (_ & _ & _ & L & Frh & Frl & Frr & Err & N & Nm & Hrho & Erho & Hrl).
+    subst rr.
+    exact (band_tan_out x nw (N / 8192) rh rl (add rh rl) _ h l L (big_rho x N nw Nm) Frh Frl
+      Frr (rr_rn rh rl Frh Frl Frr) Hrho Erho Hrl F).
+  + discriminate F.
 Qed.
 
 (** ** With and without an FMA *)
@@ -926,20 +1061,38 @@ Theorem fast_sin_fma :
   forall x, bpow radix2 (-27) <= Rabs (B2R x) ->
   DyadicTrig.fast_sin true x = DyadicTrig.fast_sin false x.
 Proof.
-intros x _. unfold DyadicTrig.fast_sin. rewrite fast_reduce_any_fma.
-destruct (DyadicTrig.fast_reduce_any false x) as [[[[n rh] rl] rr] |] eqn:R.
-- destruct (n =? 0)%Z; [reflexivity |]. exact (quad_fma x n rh rl rr 0 R).
-- unfold DyadicTrig.fast_band_big. rewrite fast_reduce_band_big_fma. reflexivity.
+intros x _. unfold DyadicTrig.fast_sin.
+destruct (DyadicTrig.fast_reduce x) as [[[[n rh] rl] rr] |] eqn:R0.
+- destruct (n =? 0)%Z; [reflexivity |].
+  exact (quad_fma x n rh rl rr 0 (any_reduce false x _ R0)).
+- pose proof (big_band_fma x) as E.
+  destruct (DyadicTrig.fast_reduce_big_band true x) as [n rh rl rr | n a lo |];
+    destruct (DyadicTrig.fast_reduce_big_band false x) as [n' rh' rl' rr' | n' a' lo' |] eqn:B;
+    cbn beta iota in E; try contradiction E.
+  + apply pair_equal_spec in E as (E & <-). apply pair_equal_spec in E as (E & <-).
+    apply pair_equal_spec in E as (<- & <-).
+    exact (quad_fma x n rh rl rr 0 (any_red false x n rh rl rr R0 B)).
+  + unfold DyadicTrig.fast_band_big. rewrite E. reflexivity.
+  + reflexivity.
 Qed.
 
 Theorem fast_cos_fma :
   forall t, bpow radix2 (-27) <= Rabs (B2R t) ->
   DyadicTrig.fast_cos true t = DyadicTrig.fast_cos false t.
 Proof.
-intros t _. unfold DyadicTrig.fast_cos. rewrite fast_reduce_any_fma.
-destruct (DyadicTrig.fast_reduce_any false t) as [[[[n rh] rl] rr] |] eqn:R.
-- destruct (n =? 0)%Z; [reflexivity |]. exact (quad_fma t n rh rl rr 1 R).
-- unfold DyadicTrig.fast_band_big. rewrite fast_reduce_band_big_fma. reflexivity.
+intros t _. unfold DyadicTrig.fast_cos.
+destruct (DyadicTrig.fast_reduce t) as [[[[n rh] rl] rr] |] eqn:R0.
+- destruct (n =? 0)%Z; [reflexivity |].
+  exact (quad_fma t n rh rl rr 1 (any_reduce false t _ R0)).
+- pose proof (big_band_fma t) as E.
+  destruct (DyadicTrig.fast_reduce_big_band true t) as [n rh rl rr | n a lo |];
+    destruct (DyadicTrig.fast_reduce_big_band false t) as [n' rh' rl' rr' | n' a' lo' |] eqn:B;
+    cbn beta iota in E; try contradiction E.
+  + apply pair_equal_spec in E as (E & <-). apply pair_equal_spec in E as (E & <-).
+    apply pair_equal_spec in E as (<- & <-).
+    exact (quad_fma t n rh rl rr 1 (any_red false t n rh rl rr R0 B)).
+  + unfold DyadicTrig.fast_band_big. rewrite E. reflexivity.
+  + reflexivity.
 Qed.
 
 (** A pair within a relative 2^-71 of a [v] between 2^-28 and 1 in
@@ -962,77 +1115,95 @@ split.
 - rewrite <- (proj2 B). apply rn_le_bpow; [lia |]. lra.
 Qed.
 
+(** [tan_steps] is the same with and without an FMA, for a nonzero [n]
+    of a reduction of [fast_reduce_any]. *)
+Local Lemma tan_steps_fma :
+  forall x n rh rl rr, DyadicTrig.fast_reduce_any false x = Some (n, rh, rl, rr) -> n <> 0%Z ->
+  tan_steps true n rh rl rr = tan_steps false n rh rl rr.
+Proof.
+intros x n rh rl rr R N0. unfold tan_steps. cbv zeta.
+destruct (Z.land n 2047 =? 0)%Z eqn:Ei.
+- (* the band below 2^16 *)
+  apply Z.eqb_eq in Ei.
+  pose proof (reduce_any_band x n rh rl rr R Ei) as R0.
+  unfold DyadicTrig.fast_tan_band.
+  rewrite (fast_band_reduce_fma x n rh rl rr R0).
+  pose proof (fast_band_reduce_correct x n rh rl rr R0 Ei N0) as BR.
+  destruct (DyadicTrig.fast_band_reduce false n rh rl) as [[sh sl] sr].
+  destruct BR as (Fsh & Fsl & Fsr & Esr & Hrho & Err & Hsl). subst sr. cbn beta iota.
+  rewrite (band_tan_fma n sh sl (add sh sl) _ Fsh Fsl Fsr (rr_rn sh sl Fsh Fsl Fsr) Hrho Err
+    Hsl).
+  reflexivity.
+- destruct (eq rh zero) eqn:Ez; [reflexivity |].
+  destruct (quad_setup x n rh rl rr R Ei Ez)
+    as (Hi & _ & Frh & Frl & Frr & Hrr & Hrl & Hrh & j & Hrho & Err).
+  destruct (rh_range x n rh rl rr R Ei Ez) as [Rh Rh'].
+  destruct (opp_ok rh) as [Frh' _].
+  pose proof (eval_both _ rh rl rr _ Hi Frh Frl Frr Hrr Hrho Err Hrl Hrh) as EB.
+  rewrite (fast_sc_fma _ Hi).
+  pose proof (sc_facts _ Hi) as S.
+  revert EB S. destruct (DyadicTrig.fast_sc false (Z.land n 2047)) as [[[sh sl] ch] cl].
+  intros (Sy & Cy & E1 & E2) (Fsh & _ & Fch & _ & _ & _ & _ & _ & Rs & Rc).
+  rewrite (fast_eval_fma sh sl ch cl rh rl rr Fch Frh Rc Rh).
+  rewrite (fast_eval_fma ch cl sh sl (opp rh) (opp rl) (opp rr) Fsh (eq_trans Frh' Frh) Rs Rh').
+  revert E1 E2. destruct (DyadicTrig.fast_eval false sh sl ch cl rh rl rr) as [s0 s1].
+  destruct (DyadicTrig.fast_eval false ch cl sh sl (opp rh) (opp rl) (opp rr)) as [c0 c1].
+  intros (Fs0 & _ & Hs0 & Es) (Fc0 & _ & Hc0 & Ec).
+  pose proof (pair_pos_range s0 s1 _ Hs0 Es Sy) as Ps.
+  pose proof (pair_pos_range c0 c1 _ Hc0 Ec Cy) as Pc.
+  assert (L : bpow radix2 (-29) <= bpow radix2 (-14)) by (apply bpow_le; lia).
+  assert (As : bpow radix2 (-29) <= Rabs (B2R s0) <= 2)
+    by (rewrite Rabs_pos_eq by (pose proof (bpow_ge_0 radix2 (-14)); lra); lra).
+  assert (Ac : bpow radix2 (-29) <= Rabs (B2R c0) <= 2)
+    by (rewrite Rabs_pos_eq by (pose proof (bpow_ge_0 radix2 (-14)); lra); lra).
+  rewrite (fast_div_fma s0 s1 c0 c1 Fs0 Fc0 As Pc).
+  rewrite (fast_div_fma c0 c1 s0 s1 Fc0 Fs0 Ac Ps).
+  reflexivity.
+Qed.
+
 Theorem fast_tan_fma :
   forall x, bpow radix2 (-27) <= Rabs (B2R x) ->
   DyadicTrig.fast_tan true x = DyadicTrig.fast_tan false x.
 Proof.
-intros x Hx. unfold DyadicTrig.fast_tan. rewrite fast_reduce_any_fma.
-destruct (DyadicTrig.fast_reduce_any false x) as [[[[n rh] rl] rr] |] eqn:R.
-2: { (* the band above 2^16 *)
-  unfold DyadicTrig.fast_tan_band_big. rewrite fast_reduce_band_big_fma.
-  destruct (DyadicTrig.fast_reduce_band_big false x) as [[[[n rh] rl] rr] |] eqn:B;
-    [| reflexivity].
-  destruct (fast_reduce_band_big_correct x n rh rl rr B)
-    as (_ & _ & _ & _ & Frh & Frl & Frr & Err & N & _ & Hrho & Erho & Hrl).
-  subst rr. cbn beta iota.
-  rewrite (band_tan_fma n rh rl (add rh rl) _ Frh Frl Frr (rr_rn rh rl Frh Frl Frr) Hrho Erho
-    Hrl).
-  reflexivity. }
-destruct (n =? 0)%Z eqn:N0.
-- (* n = 0: the quotient of fast_sin0 and fast_cos0 *)
-  apply Z.eqb_eq in N0. subst n.
-  pose proof (proj1 (fast_reduce_any_correct x 0 rh rl rr R) eq_refl) as R0.
-  destruct (fast_reduce_correct x 0 rh rl rr R0) as (Fx & _ & _ & _ & _ & _ & _ & _ & Erho & _).
-  rewrite Rmult_0_l, Rminus_0_r in Erho.
-  pose proof (fast_sin0_correct x Fx (conj Hx Erho)) as S0.
-  pose proof (fast_cos0_correct x Fx (conj Hx Erho)) as C0.
-  pose proof (sin_small (B2R x) (conj Hx (n0_small _ Erho))) as Hs.
-  pose proof (cos_small (B2R x) (n0_small _ Erho)) as Hc.
-  assert (Hc' : bpow radix2 (-13) <= cos (B2R x) <= 1).
-  { assert (bpow radix2 (-13) <= / 2) by (cbn [bpow radix_val radix2 Z.pow_pos Z.opp]; lra).
-    lra. }
-  revert S0 C0. destruct (DyadicTrig.fast_sin0 x) as [sh sl].
-  destruct (DyadicTrig.fast_cos0 x) as [ch cl].
-  intros (Fsh & _ & Hsrn & Es) (Fch & _ & Hcrn & Ec).
-  rewrite (fast_div_fma sh sl ch cl Fsh Fch (pair_small_range sh sl _ Hsrn Es Hs)
-    (pair_pos_range ch cl _ Hcrn Ec Hc')).
-  reflexivity.
-- cbv zeta.
-  destruct (Z.land n 2047 =? 0)%Z eqn:Ei.
-  + (* the band below 2^16 *)
-    apply Z.eqb_eq in Ei. apply Z.eqb_neq in N0.
-    pose proof (reduce_any_band x n rh rl rr R Ei) as R0.
-    unfold DyadicTrig.fast_tan_band.
-    rewrite (fast_band_reduce_fma x n rh rl rr R0).
-    pose proof (fast_band_reduce_correct x n rh rl rr R0 Ei N0) as BR.
-    destruct (DyadicTrig.fast_band_reduce false n rh rl) as [[sh sl] sr].
-    destruct BR as (Fsh & Fsl & Fsr & Esr & Hrho & Err & Hsl). subst sr. cbn beta iota.
-    rewrite (band_tan_fma n sh sl (add sh sl) _ Fsh Fsl Fsr (rr_rn sh sl Fsh Fsl Fsr) Hrho Err
-      Hsl).
+intros x Hx. rewrite !tan_quad_eq.
+destruct (DyadicTrig.fast_reduce x) as [[[[n rh] rl] rr] |] eqn:R0.
+- destruct (n =? 0)%Z eqn:N0.
+  + (* n = 0: the quotient of fast_sin0 and fast_cos0 *)
+    apply Z.eqb_eq in N0. subst n.
+    destruct (fast_reduce_correct x 0 rh rl rr R0)
+      as (Fx & _ & _ & _ & _ & _ & _ & _ & Erho & _).
+    rewrite Rmult_0_l, Rminus_0_r in Erho.
+    pose proof (fast_sin0_correct x Fx (conj Hx Erho)) as S0.
+    pose proof (fast_cos0_correct x Fx (conj Hx Erho)) as C0.
+    pose proof (sin_small (B2R x) (conj Hx (n0_small _ Erho))) as Hs.
+    pose proof (cos_small (B2R x) (n0_small _ Erho)) as Hc.
+    assert (Hc' : bpow radix2 (-13) <= cos (B2R x) <= 1).
+    { assert (bpow radix2 (-13) <= / 2) by (cbn [bpow radix_val radix2 Z.pow_pos Z.opp]; lra).
+      lra. }
+    revert S0 C0. destruct (DyadicTrig.fast_sin0 x) as [sh sl].
+    destruct (DyadicTrig.fast_cos0 x) as [ch cl].
+    intros (Fsh & _ & Hsrn & Es) (Fch & _ & Hcrn & Ec).
+    rewrite (fast_div_fma sh sl ch cl Fsh Fch (pair_small_range sh sl _ Hsrn Es Hs)
+      (pair_pos_range ch cl _ Hcrn Ec Hc')).
     reflexivity.
-  + destruct (eq rh zero) eqn:Ez; [reflexivity |].
-    destruct (quad_setup x n rh rl rr R Ei Ez)
-      as (Hi & _ & Frh & Frl & Frr & Hrr & Hrl & Hrh & j & Hrho & Err).
-    destruct (rh_range x n rh rl rr R Ei Ez) as [Rh Rh'].
-    destruct (opp_ok rh) as [Frh' _].
-    pose proof (eval_both _ rh rl rr _ Hi Frh Frl Frr Hrr Hrho Err Hrl Hrh) as EB.
-    rewrite (fast_sc_fma _ Hi).
-    pose proof (sc_facts _ Hi) as S.
-    revert EB S. destruct (DyadicTrig.fast_sc false (Z.land n 2047)) as [[[sh sl] ch] cl].
-    intros (Sy & Cy & E1 & E2) (Fsh & _ & Fch & _ & _ & _ & _ & _ & Rs & Rc).
-    rewrite (fast_eval_fma sh sl ch cl rh rl rr Fch Frh Rc Rh).
-    rewrite (fast_eval_fma ch cl sh sl (opp rh) (opp rl) (opp rr) Fsh (eq_trans Frh' Frh) Rs Rh').
-    revert E1 E2. destruct (DyadicTrig.fast_eval false sh sl ch cl rh rl rr) as [s0 s1].
-    destruct (DyadicTrig.fast_eval false ch cl sh sl (opp rh) (opp rl) (opp rr)) as [c0 c1].
-    intros (Fs0 & _ & Hs0 & Es) (Fc0 & _ & Hc0 & Ec).
-    pose proof (pair_pos_range s0 s1 _ Hs0 Es Sy) as Ps.
-    pose proof (pair_pos_range c0 c1 _ Hc0 Ec Cy) as Pc.
-    assert (L : bpow radix2 (-29) <= bpow radix2 (-14)) by (apply bpow_le; lia).
-    assert (As : bpow radix2 (-29) <= Rabs (B2R s0) <= 2)
-      by (rewrite Rabs_pos_eq by (pose proof (bpow_ge_0 radix2 (-14)); lra); lra).
-    assert (Ac : bpow radix2 (-29) <= Rabs (B2R c0) <= 2)
-      by (rewrite Rabs_pos_eq by (pose proof (bpow_ge_0 radix2 (-14)); lra); lra).
-    rewrite (fast_div_fma s0 s1 c0 c1 Fs0 Fc0 As Pc).
-    rewrite (fast_div_fma c0 c1 s0 s1 Fc0 Fs0 Ac Ps).
+  + apply Z.eqb_neq in N0. exact (tan_steps_fma x n rh rl rr (any_reduce false x _ R0) N0).
+- (* above 2^16 *)
+  pose proof (big_band_fma x) as E.
+  destruct (DyadicTrig.fast_reduce_big_band true x) as [n rh rl rr | n a lo |];
+    destruct (DyadicTrig.fast_reduce_big_band false x) as [n' rh' rl' rr' | n' a' lo' |] eqn:B;
+    cbn beta iota in E; try contradiction E.
+  + apply pair_equal_spec in E as (E & <-). apply pair_equal_spec in E as (E & <-).
+    apply pair_equal_spec in E as (<- & <-).
+    exact (tan_steps_fma x n rh rl rr (any_red false x n rh rl rr R0 B) (red_n0 x n rh rl rr B)).
+  + (* the band: [band_tan_fma] at the window of [fast_reduce_band_win] *)
+    unfold DyadicTrig.fast_tan_band_big. rewrite E.
+    pose proof (band_some false x n' a' lo' B) as R.
+    destruct (DyadicTrig.fast_reduce_band_win false n' a' lo' x) as [[[nw rh] rl] rr].
+    destruct (fast_reduce_band_big_correct x nw rh rl rr R)
+      as (_ & _ & _ & _ & Frh & Frl & Frr & Err & N & _ & Hrho & Erho & Hrl).
+    subst rr. cbn beta iota.
+    rewrite (band_tan_fma nw rh rl (add rh rl) _ Frh Frl Frr (rr_rn rh rl Frh Frl Frr) Hrho Erho
+      Hrl).
     reflexivity.
+  + reflexivity.
 Qed.

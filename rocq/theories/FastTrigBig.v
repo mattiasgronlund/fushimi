@@ -1,16 +1,25 @@
 (** * The reduction of large arguments of the fast paths of [sin], [cos] and [tan]
 
-    Where [DyadicTrig.fast_reduce_big x] of [Model.v] returns [(n, rh, rl,
-    rr)], [x] is finite with [|x| >= 2^16], [n] is in [[0, 8191]] with [n
-    mod 2048 <> 0], and there is an integer [N = n] mod 8192 such that [x
-    - N π/4096] is at most [π/8192 (1 + 2^-24)] in magnitude and [rh + rl]
-    is within [2^-90] of it, with [|rl| <= 2^-37], [|rh| >= 2^-65] and [rr
-    = rh + rl] rounded ([fast_reduce_big_correct]); the same with and
-    without an FMA ([fast_reduce_big_fma]). [DyadicTrig.fast_reduce_any],
-    which [fast_sin], [fast_cos] and [fast_tan] call, gives the bounds of
-    [fast_reduce_correct] ([FastTrigReduce.v]) on [rh], [rl], [rr] and
-    [x - N π/4096] for an integer [N] equal to [n] modulo 8192, and gives
-    [n = 0] only from [fast_reduce] ([fast_reduce_any_correct]). *)
+    [DyadicTrig.fast_reduce_big_band x] of [Model.v], which [fast_sin],
+    [fast_cos] and [fast_tan] call where [fast_reduce x] is [None], returns
+    a reduction [Red n rh rl rr]; or, where [n mod 2048 = 0], [Band n a lo]
+    (see [BigRed]), from which [fast_reduce_band_win] reduces [x]
+    ([FastTrigBandBig.v]); or [No]. [DyadicTrig.fast_reduce_big x] is
+    [Some (n, rh, rl, rr)] where [fast_reduce_big_band x] is [Red n rh rl
+    rr], and [None] elsewhere. Where [fast_reduce_big x] returns [(n, rh,
+    rl, rr)], [x] is finite with [|x| >= 2^16], [n] is in [[0, 8191]] with
+    [n mod 2048 <> 0], and there is an integer [N = n] mod 8192 such that
+    [x - N π/4096] is at most [π/8192 (1 + 2^-24)] in magnitude and [rh +
+    rl] is within [2^-90] of it, with [|rl| <= 2^-37], [|rh| >= 2^-65] and
+    [rr = rh + rl] rounded ([fast_reduce_big_correct]).
+    [fast_reduce_big_band] is the same with and without an FMA
+    ([fast_reduce_big_band_fma]), and so is [fast_reduce_big]
+    ([fast_reduce_big_fma]). [DyadicTrig.fast_reduce_any], which the tests
+    check, is [fast_reduce] or, where that is [None], [fast_reduce_big]. It
+    gives the bounds of [fast_reduce_correct] ([FastTrigReduce.v]) on [rh],
+    [rl], [rr] and [x - N π/4096] for an integer [N] equal to [n] modulo
+    8192, and gives [n = 0] only from [fast_reduce]
+    ([fast_reduce_any_correct]). *)
 
 From Stdlib Require Import ZArith Reals Lra Lia.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
@@ -52,10 +61,10 @@ cbn [bpow radix_val radix2 Z.opp].
 lra.
 Qed.
 
-(** The end of [fast_reduce_big] after the sign: where the product [rh +
-    rl] of [fh + fl = s (h + l)] passes the test [|rh| >= 2^-65], it is
-    within [2^-90] of [s X - s N π/4096] ([big_guard], [big_mul_correct],
-    [big_err]). *)
+(** The end of [fast_reduce_big_band] after the sign: where the product
+    [rh + rl] of [fh + fl = s (h + l)] passes the test [|rh| >= 2^-65], it
+    is within [2^-90] of [s X - s N π/4096] ([big_guard],
+    [big_mul_correct], [big_err]). *)
 Lemma big_tail :
   forall s X N h l t xr Nr fh fl rh rl,
   (s = 1 \/ s = - 1) -> xr = s * X -> Nr = s * N ->
@@ -97,6 +106,30 @@ split; [exact Frh |]. split; [exact Frl |]. split; [exact Frr |].
 split; [exact E1 |]. split; [exact E2 |]. split; [exact Hrl | exact Hrh].
 Qed.
 
+(** The range test of [fast_reduce_big_band], [(be - 1039) mod 2^64 > 1007]
+    for the biased exponent [be], is the test [be < 1039 \/ be > 2046], as
+    [be] is in [[0, 2^11)]. *)
+Lemma big_range :
+  forall x,
+  let be := Z.shiftr (Z.land (to_bits x) (2 ^ 63 - 1)) 52 in
+  (1007 <? (be - 1039) mod 2 ^ 64)%Z = negb ((1039 <=? be) && (be <=? 2046))%Z.
+Proof.
+intros x be.
+assert (Hbe : (0 <= be < 2 ^ 11)%Z).
+{ unfold be. change (2 ^ 63 - 1)%Z with (Z.ones 63).
+  rewrite Z.land_ones, Z.shiftr_div_pow2 by lia.
+  pose proof (Z.mod_pos_bound (to_bits x) (2 ^ 63)) as B.
+  split; [apply Z.div_pos; lia | apply Z.div_lt_upper_bound; lia]. }
+clearbody be.
+destruct (Z_lt_le_dec be 1039) as [L | L].
+- rewrite <- (Z_mod_plus_full (be - 1039) 1 (2 ^ 64)), Z.mod_small by lia.
+  replace (1039 <=? be)%Z with false by (symmetry; apply Z.leb_gt; lia).
+  cbn [andb negb]. apply Z.ltb_lt. lia.
+- rewrite Z.mod_small by lia.
+  replace (1039 <=? be)%Z with true by (symmetry; apply Z.leb_le; lia).
+  cbn [andb]. destruct (Z.leb_spec be 2046); cbn [negb]; [apply Z.ltb_ge | apply Z.ltb_lt]; lia.
+Qed.
+
 Theorem fast_reduce_big_correct :
   forall x n rh rl rr,
   DyadicTrig.fast_reduce_big false x = Some (n, rh, rl, rr) ->
@@ -109,13 +142,17 @@ Theorem fast_reduce_big_correct :
   Rabs (B2R rl) <= bpow radix2 (-37) /\ bpow radix2 (-65) <= Rabs (B2R rh).
 Proof.
 intros x n rh rl rr H.
-unfold DyadicTrig.fast_reduce_big in H.
+unfold DyadicTrig.fast_reduce_big, DyadicTrig.fast_reduce_big_band in H.
 pose proof (big_decode x) as D.
-cbv zeta in H, D.
-(* Name the integers of [fast_reduce_big] as [Model.v] does ([nn] for
-   its [n]), in [H] and in the statements of [big_decode] and [big_int]. *)
+pose proof (big_range x) as RT.
+cbv zeta in H, D, RT.
+(* Name the integers of [fast_reduce_big_band] as [Model.v] does ([nn]
+   for its [n]), in [H] and in the statements of [big_decode],
+   [big_range] and [big_int]. [zh] and [zl], which [Model.v] does not
+   name, are the integers of [fh] and [fl]. *)
 set (b := Z.land (to_bits x) (2 ^ 63 - 1)%Z) in *.
 set (be := Z.shiftr b 52) in *.
+rewrite RT in H. clear RT.
 set (m := Z.lor (Z.land b (2 ^ 52 - 1)) (2 ^ 52)%Z) in *.
 pose proof (big_int m be) as BI. cbv zeta in BI.
 set (k := (be - 1011)%Z) in *.
@@ -151,7 +188,8 @@ destruct (lt x zero) eqn:S; cbv beta iota in H, Ex.
 - revert H.
   destruct (DyadicTrig.fast_mul false _ _ _ _) as (p, q) eqn:M.
   cbv beta iota.
-  destruct (lt (fabs p) (from_bits 0x3be0000000000000)) eqn:L; [discriminate |].
+  destruct (lt (fabs p) (from_bits 0x3be0000000000000)) eqn:L; cbv beta iota;
+    [discriminate |].
   intro H. apply some_eq in H.
   apply pair_equal_spec in H as (H & Er).
   apply pair_equal_spec in H as (H & Eql).
@@ -187,7 +225,8 @@ destruct (lt x zero) eqn:S; cbv beta iota in H, Ex.
 - revert H.
   destruct (DyadicTrig.fast_mul false _ _ _ _) as (p, q) eqn:M.
   cbv beta iota.
-  destruct (lt (fabs p) (from_bits 0x3be0000000000000)) eqn:L; [discriminate |].
+  destruct (lt (fabs p) (from_bits 0x3be0000000000000)) eqn:L; cbv beta iota;
+    [discriminate |].
   intro H. apply some_eq in H.
   apply pair_equal_spec in H as (H & Er).
   apply pair_equal_spec in H as (H & Eql).
@@ -209,20 +248,21 @@ destruct (lt x zero) eqn:S; cbv beta iota in H, Ex.
   split; [exact Hrl | exact Hrh].
 Qed.
 
-(** The end of [fast_reduce_big] after the sign is the same with and
-    without an FMA: where the test [|fh uh| < 2^-65] passes, both
-    return [None], as [rh] is [fh uh] rounded for either flag, and
-    elsewhere [big_mul_fma] gives the same product. *)
+(** The end of [fast_reduce_big_band] after the sign is the same with and
+    without an FMA: where the test [|rh| < 2^-65] passes, both return
+    [No], as [rh] is [fh uh] rounded for either flag, and elsewhere
+    [big_mul_fma] gives the same [(rh, rl)], from the bound [|rh| >=
+    2^-65] that [big_guard] reads off the test. *)
 Lemma big_fma_tail :
   forall (n : Z) fh fl, is_finite fh = true -> Rabs (B2R fh) <= / 2 ->
   (let '(rh, rl) := DyadicTrig.fast_mul true fh fl
        (add (from_bits DyadicTrig.U1) (from_bits DyadicTrig.U2)) (from_bits DyadicTrig.U3) in
-   if lt (fabs rh) (from_bits 0x3be0000000000000) then None
-   else Some (n, rh, rl, add rh rl)) =
+   if lt (fabs rh) (from_bits 0x3be0000000000000) then DyadicTrig.No
+   else DyadicTrig.Red n rh rl (add rh rl)) =
   (let '(rh, rl) := DyadicTrig.fast_mul false fh fl
        (add (from_bits DyadicTrig.U1) (from_bits DyadicTrig.U2)) (from_bits DyadicTrig.U3) in
-   if lt (fabs rh) (from_bits 0x3be0000000000000) then None
-   else Some (n, rh, rl, add rh rl)).
+   if lt (fabs rh) (from_bits 0x3be0000000000000) then DyadicTrig.No
+   else DyadicTrig.Red n rh rl (add rh rl)).
 Proof.
 intros n fh fl Ffh Bfh.
 destruct (lt (fabs (mul fh (add (from_bits DyadicTrig.U1) (from_bits DyadicTrig.U2))))
@@ -232,15 +272,20 @@ destruct (lt (fabs (mul fh (add (from_bits DyadicTrig.U1) (from_bits DyadicTrig.
   rewrite (big_mul_fma fh fl Ffh Bfh Hp). reflexivity.
 Qed.
 
-Theorem fast_reduce_big_fma :
-  forall x, DyadicTrig.fast_reduce_big true x = DyadicTrig.fast_reduce_big false x.
+(** [fast_reduce_big_band] is the same with and without an FMA, at every
+    [x]: its [No] of the range test and its [Band] do not read the flag,
+    and its tail is the same for either sign ([big_fma_tail]). *)
+Lemma fast_reduce_big_band_fma :
+  forall x, DyadicTrig.fast_reduce_big_band true x = DyadicTrig.fast_reduce_big_band false x.
 Proof.
 intros x.
-unfold DyadicTrig.fast_reduce_big.
+unfold DyadicTrig.fast_reduce_big_band.
 pose proof (big_decode x) as D.
-cbv zeta. cbv zeta in D.
+pose proof (big_range x) as RT.
+cbv zeta. cbv zeta in D, RT.
 set (b := Z.land (to_bits x) (2 ^ 63 - 1)%Z) in *.
 set (be := Z.shiftr b 52) in *.
+rewrite !RT. clear RT.
 set (m := Z.lor (Z.land b (2 ^ 52 - 1)) (2 ^ 52)%Z) in *.
 pose proof (big_int m be) as BI. cbv zeta in BI.
 set (k := (be - 1011)%Z) in *.
@@ -272,6 +317,15 @@ destruct (lt x zero); cbv beta iota.
   + unfold opp. rewrite is_finite_Bopp. exact Ffh.
   + unfold opp. rewrite B2R_Bopp, Rabs_Ropp. exact Bfh.
 - apply big_fma_tail; assumption.
+Qed.
+
+Theorem fast_reduce_big_fma :
+  forall x, DyadicTrig.fast_reduce_big true x = DyadicTrig.fast_reduce_big false x.
+Proof.
+intros x.
+unfold DyadicTrig.fast_reduce_big.
+rewrite fast_reduce_big_band_fma.
+reflexivity.
 Qed.
 
 Lemma fast_reduce_any_correct :
@@ -312,13 +366,4 @@ destruct (DyadicTrig.fast_reduce x) as [r |] eqn:R.
   + rewrite Zminus_mod, EN, (Z.mod_small n 8192) by lia.
     rewrite Z.sub_diag. reflexivity.
   + split; [exact E1 | exact E2].
-Qed.
-
-Lemma fast_reduce_any_fma :
-  forall x, DyadicTrig.fast_reduce_any true x = DyadicTrig.fast_reduce_any false x.
-Proof.
-intros x.
-unfold DyadicTrig.fast_reduce_any.
-destruct (DyadicTrig.fast_reduce x); [reflexivity |].
-apply fast_reduce_big_fma.
 Qed.
