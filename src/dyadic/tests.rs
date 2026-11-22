@@ -725,19 +725,14 @@ fn exact_identities() {
 }
 
 // `isqrt` on the `x` of 2 n + 1 limbs whose top bits t = x >> 2k, from which it seeds Newton's
-// iteration, are at the top of their range: t in [2^64 - 2^11 - 1, 2^64 - 1] when `x` has
-// 128 n bits (x[2 n - 1] = t), and t in [2^63 - 2^10 - 1, 2^63 - 1] when it has 128 n + 1 bits
-// (t is its top 63 bits). The t >= 2^64 - 2^10 are the tops that `t as f64` rounds up to
-// 2^64. The bits of `x` below t are all 0, all 1, or random. Each result has to be
-// floor(sqrt(x)): s^2 <= x < (s + 1)^2.
-fn isqrt_tops(n: usize, rng: &mut Rng) {
-    // `x` has 128 n + extra bits, and its top bits run over the `count` numbers up to `last`.
-    let tops = [
-        (0, (1 << 11) + 1, u64::MAX),
-        (1, (1 << 10) + 1, (1 << 63) - 1),
-    ];
-    for (extra, count, last) in tops {
-        for t in last - (count - 1)..=last {
+// iteration, run over the ranges `ends` of (extra, first, last): `x` has 128 n + extra bits,
+// and t runs from `first` to `last`. When `x` has 128 n bits, t is x[2 n - 1], in
+// [2^63, 2^64), and when it has 128 n + 1 bits, t is its top 63 bits, in [2^62, 2^63). The bits
+// of `x` below t are all 0, all 1, or random. Each result has to be floor(sqrt(x)):
+// s^2 <= x < (s + 1)^2.
+fn isqrt_ends(n: usize, rng: &mut Rng, ends: [(usize, u64, u64); 2]) {
+    for (extra, first, last) in ends {
+        for t in first..=last {
             for low in ["0", "1", "random"] {
                 let mut limb = || match low {
                     "0" => 0,
@@ -782,11 +777,73 @@ fn isqrt_tops(n: usize, rng: &mut Rng) {
     }
 }
 
+// The tops of the two ranges of t, t in [2^64 - 2^11 - 1, 2^64 - 1] and
+// [2^63 - 2^10 - 1, 2^63 - 1]. The t >= 2^64 - 2^10 are the tops that `t as f64` rounds up to
+// 2^64, and 2^64 - 2^11 is the largest t that clearing its low 11 bits leaves as it is.
 #[test]
 fn isqrt_at_the_top_of_the_seed() {
     let mut rng = Rng(7);
     for n in [1, 2, 4, 64] {
-        isqrt_tops(n, &mut rng);
+        isqrt_ends(
+            n,
+            &mut rng,
+            [
+                (0, u64::MAX - (1 << 11), u64::MAX),
+                (1, (1 << 63) - 1 - (1 << 10), (1 << 63) - 1),
+            ],
+        );
+    }
+}
+
+// The bottoms of the two ranges of t, t in [2^63, 2^63 + 2^11] and [2^62, 2^62 + 2^10], where
+// floor(sqrt(x)) is near 2^(64 n - 1/2) and near 2^(64 n). In the second range, clearing the
+// low 11 bits of t leaves u = 2^62, whose square root 2^31 has no fraction bits, so that the
+// seed's c is the least it can be.
+#[test]
+fn isqrt_at_the_bottom_of_the_seed() {
+    let mut rng = Rng(8);
+    for n in [1, 2, 4, 64] {
+        isqrt_ends(
+            n,
+            &mut rng,
+            [
+                (0, 1 << 63, (1 << 63) + (1 << 11)),
+                (1, 1 << 62, (1 << 62) + (1 << 10)),
+            ],
+        );
+    }
+}
+
+// `mul_into` gives x * y in an `out` filled with 0 bits before it and in one filled with 1 bits,
+// for x and y of 0 to 4 limbs, so that a limb of `out` that it did not write, which keeps its
+// fill, fails at least one of the two. The product is checked against the sum of the rows
+// x[i] * y * 2^(64 i), each from `mul_add_limb`.
+#[test]
+fn mul_into_writes_every_limb() {
+    let mut rng = Rng(9);
+    for xl in 0..=4 {
+        for yl in 0..=4 {
+            for _ in 0..16 {
+                let x: Vec<u64> = (0..xl).map(|_| rng.limb()).collect();
+                let y: Vec<u64> = (0..yl).map(|_| rng.limb()).collect();
+                let mut want = vec![0; xl + yl];
+                for (i, &a) in x.iter().enumerate() {
+                    let mut row = y.clone();
+                    let top = limbs::mul_add_limb(&mut row, a, 0);
+                    row.push(top);
+                    assert!(!limbs::add_assign(&mut want[i..], &row));
+                }
+                for fill in [0, u64::MAX] {
+                    let mut out = vec![fill; xl + yl];
+                    limbs::mul_into(&mut out, &x, &y);
+                    assert_eq!(
+                        out, want,
+                        "x = {:x?}, y = {:x?}, out filled with {:#x}",
+                        x, y, fill
+                    );
+                }
+            }
+        }
     }
 }
 
