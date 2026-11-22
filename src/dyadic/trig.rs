@@ -1077,7 +1077,18 @@ fn fast_tan_band_big_body<const FMA: bool>(x: f64) -> Option<(f64, f64)> {
 // tan x as h + l, as `fast_sin` does sin x: sin and cos from the same reduction and `fast_sc`,
 // and their quotient, tan(i u + ρ) at an even q and -1 / tan(i u + ρ) at an odd one, within
 // 3 2^-71 |tan x| of tan x (`fast_tan_correct` in `rocq/theories/FastTrigCore.v`).
-#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
+// Always inlined, into `tan_dir_fast` and `fast_tan_near`. Before row 177 it had no attribute
+// in the builds without the dispatch, and the one for haswell kept it out of line, with all of
+// `tan_dir_with` in one function. `tan` then took 4.4 to 12.5 more instructions per call than
+// now over 4,096 calls uniform in [0.1, 10), [-10, 10) and [-π/4, π/4), of either sign with a
+// magnitude log-uniform in [2^-30, 2^1024), [2^60, 2^1024) and [2^-1074, 2^1024), on the
+// `f64`s nearest to the multiples of π/2 and, rounded to nearest, on the `f64`s nearest to
+// 2^-26, and 9.1 to 10.6 more on its hard cases in `src/cr/tests/mpfr/hard_cases.wc`, but
+// rounded down or up only 1 more on the `f64`s nearest to 2^-26, which its rules decide (a
+// crate that links `cr`, built for haswell, cachegrind chase=no, row 177). Rounded to nearest,
+// that is the inlining alone; rounded down or up, the split into `tan_dir_fast` too, which
+// says what that costs.
+#[inline(always)]
 fn fast_tan<const FMA: bool>(x: f64) -> Option<(f64, f64)> {
     let (n, rh, rl, rr) = match fast_reduce_any::<FMA>(x) {
         Some(r) => r,
@@ -1348,8 +1359,8 @@ level_entry! {
     fn tan_dir<const UP: bool>(x: f64) -> f64 = tan_dir_with;
 }
 
-// The body of `tan_dir`, with `FMA` for the products (`level_entry!`), in the two forms of
-// `sin_dir_with`, for the same reasons.
+// The body of `tan_dir`, with `FMA` for the products (`level_entry!`), in the `if let` chain
+// of `sin_dir_with` in every build, with the fast path and the kernel in `tan_dir_fast`.
 #[inline(always)]
 fn tan_dir_with<const FMA: bool, const UP: bool>(x: f64) -> f64 {
     if !x.is_finite() {
@@ -1357,20 +1368,33 @@ fn tan_dir_with<const FMA: bool, const UP: bool>(x: f64) -> f64 {
     } else if x.abs() < TINY_HYP {
         // x < tan x < x + x^3 / 2 for x in (0, 2^-26), and tan is odd.
         away(x, UP)
-    } else {
-        #[cfg(not(fushimi_kernel_dispatch))]
-        let r = tan_small(x, UP)
-            .or_else(|| fast_tan_dir::<FMA>(x, UP))
-            .unwrap_or_else(|| ziv(&Tan(x), UP, 1));
-        #[cfg(fushimi_kernel_dispatch)]
-        let r = if let Some(r) = tan_small(x, UP) {
-            r
-        } else if let Some(r) = fast_tan_dir::<FMA>(x, UP) {
-            r
-        } else {
-            ziv(&Tan(x), UP, 1)
-        };
+    } else if let Some(r) = tan_small(x, UP) {
         r
+    } else {
+        tan_dir_fast::<FMA, UP>(x)
+    }
+}
+
+// The rest of `tan_dir_with`, where `tan_small` declined x: the fast path, and the kernel where
+// it declines too. Without the dispatch it is kept out of line, and `tan_dir_with` reaches it by
+// a jump, so that the copy of x that the inlined `fast_tan` needs is made here, and not on the
+// path of `tan_small`. With `fast_tan` inlined into `tan_dir_with` itself, the copy was made at
+// its entry, and `tan` rounded down or up took 2 more instructions per call than now on the
+// `f64`s nearest to 2^-26, which its rules decide, 1 more than before row 177. Out of line,
+// this tests again that x is not NaN, and takes |x| again, for `fast_reduce`, which in one
+// function LLVM had from the tests of `tan_dir_with`, and `tan` rounded down or up takes 0.5
+// to 3.0 more instructions per call than in one function on the other sets that `fast_tan`
+// names, though still fewer than before row 177 (a crate that links `cr`, built for haswell,
+// cachegrind chase=no, row 177). With the dispatch it is inlined, as the fast path is
+// (`sin_dir_with` says why). `rocq/theories/Model.v` transcribes its body as the inner `match`
+// of `tan_dir_with`.
+#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
+#[cfg_attr(not(fushimi_kernel_dispatch), inline(never))]
+fn tan_dir_fast<const FMA: bool, const UP: bool>(x: f64) -> f64 {
+    if let Some(r) = fast_tan_dir::<FMA>(x, UP) {
+        r
+    } else {
+        ziv(&Tan(x), UP, 1)
     }
 }
 

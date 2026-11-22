@@ -5658,7 +5658,11 @@ Definition cos_dir_with (x : f64) (up : bool) : option f64 :=
        end.
 
 (** [pub(crate) fn tan(x: f64, up: bool) -> f64], with [tan_dir] as
-    [sin_dir] in [sin], and the rest as in [sin]. *)
+    [sin_dir] in [sin], and the rest as in [sin]. The body is an [if let]
+    chain in every build, which calls
+    [fn tan_dir_fast<const FMA: bool, const UP: bool>(x: f64) -> f64]
+    where [tan_small] declines x, and the inner [match] is the body of
+    [tan_dir_fast]. *)
 Definition tan_dir_with (x : f64) (up : bool) : option f64 :=
   if negb (is_finite x) then Some B754_nan
   else if lt (fabs x) DyadicExp.tiny_hyp then Some (DyadicExp.away x up)
