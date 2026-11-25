@@ -928,7 +928,8 @@ fn quotient_rules_at_their_thresholds() {
 // argument that no rule settles down and up at the first level of `ziv` that settles it
 // (`ziv_at::<N>` for N = 1, 2, 4, .., 64 limbs), and measured the bits that each needs, -log2
 // of the distance from f(x) to the nearest `f64` relative to |f(x)|, with MPFR at 1024 bits.
-// F and F/2 are the `f64`s nearest π and π/2, both below them.
+// A fourth source adds the arguments at which the kernel needed level 2 (below). F and F/2 are
+// the `f64`s nearest π and π/2, both below them.
 //
 // The list search ran on atan at m 2^e in [2^-26, 2^-8] and asin at m 2^e in [2^-27, 2^-8],
 // for odd m < 2^12 with 3 | m; atan at tan G and acos at cos G, each rounded down, to nearest
@@ -958,9 +959,16 @@ fn quotient_rules_at_their_thresholds() {
 // Each of those G near F and F/2 has a pair that needs level 4, as do 9 of the pairs from the
 // random G, and none needs level 8.
 //
+// The fourth source, a temporary test that recorded how asin and acos, each rounded down, to
+// nearest and up, returned at a sample of 42,020 of the arguments that a program using the
+// crate passed to acos, kept those at which a rounding of the kernel needed level 2. Their
+// bits are measured as above, except for the asin case, which needs level 2 only to nearest:
+// its distance is from f(x) to the nearest midpoint of two `f64`s, where a rounding to nearest
+// changes, and its comment gives its level to nearest too.
+//
 // Each comment gives the search and family of its cases, the bits that they need, and their
 // levels down and up, where the search recorded them.
-const HARD_CASES: [(usize, f64); 19] = [
+const HARD_CASES: [(usize, f64); 25] = [
     // The list search at the roundings of tan G for atan and of cos G for acos: the hardest of
     // each, at G = F/2, and one more of each, at G = F/2 - 17 2^-52 for atan, which the random
     // search also found at tan r for r near ±F/2, and at G = F/2 + 2^-52 for acos, where
@@ -993,6 +1001,16 @@ const HARD_CASES: [(usize, f64); 19] = [
     (ASIN, 1.1106174921949541e-1), // Uniform: 76.6 bits, level 2 down.
     (ACOS, 1.1379607369459111e-4), // cos r: 81.2 bits, level 2 down.
     (ACOS, -3.47639092730899e-1),  // Uniform: 76.7 bits, level 2 down.
+    // The fourth source, every argument that it kept but acos at 6.123233995736766e-17, which
+    // is above: asin to nearest, 70.7 bits from the nearest midpoint of two `f64`s, level 2 to
+    // nearest, 0 down and up; then acos at tiny x, |x| < 2^-27, where acos(x) is about π/2 - x
+    // and lies next to F/2 + k 2^-52 for the k given, level 2 both ways.
+    (ASIN, 6.756288704322327e-1),
+    (ACOS, 6.12323399573676e-17),   // k = 0: 104.4 bits.
+    (ACOS, 2.83276944882399e-16),   // k = -1: 106.5 bits.
+    (ACOS, 2.8327694488239903e-16), // k = -1: 104.3 bits.
+    (ACOS, 7.273661547324616e-16),  // k = -3: 106.5 bits.
+    (ACOS, -6.049014748177279e-16), // k = 3: 99.6 bits.
 ];
 
 const HARD_CASES2: [(f64, f64); 21] = [
