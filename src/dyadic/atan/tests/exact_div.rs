@@ -140,8 +140,20 @@ fn dyadic_pair(rng: &mut Rng, eq: Option<i32>, of_y: bool, e: i32) -> (f64, f64)
     (y, x)
 }
 
-// `check_rules` at 10^5 random (y, x) with 0 < |y| < 2^-968, at which `exact_div` scales y by
-// 2^128, and |y| < x, a quarter of them of each of these kinds:
+// The random arguments of `exact_div_random`, and of each set of `exact_div_same_map`. The two
+// tests run about 10 to 15 times slower in a debug build than in release, so a debug build,
+// such as that of the coverage job (`cargo llvm-cov` in .github/workflows/ci-x86-64.yml), takes
+// a tenth of the points. At 10^4 every count that the tests assert on stays above 100: the
+// least is 147, the midpoints that `midpoint_quotient` gives in set C.
+const POINTS: usize = if cfg!(debug_assertions) {
+    10_000
+} else {
+    100_000
+};
+
+// `check_rules` at `POINTS` random (y, x), 10^5 in release and 10^4 in a debug build, with
+// 0 < |y| < 2^-968, at which `exact_div` scales y by 2^128, and |y| < x, a quarter of them of
+// each of these kinds:
 // - y log-uniform with an exponent in [-1074, -969] and a random sign, and x log-uniform with
 //   an exponent 1 to 60 above that of y;
 // - such a y with x log-uniform with an exponent in [-60, 9], at which 2y / x is subnormal for
@@ -162,7 +174,7 @@ fn exact_div_random() {
     // The false positives of each kind, the quotients that `tiny_quotient` gives, and the
     // midpoints.
     let mut counts = [0; 4];
-    for n in 0..100_000 {
+    for n in 0..POINTS {
         let (y, x) = match n % 4 {
             0 => {
                 let y = random_sign(&mut rng) * log_uniform(&mut rng, -1074, -969);
@@ -201,7 +213,8 @@ fn exact_div_random() {
     assert!(counts.iter().all(|&c| c > 0), "counts {counts:?}");
 }
 
-// `check_rules` at 10^5 random (y, x) in each of three sets, with random signs of y:
+// `check_rules` at `POINTS` random (y, x) in each of three sets, 10^5 in release and 10^4 in a
+// debug build, with random signs of y:
 // - A: |y| = my 2^ey and x = mx 2^(ey - d), for an ey uniform in [-971, -965], around 2^-968,
 //   below which `exact_div` scales y;
 // - B: x = mx 2^ex and |y| = my 2^(ex + d), for an ex uniform in [993, 999], around 2^996,
@@ -232,7 +245,7 @@ fn exact_div_same_map() {
         // 2^-968 (|y|, in A) or 2^996 (x, in B).
         let mut counts = [0; 4];
         let mut n = 0;
-        while n < 100_000 {
+        while n < POINTS {
             let d = if set == 2 {
                 uniform(&mut rng, -1030, -1010)
             } else if rng.below(2) == 0 {
