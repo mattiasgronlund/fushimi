@@ -2,8 +2,8 @@
 
     At an [f64] [x = m] with [m] an integer, [ev_exp2] computes
     [y = (m - x) ln 2] as the point 0, since the enclosure [m - x] is the
-    point 0 and 0 times any valid enclosure is 0 ([pt_mul_0_l] of
-    [DyExactPoint.v]). [scaled] keeps [y] as it is, as [y] is not
+    point 0 and 0 times a valid [encl_small] enclosure is 0 ([pt_mul_0_l]
+    of [DyExactPoint.v]). [scaled] keeps [y] as it is, as [y] is not
     negative. The series of [exp_neg] at the point [s = 0] is the point
     0: each step of its loop gives the point [1 - 0 t / i = 1], so that
     the loop ends at a valid enclosure [t] ([xp_series_loop]), and the

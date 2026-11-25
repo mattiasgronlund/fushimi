@@ -13,11 +13,11 @@
 // has that `f64` as its bound in the direction of the rounding, as the exact enclosures of 2^x
 // at an integer x do, since the two bounds of any other enclosure round to different `f64`s.
 // The only finite arguments whose results are `f64`s are 0 and, for 2^x and 10^x, the integers
-// whose powers are `f64`s, as e^r and tanh r are irrational for every rational r other than 0,
-// sinh r and cosh r too if e^r is not a quadratic irrational, which follows from the theorem of
-// Hermite and Lindemann, and 2^r and 10^r are rational only for an integer r. The rules settle
-// them all but the integers other than 0 of 2^x, which the exact enclosures settle. The rules
-// also keep the reductions below in range. `ziv` computes the rest from an `Eval`.
+// whose powers are `f64`s, as e^r and tanh r are irrational for every rational r other than 0, sinh
+// r and cosh r too if e^r is not a quadratic irrational, which follows from the theorem of Hermite
+// and Lindemann, and 2^r and 10^r are rational, for a rational r, only for an integer r. The rules
+// settle them all but the integers other than 0 of 2^x, which the exact enclosures settle. The
+// rules also keep the reductions below in range. `ziv` computes the rest from an `Eval`.
 //
 // The functions rounded to nearest have rules of the same kinds, with thresholds of their own:
 // |x| >= 20 for tanh, as tanh 19 is more than half an ulp below 1, and |x| < 2^-27
@@ -553,10 +553,10 @@ fn fast_exp_by<const FMA: bool>(x: f64, c: [u64; 2]) -> Option<(f64, f64, i64)> 
 // shift moves z by less than 2^-91, the error of SH + SL and of RN(zl + SL), which moves the
 // scaled result by less than 2^-87 (`rocq/theories/FastExpEdge.v`).
 // Always inlined, as is `fast_exp_by_edge`: out of line, the call made `exp`, `exp2` and
-// `fast_cosh_pos` set up a stack frame on every call, also where x never comes here, which
-// cost 3 to 5 instructions per call on the arguments of the normal range (cachegrind).
-// The fast path of x^y and x^n calls it too, for the th out of the range of `fast_exp` that its
-// rules on th leave (`src/dyadic/pow.rs`).
+// `fast_cosh_pos` set up a stack frame on every call, also where x never comes here, which cost 3
+// to 5 instructions per call on the arguments of the normal range (cachegrind in the lib's test
+// binary, built for Haswell, before rule M5). The fast path of x^y and x^n calls it too, for the th
+// out of the range of `fast_exp` that its rules on th leave (`src/dyadic/pow.rs`).
 #[inline(always)]
 pub(super) fn fast_exp_edge<const FMA: bool>(zh: f64, zl: f64) -> Option<(f64, f64, i64)> {
     if zh < 0.0 {
