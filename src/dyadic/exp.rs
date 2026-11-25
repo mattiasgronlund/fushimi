@@ -837,7 +837,14 @@ fn fast_tanh_dir<const FMA: bool>(x: f64, up: bool) -> Option<f64> {
     Some(if x < 0.0 { -r } else { r })
 }
 
-#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
+// Always inlined, also in a build without the dispatch, where `sinh_near` is inlined in
+// `cr::sinh_rn` too: when only `sinh_near` was, `cr::sinh_rn` called this function out of line,
+// with a stack frame and a spill of x on the fast path. Inlined, the fast path follows the rule
+// of `sinh_near` for a tiny |x|, LLVM drops the test t < 2^-27 of `fast_sinh_pos`, which repeats
+// that rule's test of |x| = t, and the code of `cr` holds its own copy of the 2 KB of tables `T1`
+// and `T2` of `fast_exp` (objdump, in a crate that links `cr`, built for Haswell). The same holds
+// for `fast_tanh_near`.
+#[inline(always)]
 fn fast_sinh_near<const FMA: bool>(x: f64) -> Option<f64> {
     let (h, l, e, err) = fast_sinh_pos::<FMA>(x.abs())?;
     let r = round_near_err(h, l, e, err)?;
@@ -850,7 +857,8 @@ fn fast_cosh_near<const FMA: bool>(t: f64) -> Option<f64> {
     round_near_err(h, l, e, err)
 }
 
-#[cfg_attr(fushimi_kernel_dispatch, inline(always))]
+// Always inlined, as `fast_sinh_near`.
+#[inline(always)]
 fn fast_tanh_near<const FMA: bool>(x: f64) -> Option<f64> {
     let (h, l, e, err) = fast_tanh_pos::<FMA>(x.abs())?;
     let r = round_near_err(h, l, e, err)?;
@@ -1204,6 +1212,13 @@ fn sinh_dir_with<const FMA: bool, const UP: bool>(x: f64) -> f64 {
 
 level_entry! {
     /// sinh x rounded to nearest, ties to even.
+    // Inlined in `cr::sinh_rn`, its only caller in the lib, in a build without the dispatch,
+    // together with `fast_sinh_near`: out of line, `cr::sinh_rn` was one `jmp` to it, which every
+    // call ran. Inlined, `cr::sinh_rn` and `cr::tanh_rn` (see `tanh_near`) take 1 fewer
+    // instruction per call, with as many conditional branches, on each of six sets of random x for
+    // sinh and four for tanh, and on their hard cases in `src/cr/tests/mpfr/hard_cases.wc`
+    // (objdump and cachegrind, in a crate that links `cr`, built for Haswell).
+    #[cfg_attr(not(fushimi_kernel_dispatch), inline(always))]
     pub(crate) fn sinh_near(x: f64) -> f64 = sinh_near_with;
 }
 
@@ -1436,6 +1451,9 @@ fn tanh_dir_with<const FMA: bool, const UP: bool>(x: f64) -> f64 {
 
 level_entry! {
     /// tanh x rounded to nearest, ties to even.
+    // Inlined in `cr::tanh_rn` without the dispatch, together with `fast_tanh_near`, as
+    // `sinh_near`.
+    #[cfg_attr(not(fushimi_kernel_dispatch), inline(always))]
     pub(crate) fn tanh_near(x: f64) -> f64 = tanh_near_with;
 }
 
