@@ -57,11 +57,11 @@ const FILES: [(&str, &str); 22] = [
     ("hypot", "hypot"),
 ];
 
-// The `f64` that `s` names, rounded to nearest, ties to even, as C's `strtod` reads it: a
-// hexadecimal float such as `-0x1.62e42fefa39efp+9`, `0x.fffffffffffffp-1022` or `0x1`, a
-// decimal such as `-1000.0`, `inf`, `nan` or `snan` (a signalling NaN), each with an optional
-// sign. A few lines of CORE-MATH have more bits than an `f64`, such as `0x11.e44c76af19d67p+1`
-// in tanh.wc.
+// The `f64` nearest the value that `s` names, ties to even, as C asks of `strtod` for a
+// hexadecimal float. `s` is a hexadecimal float such as `-0x1.62e42fefa39efp+9`,
+// `0x.fffffffffffffp-1022` or `0x1`, a decimal such as `-1000.0`, `inf`, `nan` or `snan` (a
+// signalling NaN), each with an optional sign. A few lines of CORE-MATH have more bits than an
+// `f64`, such as `0x11.e44c76af19d67p+1` in tanh.wc.
 fn parse(s: &str) -> f64 {
     let (neg, t) = match s.as_bytes().first() {
         Some(b'-') => (true, &s[1..]),
@@ -82,25 +82,65 @@ fn parse(s: &str) -> f64 {
     }
 }
 
-// The `f64` nearest m 2^e, ties to even, where m is the integer of the hexadecimal digits of
-// `s` = `<digits>p<e'>` or `<digits>` (e' = 0) and e = e' - 4k for k digits after the point,
-// or `None` if it overflows or `s` is not of that form.
+// The `f64` nearest m 2^e, ties to even, where m is the integer of all the hexadecimal digits
+// of `s` = `<digits>p<e'>` or `<digits>` (e' = 0) and e = e' - 4k for k digits after the point.
+// It reads any number of digits exactly, and e' may be any integer: one below `i64` gives 0,
+// and one above gives `None` unless every digit is 0. Otherwise `None` means that m 2^e rounds
+// to 2^1024 or more, or that `s` is not of that form: a long string of digits is not an
+// overflow.
 fn parse_hex(s: &str) -> Option<f64> {
     let (digits, exp) = s.split_once('p').unwrap_or((s, "0"));
-    let mut e: i64 = exp.parse().ok()?;
+    // Saturating: at `i64::MIN`, m 2^e and the exact value are both below 2^(128 + e), far
+    // below 2^-1075, so that both round to 0. At `i64::MAX`, both are at least 2^e unless m is
+    // 0, far above 2^1024, so that both overflow. The digits move e by at most 4 each, also
+    // saturating, so that no string that fits in memory brings e back from either end to the
+    // exponents of an `f64`.
+    let mut e: i64 = match exp.parse() {
+        Ok(e) => e,
+        Err(err) => match err.kind() {
+            std::num::IntErrorKind::PosOverflow => i64::MAX,
+            std::num::IntErrorKind::NegOverflow => i64::MIN,
+            _ => return None,
+        },
+    };
+    // The digits read so far, with the exponent e', have the value V = m 2^e + R 2^(e - 4r),
+    // where the last r of them were dropped from m and form the integer R < 16^r: e is e' less
+    // 4 per digit kept after the point and plus 4 per digit dropped before it, where it does
+    // not saturate. Hence m 2^e <= V < (m + 1) 2^e, with V = m 2^e iff R = 0. A digit is kept
+    // while m < 2^123, so that 16 m + 15 < 2^127, and m never decreases, so that once a digit
+    // is dropped, every later one is too.
     let mut m = 0u128;
+    // R > 0: a nonzero digit was dropped.
+    let mut sticky = false;
     let mut after_point = false;
     for c in digits.chars() {
         if c == '.' {
             after_point = true;
             continue;
         }
-        m = m.checked_mul(16)?.checked_add(c.to_digit(16)? as u128)?;
-        if after_point {
-            // Saturating: at `i64::MIN`, m 2^e and the exact value are both below 2^(128 + e),
-            // far below 2^-1075, so that both round to 0.
-            e = e.saturating_sub(4);
+        let d = c.to_digit(16)? as u128;
+        if m >> 123 == 0 {
+            m = 16 * m + d;
+            if after_point {
+                e = e.saturating_sub(4);
+            }
+        } else {
+            sticky |= d != 0;
+            if !after_point {
+                e = e.saturating_add(4);
+            }
         }
+    }
+    if sticky {
+        // m 2^e < V < (m + 1) 2^e, and so is (m + 1/2) 2^e = (2m + 1) 2^(e - 1). 2m + 1 has
+        // at least 125 bits, as m >= 2^123, and the rounding below keeps at most 53 of them:
+        // drop >= 72. Between m 2^e = 2m 2^(e - 1), of the bit length of 2m + 1, and
+        // (m + 1) 2^e, the midpoints of adjacent `f64`s, where the rounding changes, are
+        // multiples of 2^(e - 2 + drop), and so of 2^e: none lies strictly between, so that V
+        // and (2m + 1) 2^(e - 1) round alike, and neither is a tie. 2m + 1 < 2^128, as
+        // m < 2^127.
+        m = 2 * m + 1;
+        e = e.saturating_sub(1);
     }
     if m == 0 {
         return Some(0.0);
@@ -158,9 +198,14 @@ fn parse_tiny_hex() {
         // At the tie between 0 and 2^-1074, to even, and above it.
         ("0x1p-1075", 0),
         ("0x1.8p-1075", 1),
-        // 128 bits dropped, m 2^e = (m / 2^128) 2^-1074: above the tie m = 2^127, and at it.
+        // Above the tie and at it, at 32 digits, of which `parse_hex` keeps 31 and folds the
+        // last into its sticky bit.
         ("0x80000000000000000000000000000001p-1202", 1),
         ("0x80000000000000000000000000000000p-1202", 0),
+        // 128 bits dropped, m 2^e = (m / 2^128) 2^-1074: above the tie m = 2^127, with m odd
+        // from the sticky bit of the last of 33 digits, and below it, at 32 digits.
+        ("0x400000000000000000000000000000001p-1205", 1),
+        ("0x7fffffffffffffffffffffffffffffffp-1202", 0),
         // An exponent that the digit after the point takes below `i64::MIN`.
         ("0x0.1p-9223372036854775808", 0),
     ] {
@@ -168,6 +213,89 @@ fn parse_tiny_hex() {
     }
     // At e = `i64::MAX`, where -1074 - e overflows, m 2^e overflows too.
     assert_eq!(parse_hex("1p9223372036854775807"), None);
+}
+
+// `parse` of hexadecimal floats of more than 32 digits, against MPFR, which reads all of their
+// digits, and `parse_hex` at exponents outside `i64`. Each value of more than 32 digits is a tie
+// between two `f64`s, or the same value just above it (a 1 in its last digit) or just below it
+// (the 8 that makes it a tie lowered to 7, then f's), at a normal and at a subnormal result.
+#[test]
+fn parse_long_hex() {
+    // The `f64` nearest the value of `s` = `<digits>p<e>`, for an e in `i32`, by MPFR: m 2^(e -
+    // 4k), for m the integer of the digits, exact at 4 bits per digit, and k digits after the
+    // point.
+    let mpfr = |s: &str| {
+        let (digits, e) = s.split_once('p').unwrap();
+        let k = digits.split_once('.').map_or(0, |(_, f)| f.len()) as i32;
+        let m = rug::Integer::from_str_radix(&digits.replace('.', ""), 16).unwrap();
+        let shift = e.parse::<i32>().unwrap() - 4 * k;
+        (Float::with_val(4 * digits.len() as u32, m) << shift).to_f64()
+    };
+    // A value as `parse_hex` reads it, then the bits of the `f64` nearest it, in hexadecimal,
+    // per line, with anything after a `#` a comment.
+    let cases: Vec<(&str, u64)> = "
+        # 1 + 2^-53, the tie between 1 and 1 + 2^-52, which goes to 1, and 1 + 3 2^-53, the tie
+        # between 1 + 2^-52 and 1 + 2^-51, which goes to 1 + 2^-51.
+        1.000000000000080000000000000000000000000p0 3ff0000000000000
+        1.000000000000080000000000000000000000001p0 3ff0000000000001
+        1.00000000000007fffffffffffffffffffffffffp0 3ff0000000000000
+        1.000000000000180000000000000000000000000p0 3ff0000000000002
+        1.000000000000180000000000000000000000001p0 3ff0000000000002
+        1.00000000000017fffffffffffffffffffffffffp0 3ff0000000000001
+        # 1 + 2^-53 again, as (2^156 + 2^103) 2^-156, with 40 digits before the point.
+        1000000000000080000000000000000000000000p-156 3ff0000000000000
+        1000000000000080000000000000000000000001p-156 3ff0000000000001
+        100000000000007fffffffffffffffffffffffffp-156 3ff0000000000000
+        # 3 2^-1026 + 2^-1075, the tie between the subnormals of bits 3 2^48 and 3 2^48 + 1,
+        # which goes to 3 2^48, and 3 2^-1026 + 3 2^-1075, the tie between 3 2^48 + 1 and
+        # 3 2^48 + 2, which goes to 3 2^48 + 2.
+        3.000000000000800000000000000000000000000p-1026 0003000000000000
+        3.000000000000800000000000000000000000001p-1026 0003000000000001
+        3.0000000000007ffffffffffffffffffffffffffp-1026 0003000000000000
+        3.000000000001800000000000000000000000000p-1026 0003000000000002
+        3.000000000001800000000000000000000000001p-1026 0003000000000002
+        3.0000000000017ffffffffffffffffffffffffffp-1026 0003000000000001
+        # 2^-1075, the tie between 0 and 2^-1074, which goes to 0, with a leading 0 that is not
+        # one of the 40 significant digits.
+        0.8000000000000000000000000000000000000000p-1074 0000000000000000
+        0.8000000000000000000000000000000000000001p-1074 0000000000000001
+        0.7fffffffffffffffffffffffffffffffffffffffp-1074 0000000000000000
+    "
+    .lines()
+    .filter_map(|line| {
+        let (s, bits) = line.split('#').next().unwrap().trim().split_once(' ')?;
+        Some((s, u64::from_str_radix(bits, 16).unwrap()))
+    })
+    .collect();
+    assert_eq!(cases.len(), 18);
+    // The values and MPFR first, so that a mistake in them shows before one of `parse`.
+    for &(s, bits) in &cases {
+        let digits = s.split('p').next().unwrap().replace('.', "");
+        let significant = digits.trim_start_matches('0').len();
+        assert!((33..=40).contains(&significant), "{s}: {significant}");
+        assert_eq!(mpfr(s).to_bits(), bits, "MPFR at {s}");
+    }
+    for &(s, bits) in &cases {
+        assert_eq!(parse(&format!("0x{s}")).to_bits(), bits, "{s}");
+    }
+    // The nearest `f64`, as C asks of `strtod`: 3 2^-1026 + 9 2^-1078 is 9/16 of 2^-1074 above
+    // the subnormal of bits 3 2^48. glibc 2.39's `strtod` gives the `f64` of bits
+    // 0x0003000000000000 here.
+    let s = "3.0000000000009p-1026";
+    assert_eq!(parse(&format!("0x{s}")).to_bits(), 0x0003_0000_0000_0001);
+    assert_eq!(mpfr(s).to_bits(), 0x0003_0000_0000_0001);
+    // An exponent below `i64::MIN` gives 0, one above `i64::MAX` overflows, and one that is not
+    // an integer is not of the form.
+    assert_eq!(
+        parse_hex("1p-9223372036854775809").map(f64::to_bits),
+        Some(0)
+    );
+    assert_eq!(
+        parse_hex("1p-99999999999999999999999999999999999999999").map(f64::to_bits),
+        Some(0)
+    );
+    assert_eq!(parse_hex("1p9223372036854775808"), None);
+    assert_eq!(parse_hex("1p1.5"), None);
 }
 
 // The arguments of a line of the sample or of a CORE-MATH file, if it has any. Each argument
