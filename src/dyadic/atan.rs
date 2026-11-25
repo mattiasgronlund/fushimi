@@ -1096,10 +1096,13 @@ fn fast_asin_pos0<const FMA: bool>(t: f64) -> (f64, f64, i64, f64) {
     (h, l, e, ERR60)
 }
 
-// Always inlined, as the first stage that acos had before stage 0 was: LLVM by itself kept that
-// out of line, with its result through memory and, where it took atan of a quotient, a stack
-// frame of its own, at which acos took 15 to 23 more instructions per call (cachegrind in the
-// lib's test binary, before rule M5). This stage is not counted without the attribute.
+// Always inlined, as `fast_acos_dir0`, where the rest of stage 0 is always inlined only under
+// `cfg(fushimi_kernel_dispatch)`, under which the two attributes are the same: built for haswell
+// with that `cfg_attr` in place of this attribute, LLVM by itself keeps this function out of
+// line, at which acos takes 23.48 to 26.25 more instructions per call and `Interval::acos` of a
+// point 48.33 to 50.77 more per call, on random arguments, on CORE-MATH's hard cases and on the
+// arguments of solidcore's acos calls, in a crate that links `cr`, cachegrind chase=no
+// (2026-11-25, against ca58fa71).
 #[inline(always)]
 fn fast_acos_val0<const FMA: bool>(x: f64) -> Option<(f64, f64, i64, f64)> {
     if x == 1.0 {
@@ -1171,7 +1174,8 @@ fn stage1_enabled() -> bool {
 // `octant`'s), the two copies of `atan` and of `acos` take 4.8 to 6.4 and 4.5 to 6 fewer
 // instructions per directed call than one copy with `up` at run time, on random arguments and on
 // CORE-MATH's hard cases, in a crate that links `cr` (cachegrind). The counts of `acos` were
-// taken before stage 0, with the first stage that it replaced.
+// taken before stage 0, with the first stage that it replaced; the comment of `fast_acos_dir0`
+// gives the counts of its own attribute.
 #[inline(always)]
 fn fast_atan_dir<const FMA: bool>(x: f64, up: bool) -> Option<f64> {
     if let Some(r) = fast_atan_dir1::<FMA>(x, up) {
@@ -1247,7 +1251,12 @@ fn fast_asin_dir0<const FMA: bool>(x: f64, up: bool) -> Option<f64> {
     Some(if x < 0.0 { -r } else { r })
 }
 
-// Always inlined, as `fast_atan_dir`.
+// Always inlined, as `fast_atan_dir` and `fast_acos_val0`: built for haswell with the `cfg_attr`
+// of `fast_asin_dir0` in place of this attribute, LLVM keeps this function out of line, one copy
+// for both directions, at which acos takes 6.17 to 12.98 more instructions per directed call and
+// `Interval::acos` of a point, which makes one directed call each way, 6.50 to 18.98 more per
+// call, on the arguments named at `fast_acos_val0`, in a crate that links `cr`, cachegrind
+// chase=no (2026-11-25, against ca58fa71).
 #[inline(always)]
 fn fast_acos_dir0<const FMA: bool>(x: f64, up: bool) -> Option<f64> {
     #[cfg(test)]
