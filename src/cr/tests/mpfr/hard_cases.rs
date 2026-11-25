@@ -13,7 +13,8 @@
 // `random_levels` at random arguments, and `sample_hard_cases` writes the sample again from a
 // clone of CORE-MATH. Where a fast path passed its rounding test, `hard_cases` (alone) checks the
 // argument again with the fast paths disabled, so that the kernel, Ziv's strategy or the exact
-// roots of cbrt and hypot, is checked there too.
+// roots of cbrt and hypot, is checked there too, and `full_hard_cases` and `random_levels`, with
+// `FUSHIMI_HC_KERNEL` set, disable them at every argument.
 
 use super::*;
 use crate::dyadic::{fast_counts, reset_fast_counts, reset_ziv_level, set_fast_path, ziv_level};
@@ -472,16 +473,22 @@ fn check(errs: &mut Vec<String>, levels: &mut [Levels; 3], k: usize, xs: &[f64],
 }
 
 // `check` at each of `entries`, arguments of `FILES[k]` with their text, split over 16
-// threads: the levels that the kernel used, and the mismatches with MPFR in the order of
-// `entries`.
+// threads, with the fast paths disabled if `FUSHIMI_HC_KERNEL` is set: the levels that the
+// kernel used, and the mismatches with MPFR in the order of `entries`.
 fn check_all(k: usize, entries: &[(Vec<f64>, String)]) -> ([Levels; 3], Vec<String>) {
     let chunk = entries.len().div_ceil(16).max(1);
+    // With `FUSHIMI_HC_KERNEL` set, the fast paths are off, so that the kernel computes each
+    // result that one of them would have given. The entries' own arms, such as that of asin at
+    // |x| < 2^-27, still give theirs. `set_fast_path` acts on the calling thread, so each thread
+    // calls it.
+    let kernel = std::env::var_os("FUSHIMI_HC_KERNEL").is_some();
     // Each thread records its own levels, as `ziv_level` gives those of its thread.
     let parts: Vec<([Levels; 3], Vec<String>)> = std::thread::scope(|s| {
         let threads: Vec<_> = entries
             .chunks(chunk)
             .map(|part| {
                 s.spawn(move || {
+                    set_fast_path(!kernel);
                     let mut levels = Default::default();
                     let mut errs = vec![];
                     for (xs, text) in part {
@@ -506,6 +513,8 @@ fn check_all(k: usize, entries: &[(Vec<f64>, String)]) -> ([Levels; 3], Vec<Stri
         }
         errs.extend(es);
     }
+    // A disabled fast path counts as neither passed nor failed.
+    assert!(!kernel || levels.iter().all(|l| l.fast == [0, 0]));
     (levels, errs)
 }
 
@@ -554,7 +563,10 @@ fn hard_cases() {
 
 // `hard_cases` at every argument of the files of the clone of CORE-MATH at `$CORE_MATH`, after
 // repeated arguments are removed: `CORE_MATH=<clone> cargo test --release --lib
-// full_hard_cases -- --ignored --nocapture`. It takes some minutes on 16 threads.
+// full_hard_cases -- --ignored --nocapture`. With `FUSHIMI_HC_KERNEL` set, to any value, the
+// fast paths are disabled at every argument, so that the kernel computes each result that one
+// of them would have given, and no fast path is counted. It takes under a minute on 16 threads
+// of a Ryzen 9 3900X, with or without `FUSHIMI_HC_KERNEL`.
 #[test]
 #[ignore]
 fn full_hard_cases() {
@@ -601,7 +613,8 @@ const RANDOM: usize = 1_000_000;
 // `hard_cases` at `RANDOM` random arguments of each function, x and y from `Rng::arg` except y
 // of pow from `Rng::exponent`, as in `unary_random`, `atan2_special_and_random` and
 // `pow_special_and_random` of `src/cr.rs`, with other seeds: `cargo test --release --lib
-// random_levels -- --ignored --nocapture`.
+// random_levels -- --ignored --nocapture`. `FUSHIMI_HC_KERNEL` disables the fast paths, as in
+// `full_hard_cases`.
 #[test]
 #[ignore]
 fn random_levels() {
