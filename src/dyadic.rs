@@ -55,6 +55,7 @@
 
 use crate::{limbs, simd::round_up_exact};
 use std::cmp::Ordering;
+use std::mem::MaybeUninit;
 
 mod atan;
 mod consts;
@@ -108,30 +109,23 @@ pub(crate) struct Encl<const N: usize> {
 }
 
 // Calls `f` with a zeroed scratch of `len` limbs, the number that the caller's slices take,
-// which is at most 12 N + 16: on the stack for the precisions up to 256 bits, which Ziv's
-// strategy tries first, and on the heap above. On the stack it is the first `len` limbs of the
-// smallest of 8, 16, 24, ..., 64 limbs that holds them (12 N + 16 <= 64), a test of constants
-// once `with_buf` is inlined, so that an operation zeroes fewer than 8 limbs more than its
-// slices take.
+// which is at most 10 N + 9 (`sqrt`'s): on the stack for the precisions up to 256 bits, which
+// Ziv's strategy tries first, and on the heap above. On the stack it is the first `len` limbs
+// of an array of 64, which holds the 49 limbs of `sqrt` at N = 4. Only those `len` limbs are
+// zeroed, so that an operation zeroes no more than its slices take, and the array is one of
+// `MaybeUninit<u64>` whose other limbs stay uninitialized.
 fn with_buf<const N: usize, R>(len: usize, f: impl FnOnce(&mut [u64]) -> R) -> R {
     if N <= 4 {
-        if len <= 8 {
-            f(&mut [0; 8][..len])
-        } else if len <= 16 {
-            f(&mut [0; 16][..len])
-        } else if len <= 24 {
-            f(&mut [0; 24][..len])
-        } else if len <= 32 {
-            f(&mut [0; 32][..len])
-        } else if len <= 40 {
-            f(&mut [0; 40][..len])
-        } else if len <= 48 {
-            f(&mut [0; 48][..len])
-        } else if len <= 56 {
-            f(&mut [0; 56][..len])
-        } else {
-            f(&mut [0; 64][..len])
-        }
+        let mut stack = [MaybeUninit::<u64>::uninit(); 64];
+        let buf = &mut stack[..len];
+        buf.fill(MaybeUninit::new(0));
+        // SAFETY: `fill` has just initialized each of the `len` limbs of `buf`, and
+        // `MaybeUninit<u64>` has the size, alignment and ABI of `u64`, so that they are a valid
+        // `[u64]` of the same length. The limbs of `stack` past `len` stay uninitialized and are
+        // never read: `f` gets only `buf`. The zeros are there only to initialize the limbs, which
+        // a `&mut [u64]` to them needs: their value does not matter, as each function writes
+        // every limb of the scratch that it reads before it reads it (the header).
+        f(unsafe { &mut *(buf as *mut [MaybeUninit<u64>] as *mut [u64]) })
     } else {
         f(&mut vec![0; len])
     }

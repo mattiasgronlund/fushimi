@@ -2,6 +2,12 @@
 
 Items marked with ⚠️ are breaking changes.
 
+## Unreleased
+
+### Changed
+
+- Made the operations on the dyadic numbers of the multi-precision kernel at the precisions up to 256 bits clear only the scratch limbs that the operation can use, instead of that number rounded up to a multiple of 8, and leave the other limbs of their array of 64 limbs on the stack uninitialized, with the same results as before. In a crate that links `fushimi::cr`, built for Haswell, a call on the hard-to-round cases of CORE-MATH that the tests use now takes 32.21 to 235.49 fewer instructions for `exp`, `exp2`, `exp10`, `sinh`, `cosh` and `tanh`, 74.77 to 195.95 fewer for `ln`, `log2`, `log10`, `asinh`, `acosh` and `atanh`, 27.27 to 137.54 fewer for `pow`, 27.61 to 131.02 fewer for `atan`, `atan2`, `asin` and `acos`, and 22.69 to 117.33 fewer for `sin`, `cos` and `tan`, or 0.26 to 1.06 % of its instructions, and one of `Interval::asin` and of `Interval::acos` on a point interval 262.05 and 131.15 fewer, as counted with cachegrind (with `--vex-guest-chase=no`), at each of two starts of the stack 16 bytes apart. In that build, a call of `atan2` with x > 0 and |y / x| between 2^-1030 and 2^-1009 takes 13.83 to 13.84 fewer, or 1.08 to 1.11 %, one of `atan2` with both arguments of random signs and log-uniform over every exponent 2.05 fewer, and one of `pow` on pairs one `f64` away from pairs at which the power is exact 0.37 to 1.77 fewer, while every other set of arguments counted, of these functions and of `powi`, takes as many instructions as before, or up to 0.23 fewer. `sqrt`, `cbrt` and `hypot` take none of the operations that use these scratch limbs.
+
 ## v0.1.0 - 2026-11-22
 
 The first release of fushimi, a fork of inari v2.0.0; the entries below are the changes since inari v2.0.0.
