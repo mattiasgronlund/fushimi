@@ -9,9 +9,10 @@
 // Each function first settles some arguments by rules: NaN and ±∞, the arguments beyond a
 // threshold past which the results overflow or are below 2^-1075 in magnitude, those whose
 // results are within an ulp of 1 or of x, and the integers from 1 to 22 for 10^x, whose results
-// are `f64`s. Ziv's strategy cannot settle an argument whose result is an `f64` unless an enclosure
-// has that `f64` as its bound in the direction of the rounding, as the exact enclosures of 2^x
-// at an integer x do, since the two bounds of any other enclosure round to different `f64`s.
+// are `f64`s, there only where the fast path below fails at them. Ziv's strategy cannot settle
+// an argument whose result is an `f64` unless an enclosure has that `f64` as its bound in the
+// direction of the rounding, as the exact enclosures of 2^x at an integer x do, since the two
+// bounds of any other enclosure round to different `f64`s.
 // The only finite arguments whose results are `f64`s are 0 and, for 2^x and 10^x, the integers
 // whose powers are `f64`s, as e^r and tanh r are irrational for every rational r other than 0, sinh
 // r and cosh r too if e^r is not a quadratic irrational, which follows from the theorem of Hermite
@@ -66,9 +67,10 @@
 // `rocq/theories/ExpIrrational.v`. Other than that, it is not proved that a test passes by the
 // cap of `ziv` or of `ziv_near`, nor that the evaluations do not panic.
 //
-// e^x, 2^x and 10^x try a fast path in double-double after their rules and before `ziv` and
-// `ziv_near` (`fast_exp`), whose rounding tests are in `src/dyadic/fast.rs`. Where a test
-// fails, the function calls `ziv` or `ziv_near` as before. At an integer x in its range, where
+// e^x, 2^x and 10^x try a fast path in double-double after their rules, but before those of 10^x
+// for the integers from 1 to 22 and, to nearest, 23, and before `ziv` and `ziv_near`
+// (`fast_exp`), whose rounding tests are in `src/dyadic/fast.rs`. Where a test fails, the
+// function calls `ziv` or `ziv_near` as before. At an integer x in its range, where
 // 2^x is an `f64`, the directed test fails, as it passes only where the result lies strictly
 // between two adjacent `f64`s, so that the exact enclosures settle x as above, and the test
 // rounded to nearest passes and returns 2^x. `rocq/theories/FastExpCore.v` bounds the
@@ -1085,10 +1087,18 @@ fn exp10_dir_with<const FMA: bool, const UP: bool>(x: f64) -> f64 {
         // As in `exp10`.
         near_one(x, UP)
     } else if x < 309.0 && x > -324.0 {
-        if (1.0..=22.0).contains(&x) && x == x.floor() {
-            POW10[x as usize]
-        } else if let Some(r) = fast_exp10_dir::<FMA>(x, UP) {
+        // The fast path first, and the rule for the integers from 1 to 22 only where it fails, as
+        // in `exp10_near`. It fails at each of them, as the directed test does for 2^x at an
+        // integer, so that a call at one of them takes about 59 more instructions, more than
+        // twice as many (59 more at the integers from 1 to 8 among the hard cases in
+        // `src/cr/tests/mpfr/hard_cases.wc`), while one on random x in [0.1, 10), [-10, 10),
+        // [-324, 308.25) and next to underflow and overflow takes 2.00 to 7.43 fewer, and one on
+        // the other hard cases 0.80 fewer in this function (cachegrind, in a crate that links
+        // `cr`, built for Haswell).
+        if let Some(r) = fast_exp10_dir::<FMA>(x, UP) {
             r
+        } else if (1.0..=22.0).contains(&x) && x == x.floor() {
+            POW10[x as usize]
         } else {
             ziv(&Exp10(x), UP, 1)
         }
@@ -1139,15 +1149,24 @@ fn exp10_near_with<const FMA: bool>(x: f64) -> f64 {
         // As in `exp10_near`.
         1.0
     } else if x < 309.0 && x > -324.0 {
-        if (1.0..=22.0).contains(&x) && x == x.floor() {
+        // The fast path first, and the rules for the integers from 1 to 23 only where it fails,
+        // which among them it does at 23 alone, whose result is a midpoint: the arguments that it
+        // settles then skip the tests of the rules, among them `x.floor()`, which on x86-64
+        // without SSE4.1 is a call of a function. A call takes 4.00 to 9.43 fewer instructions on
+        // random x in [0.1, 10), [-10, 10), [-324, 308.25), [-324, -307.06) and [307.93, 308.25),
+        // and 2.12 fewer on the hard cases in `src/cr/tests/mpfr/hard_cases.wc` other than the
+        // integers from 1 to 8 among them, while one at the integers from 1 to 23 takes about
+        // twice as many: 45 more at those 8, and 45.91 more on average over all 23 (cachegrind,
+        // in a crate that links `cr`, built for Haswell).
+        if let Some(r) = fast_exp10_near::<FMA>(x) {
+            r
+        } else if (1.0..=22.0).contains(&x) && x == x.floor() {
             POW10[x as usize]
         } else if x == 23.0 {
             // 10^23 = 5^23 2^23, with 5^23 odd and in [2^53, 2^54), is the midpoint of two
             // adjacent `f64`s, which an enclosure settles only if it is one of its bounds.
             // `1e23` is its rounding, ties to even.
             1e23
-        } else if let Some(r) = fast_exp10_near::<FMA>(x) {
-            r
         } else {
             ziv_near(&Exp10(x), 1)
         }

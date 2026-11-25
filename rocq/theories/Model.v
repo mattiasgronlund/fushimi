@@ -2747,15 +2747,20 @@ Definition exp2_dir_with (x : f64) (up : bool) : option f64 :=
 (** [pub(crate) fn exp10(x: f64, up: bool) -> f64], with [TINY_EXP10] as
     [TINY_EXP] and [exp10_dir] as [exp_dir] in [exp], where
     [(1.0..=22.0).contains(&x)] is [1.0 <= x && x <= 22.0], and
-    [x as usize], for such an integer [x], is [to_i64 x]. *)
+    [x as usize], for such an integer [x], is [to_i64 x]. The rule for
+    the integers from 1 to 22 comes after the fast path, where it returns
+    [None]. *)
 Definition exp10_dir_with (x : f64) (up : bool) : option f64 :=
   if lt (fabs x) tiny_exp10 then Some (near_one x up)
   else if lt x (from_bits 0x4073500000000000) (* 309.0 *)
           && gt x (from_bits 0xc074400000000000) (* -324.0 *) then
-    if le one x && le x (from_bits 0x4036000000000000) (* 22.0 *) && eq x (ffloor x) then
-      Some (pow10 (to_i64 x))
-    else
-      match fast_exp10_dir false x up with Some r => Some r | None => ziv (ev_exp10 x) up 1 end
+    match fast_exp10_dir false x up with
+    | Some r => Some r
+    | None =>
+        if le one x && le x (from_bits 0x4036000000000000) (* 22.0 *) && eq x (ffloor x) then
+          Some (pow10 (to_i64 x))
+        else ziv (ev_exp10 x) up 1
+    end
   else if is_nan x || eq x infinity then Some x
   else if eq x neg_infinity then Some zero
   else if ge x (from_bits 0x4073500000000000) (* 309.0 *) then Some (overflow up)
@@ -2886,17 +2891,21 @@ Definition exp2_near_with (x : f64) : option f64 :=
     [TINY_EXP10] as [TINY_EXP] and [exp10_near_entry] as
     [exp_near_entry], with [(1.0..=22.0).contains(&x)] and [x as usize]
     as in [exp10_dir_with], where the literal [1e23] is
-    [from_bits 0x44b52d02c7e14af6]. *)
+    [from_bits 0x44b52d02c7e14af6]. The rules for the integers from 1 to
+    23 come after the fast path, where it returns [None]. *)
 Definition exp10_near_with (x : f64) : option f64 :=
   if lt (fabs x) tiny_exp10 then Some one
   else if lt x (from_bits 0x4073500000000000) (* 309.0 *)
           && gt x (from_bits 0xc074400000000000) (* -324.0 *) then
-    if le one x && le x (from_bits 0x4036000000000000) (* 22.0 *) && eq x (ffloor x) then
-      Some (pow10 (to_i64 x))
-    else if eq x (from_bits 0x4037000000000000) (* 23.0 *) then
-      Some (from_bits 0x44b52d02c7e14af6)
-    else
-      match fast_exp10_near false x with Some r => Some r | None => ziv_near (ev_exp10 x) 1 end
+    match fast_exp10_near false x with
+    | Some r => Some r
+    | None =>
+        if le one x && le x (from_bits 0x4036000000000000) (* 22.0 *) && eq x (ffloor x) then
+          Some (pow10 (to_i64 x))
+        else if eq x (from_bits 0x4037000000000000) (* 23.0 *) then
+          Some (from_bits 0x44b52d02c7e14af6)
+        else ziv_near (ev_exp10 x) 1
+    end
   else if is_nan x || eq x infinity then Some x
   else if eq x neg_infinity then Some zero
   else if ge x (from_bits 0x4073500000000000) (* 309.0 *) then Some infinity

@@ -15,7 +15,9 @@
     [f64_pow10]). At such an integer [m <> 0], [ev_exp2] encloses [2^m]
     by the point [2^m] at every level, as [(m - x) ln 2 = 0] there, and
     the driver returns it ([ev_exp2_exact] of [DyExpPoint.v]); [exp10]
-    returns [10^m] by its rule for [1 <= m <= 22]. [sinh x] and [cosh x]
+    returns [10^m] for [1 <= m <= 22], by its fast path where that
+    returns ([fast_exp10_exact]) and by its rule for those [m] where it
+    does not. [sinh x] and [cosh x]
     at a rational [x] other than 0 are rationals only if [e^x] is a root
     of a quadratic with rational coefficients, [(e^x)^2 - 2 s e^x -+ 1 = 0]
     for [s = sinh x] or [cosh x], which the hypothesis [exp_not_quadratic]
@@ -190,6 +192,22 @@ Proof.
 intros x v up. apply exp2_dir_exact_with. exact ziv_exact.
 Qed.
 
+(** Where the fast path of [exp10] returns at an [x] whose [10^x] is an
+    [f64] [v], it returns [v]. *)
+Lemma fast_exp10_exact :
+  forall x up (v r : f64),
+  is_finite x = true -> is_finite v = true -> Rexp10 (B2R x) = B2R v ->
+  bpow radix2 (-56) <= Rabs (B2R x) -> DyadicExp.fast_exp10_dir false x up = Some r -> r = v.
+Proof.
+intros x up v r Fx Fv H Hx F.
+pose proof (fast_exp10_dir_correct false x up r Fx Hx F) as R. unfold rounds in R. rewrite H in R.
+pose proof (rnd_exact v (if up then RNDU else RNDD) (B2R v) Fv eq_refl) as R'.
+destruct (OfPointCore.round_f64_unique _ _ _ _ R R') as [E | (s & s' & _ & Ev)]; [exact E|].
+(* Both zeros: impossible, as [10^x > 0]. *)
+exfalso. subst v. cbn [B2R] in H. unfold Rexp10, Rpower in H.
+pose proof (exp_pos (B2R x * ln 10)). lra.
+Qed.
+
 Theorem exp10_dir_exact_with :
   forall z x (v : f64) (up : bool),
   is_finite x = true -> is_finite v = true -> Rexp10 (B2R x) = B2R v ->
@@ -212,7 +230,8 @@ destruct (Z.eq_dec m 0) as [-> | Nm].
   destruct (dte_zero x Fx Xm) as (s & ->).
   assert (Vo : v = DyadicExp.one) by (apply dxe_one; [exact Fv | rewrite Vm; reflexivity]).
   subst v. destruct s, up; vm_compute; reflexivity. }
-(* [1 <= m <= 22]: the rule for the integers from 1 to 22 returns [10^m]. *)
+(* [1 <= m <= 22]: the fast path, or where it fails the rule for the integers from 1 to 22,
+   returns [10^m]. *)
 assert (L22 : B2R (from_bits 0x4036000000000000) = 22)
   by (lit_B2R; cbn [bpow radix_val radix2]; lra).
 unfold DyadicExp.exp10_dir_with.
@@ -244,7 +263,11 @@ assert (G4 : le DyadicExp.one x && le x (from_bits 0x4036000000000000) && eq x (
   change (round_mode mode_DN) with Zfloor. rewrite Zfloor_IZR.
   rewrite Rle_bool_true, Rle_bool_true, Req_bool_true by (reflexivity || (apply IZR_le; lia)).
   reflexivity. }
-rewrite G3, G0, G4. f_equal.
+rewrite G3, G0.
+(* The fast path comes first: where it returns, it returns [v]. *)
+destruct (DyadicExp.fast_exp10_dir false x up) eqn:F; cbv iota.
+{ f_equal. exact (fast_exp10_exact x up v _ Fx Fv H (tiny_exp10_false x Fx G3) F). }
+rewrite G4. f_equal.
 (* [to_i64 x] is [m]: [Btrunc x] is [trunc m = m]. *)
 assert (Ht : DyadicExp.to_i64 x = m).
 { assert (Et : IZR (Btrunc x) = IZR m)

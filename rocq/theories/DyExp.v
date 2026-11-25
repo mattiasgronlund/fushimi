@@ -570,12 +570,12 @@ destruct (lt (fabs x) DyadicExp.tiny_exp10) eqn:G3; cbv iota in H.
 { injection H as <-. apply Hp. exact (exp10_tiny_rule x up Fx G3). }
 destruct (lt x (from_bits 0x4073500000000000) && gt x (from_bits 0xc074400000000000)) eqn:G0;
   cbv iota in H.
-{ destruct (le DyadicExp.one x && le x (from_bits 0x4036000000000000) && eq x (ffloor x))
-    eqn:G4; cbv iota in H.
-  { injection H as <-. apply Hp. exact (exp10_int_rule x up Fx G4). }
-  destruct (DyadicExp.fast_exp10_dir false x up) eqn:F; cbv iota in H.
+{ destruct (DyadicExp.fast_exp10_dir false x up) eqn:F; cbv iota in H.
   { injection H as <-. apply Hp.
     exact (fast_exp10_dir_correct false x up _ Fx (tiny_exp10_false x Fx G3) F). }
+  destruct (le DyadicExp.one x && le x (from_bits 0x4036000000000000) && eq x (ffloor x))
+    eqn:G4; cbv iota in H.
+  { injection H as <-. apply Hp. exact (exp10_int_rule x up Fx G4). }
   apply (Hz (DyadicExp.ev_exp10 x) up 1%nat); [|exact H].
   intros n a Hn Ha. exact (ev_exp10_correct x n a Hn Ha). }
 rewrite (fin_not_nan x Fx), (fin_neq_inf x Fx), (fin_neq_ninf x Fx) in H. cbn [orb] in H.
