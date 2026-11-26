@@ -352,7 +352,7 @@ destruct (lt (fabs x) DyadicExp.tiny_hyp) eqn:G3; cbv iota in H.
 destruct (lt (fabs x) (from_bits 0x4086380000000000)) eqn:G4; cbv iota in H.
 { destruct (DyadicExp.fast_sinh_dir false x up) eqn:F; cbv iota in H.
   { injection H as <-. apply Hp. exact (fast_sinh_dir_correct false x up _ Fx F). }
-  apply (Hz (DyadicExp.ev_sinh x) up 1%nat); [|exact H].
+  apply (Hz (DyadicExp.ev_sinh x) up (DyadicExp.sinh_start x)); [|exact H].
   intros n a Hn Ha. exact (ev_sinh_correct x n a Hn Ha). }
 rewrite (fin_not_nan x Fx), (fin_neq_inf x Fx), (fin_neq_ninf x Fx) in H. cbn [orb] in H.
 destruct (ge x (from_bits 0x4086380000000000)) eqn:G1; cbv iota in H.
@@ -431,7 +431,7 @@ destruct (lt (fabs x) (from_bits 0x4086380000000000)) eqn:G4; cbv iota in H.
   { injection H as <-. apply Hp. rewrite cosh_Rabs, <- hyp_fabs.
     apply (fast_cosh_dir_correct false (fabs x) up _ Ft); [|exact F].
     rewrite hyp_fabs. apply Rabs_pos. }
-  apply (Hz (DyadicExp.ev_cosh (fabs x)) up 1%nat); [|exact H].
+  apply (Hz (DyadicExp.ev_cosh (fabs x)) up (DyadicExp.hyp_start (fabs x))); [|exact H].
   intros n a Hn Ha. destruct (ev_cosh_correct _ n a Hn Ha) as (Oa & Ha').
   split; [exact Oa|].
   rewrite hyp_fabs in Ha'.

@@ -621,6 +621,7 @@ Print Assumptions DyExp.exp_dir_strict.
 Print Assumptions DyExp.exp2_dir_correct.
 Print Assumptions DyExp.exp2_dir_side.
 Print Assumptions DyExp.exp2_dir_strict.
+Print Assumptions DyExp.exp2_int_rule.
 Print Assumptions DyExp.exp10_dir_correct.
 Print Assumptions DyExp.exp10_dir_side.
 Print Assumptions DyExp.exp10_dir_strict.

@@ -2,9 +2,11 @@
 
     At a finite [x] whose exact result is an [f64] [v], each of [exp],
     [exp2], [exp10], [sinh], [cosh] and [tanh] of [DyadicExp] returns [v],
-    with any driver for those whose exact results are all settled by a
-    rule, and with a driver that returns exact points ([driver_exact] of
-    [DyPown.v]) for [exp2]. The only such arguments are these. [e^x] and
+    with any driver for those whose rules and fast paths settle all their
+    exact results, and for [exp2], whose rules leave the integers from
+    -1074 to -1023 to its driver where its fast path does not return,
+    with a driver that returns exact points ([driver_exact] of
+    [DyPown.v]). The only such arguments are these. [e^x] and
     [tanh x] are not rationals at a rational [x] other than 0
     ([exp_irrational]; [e^(2x) = (1 + t) / (1 - t)] for [t = tanh x]),
     nor are [sinh x] and [cosh x] under [exp_not_quadratic] (below), so
@@ -12,12 +14,16 @@
     settle. [2^x] and [10^x] are rationals only at an integer [x]
     ([pow2_rational], [pow10_rational]), [2^m] is an [f64] for
     [-1074 <= m <= 1023] and [10^m] for [0 <= m <= 22] ([f64_pow2],
-    [f64_pow10]). At such an integer [m <> 0], [ev_exp2] encloses [2^m]
-    by the point [2^m] at every level, as [(m - x) ln 2 = 0] there, and
-    the driver returns it ([ev_exp2_exact] of [DyExpPoint.v]); [exp10]
-    returns [10^m] for [1 <= m <= 22], by its fast path where that
-    returns ([fast_exp10_exact]) and by its rule for those [m] where it
-    does not. [sinh x] and [cosh x]
+    [f64_pow10]). At such an integer [m <> 0], [exp2] returns [2^m] by
+    its fast path where that returns ([fast_exp2_exact]), and where it
+    does not, by its rule for the integers from -1022 to 1023 for those
+    [m] ([exp2_int_rule] of [DyExp.v]) and by the driver for those from
+    -1074 to -1023: [ev_exp2] encloses [2^m] by the point [2^m] at every
+    level, as [(m - x) ln 2 = 0] there, and the driver returns it
+    ([ev_exp2_exact] of [DyExpPoint.v]); [exp10] returns [10^m] for
+    [1 <= m <= 22], by its fast path where that returns
+    ([fast_exp10_exact]) and by its rule for those [m] where it does
+    not. [sinh x] and [cosh x]
     at a rational [x] other than 0 are rationals only if [e^x] is a root
     of a quadratic with rational coefficients, [(e^x)^2 - 2 s e^x -+ 1 = 0]
     for [s = sinh x] or [cosh x], which the hypothesis [exp_not_quadratic]
@@ -155,9 +161,9 @@ destruct (Z.eq_dec m 0) as [-> | Nm].
   destruct (dte_zero x Fx Xm) as (s & ->).
   assert (Vo : v = DyadicExp.one) by (apply dxe_one; [exact Fv | rewrite Vm; reflexivity]).
   subst v. destruct s, up; vm_compute; reflexivity. }
-(* [1 <= |m|]: no rule applies, and [ev_exp2] encloses [2^m] by a point. *)
+(* [1 <= |m|]: no rule before the fast path applies. *)
 assert (Am : 1 <= Rabs (IZR m)) by (rewrite <- abs_IZR; apply IZR_le; lia).
-unfold DyadicExp.exp2_dir_with.
+unfold DyadicExp.exp2_dir_with, DyadicExp.exp2_dir_slow.
 (* [-1074 <= m <= 1023] ([f64_pow2]), so [x = m] passes the range test. *)
 assert (G0 : le (from_bits 0xc090cc0000000000) x && lt x (from_bits 0x4090000000000000) = true).
 { assert (L1 : B2R (from_bits 0xc090cc0000000000) = -1075)
@@ -178,9 +184,27 @@ assert (G3 : lt (fabs x) DyadicExp.tiny_exp = false).
   assert (L1 : bpow radix2 (-54) < 1) by (cbn [bpow radix_val radix2]; lra).
   rewrite Xm in G. lra. }
 rewrite G3, G0.
+(* The fast path comes first: where it returns, it returns [v]. *)
 destruct (DyadicExp.fast_exp2_dir false x up) eqn:F; cbv iota.
 { f_equal. exact (fast_exp2_exact x up v _ Fx Fv H (tiny_exp_false x Fx G3) F). }
-apply Hz; [exact Fv | rewrite Vm; apply powerRZ_NOR; lra | lia |].
+destruct (ge x (from_bits 0xc08ff00000000000)
+          && eq (DyadicExp.of_i64 (DyadicExp.to_i64 x)) x) eqn:G4; cbv iota.
+{ (* [-1022 <= m]: the rule for the integers returns [2^x] rounded in the direction of
+     [up] ([exp2_int_rule]), which is [v], as [v] is an [f64]. *)
+  f_equal.
+  pose proof (DyExp.exp2_int_rule x up Fx G0 G4) as R. rewrite H in R.
+  pose proof (rnd_exact v (if up then RNDU else RNDD) (B2R v) Fv eq_refl) as R'.
+  destruct (OfPointCore.round_f64_unique _ _ _ _ R R') as [E | (s & s' & _ & Ez)]; [exact E|].
+  (* Both zeros: impossible, as [2^x > 0]. *)
+  exfalso. subst v. cbn [B2R] in H. unfold Rexp2, Rpower in H.
+  pose proof (exp_pos (B2R x * ln 2)). lra. }
+(* Otherwise, which is [m < -1022], as the integer test passes at every integer [m] here,
+   the driver returns [2^m] ([driver_exact]): [v = 2^m] is a nonzero [f64], [ev_exp2]
+   encloses it by the point [2^m] at every level ([ev_exp2_exact]), and [exp2_start x] is
+   at most 64. *)
+apply Hz; [exact Fv | rewrite Vm; apply powerRZ_NOR; lra | |].
+{ unfold DyadicExp.exp2_start.
+  match goal with |- context [if ?c then _ else _] => destruct c end; lia. }
 intros n Hn. rewrite Vm. exact (ev_exp2_exact x m n Fx Xm Nm Hr Hn).
 Qed.
 

@@ -1,8 +1,9 @@
 (** * e^x, 2^x and 10^x in the dyadic kernel
 
     [exp_dir], [exp2_dir] and [exp10_dir] of [DyadicExp] in [Model.v]
-    apply the rules of [DyExpRules.v] where one applies, and otherwise the
-    driver [ziv] to the enclosures of [ev_exp_correct] and the others.
+    apply the rules of [DyExpRules.v], and [exp2_int_rule] for [exp2] at
+    the integers from -1022 to 1023, where one applies, and otherwise
+    the driver [ziv] to the enclosures of [ev_exp_correct] and the others.
     [exp_dir_post] and the others prove, for any driver [z] in place of
     [ziv] ([exp_dir_with z] and the others) and any property [post] that
     holds of every correct rounding ([rounds_post]) and that [z] gives
@@ -468,6 +469,88 @@ replace (IZR k * ln 2 + - (IZR k * ln 2 - B2R x * ln 10))%R with (B2R x * ln 10)
 exact Ha'.
 Qed.
 
+(** [B2R l] for a literal [l], as in [DyHypRules.v]: [B2SF l] computes to
+    its sign, significand and exponent. *)
+Local Ltac lit_B2R :=
+  match goal with |- B2R ?l = _ =>
+    rewrite <- (SF2R_B2SF _ _ l);
+    let s := eval vm_compute in (B2SF l) in
+    replace (B2SF l) with s by (vm_compute; reflexivity);
+    cbn [SF2R SpecFloat.cond_Zopp]; unfold F2R; cbn [Fnum Fexp]; rewrite ?opp_IZR end.
+
+(** [k as f64] is [k] for [|k| < 2^53], as [DyPowCore.of_i64_exact]
+    shows for the same function of [DyadicPow]; [DyPowCore.v] requires
+    this file. *)
+Local Lemma exp_of_i64 :
+  forall k, Z.abs k < 2 ^ 53 ->
+  is_finite (DyadicExp.of_i64 k) = true /\ B2R (DyadicExp.of_i64 k) = IZR k.
+Proof.
+intros k Hk.
+assert (Fk : generic_format radix2 (SpecFloat.fexp 53 1024) (IZR k)).
+{ change (SpecFloat.fexp 53 1024) with (FLT_exp (-1074) 53).
+  apply generic_format_FLT, (FLT_spec _ _ _ _ (Float radix2 k 0)).
+  - unfold F2R; cbn [Fnum Fexp bpow]. ring.
+  - cbn [Fnum radix_val radix2]. exact Hk.
+  - cbn [Fexp]. lia. }
+unfold DyadicExp.of_i64.
+pose proof (binary_normalize_correct 53 1024 prec_gt_0_53 prec_lt_emax_53_1024
+  mode_NE k 0 false) as H.
+cbv zeta in H.
+replace (F2R (Float radix2 k 0)) with (IZR k) in H by (unfold F2R; cbn [Fnum Fexp bpow]; ring).
+rewrite (round_generic _ _ _ (IZR k) Fk) in H.
+rewrite Rlt_bool_true in H.
+2: { rewrite <- abs_IZR.
+  apply Rlt_trans with (IZR (2 ^ 53)); [apply IZR_lt; exact Hk|].
+  rewrite (IZR_Zpower radix2) by lia. apply bpow_lt. lia. }
+destruct H as (HR & HF & _). split; [exact HF | exact HR].
+Qed.
+
+(** The rule of [exp2_dir_slow] for the integers from -1022 to 1023: at
+    an [x] in the range [-1075 <= x < 1024] of the test of
+    [exp2_dir_with], which calls [exp2_dir_slow], with
+    [x >= -1022] and [(x as i64) as f64 == x], [two_pow (to_i64 x)] is
+    [2^x], rounded in either direction. It is here rather than in
+    [DyExpRules.v] as it takes [pow2_bits] from [FastRound.v], which
+    requires [DyExpRules.v]. *)
+Lemma exp2_int_rule :
+  forall x (up : bool), is_finite x = true ->
+  le (from_bits 0xc090cc0000000000) x && lt x (from_bits 0x4090000000000000) = true ->
+  ge x (from_bits 0xc08ff00000000000) && eq (DyadicExp.of_i64 (DyadicExp.to_i64 x)) x = true ->
+  mpfr_round f64_format (if up then RNDU else RNDD) (Rexp2 (B2R x))
+    (with_val (DyadicExp.two_pow (DyadicExp.to_i64 x))).
+Proof.
+intros x up Fx H0 H4.
+apply andb_prop in H0 as [_ Hhi]. apply andb_prop in H4 as [Hge He].
+apply lt_R in Hhi; [| exact Fx | vm_compute; reflexivity].
+apply ge_R in Hge; [| exact Fx | vm_compute; reflexivity].
+assert (L1 : B2R (from_bits 0xc08ff00000000000) = (-1022)%R)
+  by (lit_B2R; cbn [bpow radix_val radix2]; lra).
+assert (L2 : B2R (from_bits 0x4090000000000000) = 1024%R)
+  by (lit_B2R; cbn [bpow radix_val radix2]; lra).
+rewrite L1 in Hge. rewrite L2 in Hhi.
+(* [to_i64 x] is [trunc x], which lies in [-1022, 1024] as [x] does. *)
+assert (M : DyadicExp.to_i64 x = Z.max (- 2 ^ 63) (Z.min (2 ^ 63 - 1) (Btrunc x)))
+  by (destruct x; try discriminate Fx; reflexivity).
+assert (T : Btrunc x = Ztrunc (B2R x))
+  by (apply eq_IZR; rewrite Btrunc_correct, round_FIX_IZR; reflexivity).
+assert (T1 : -1022 <= Ztrunc (B2R x))
+  by (rewrite <- (Ztrunc_IZR (-1022)); apply Ztrunc_le; lra).
+assert (T2 : Ztrunc (B2R x) <= 1024)
+  by (rewrite <- (Ztrunc_IZR 1024); apply Ztrunc_le; lra).
+set (k := DyadicExp.to_i64 x) in *.
+assert (Hk : -1022 <= k <= 1024) by (rewrite M, T; lia).
+(* [k as f64 == x] is true, so [x] is the integer [k], and [k <= 1023]. *)
+destruct (exp_of_i64 k) as [Fk Vk]; [lia|].
+unfold eq in He. rewrite Beqb_correct in He by first [exact Fk | exact Fx].
+destruct (Req_bool_spec (B2R (DyadicExp.of_i64 k)) (B2R x)) as [Ek|]; [|discriminate].
+rewrite Vk in Ek.
+assert (Hk' : k < 1024) by (apply lt_IZR; lra).
+(* [two_pow k] is the [f64] [2^k], as [k] is in the normal range. *)
+destruct (FastRound.pow2_bits k ltac:(lia)) as [Fp Ep].
+unfold DyadicExp.two_pow. apply rnd_exact; [exact Fp|].
+rewrite Ep, bpow_exp2, Ek. reflexivity.
+Qed.
+
 (** ** The directed functions *)
 
 Lemma exp_dir_post :
@@ -483,7 +566,7 @@ destruct (lt x (from_bits 0x4086300000000000) && gt x (from_bits 0xc087500000000
   cbv iota in H.
 { destruct (DyadicExp.fast_exp_dir false x up) eqn:F; cbv iota in H.
   { injection H as <-. apply Hp. exact (fast_exp_dir_correct false x up _ Fx F). }
-  apply (Hz (DyadicExp.ev_exp x) up 1%nat); [|exact H].
+  apply (Hz (DyadicExp.ev_exp x) up (DyadicExp.exp_start x)); [|exact H].
   intros n a Hn Ha. exact (ev_exp_correct x n a Hn Ha). }
 rewrite (fin_not_nan x Fx), (fin_neq_inf x Fx), (fin_neq_ninf x Fx) in H. cbn [orb] in H.
 destruct (ge x (from_bits 0x4086300000000000)) eqn:G1; cbv iota in H.
@@ -520,7 +603,7 @@ Lemma exp2_dir_post :
   is_finite x = true -> DyadicExp.exp2_dir_with z x up = Some v ->
   post up (Rexp2 (B2R x)) v.
 Proof.
-intros z post Hp Hz x up v Fx H. unfold DyadicExp.exp2_dir_with in H.
+intros z post Hp Hz x up v Fx H. unfold DyadicExp.exp2_dir_with, DyadicExp.exp2_dir_slow in H.
 destruct (lt (fabs x) DyadicExp.tiny_exp) eqn:G3; cbv iota in H.
 { injection H as <-. apply Hp. exact (exp2_tiny_rule x up Fx G3). }
 destruct (le (from_bits 0xc090cc0000000000) x && lt x (from_bits 0x4090000000000000)) eqn:G0;
@@ -528,7 +611,10 @@ destruct (le (from_bits 0xc090cc0000000000) x && lt x (from_bits 0x4090000000000
 { destruct (DyadicExp.fast_exp2_dir false x up) eqn:F; cbv iota in H.
   { injection H as <-. apply Hp.
     exact (fast_exp2_dir_correct false x up _ Fx (tiny_exp_false x Fx G3) F). }
-  apply (Hz (DyadicExp.ev_exp2 x) up 1%nat); [|exact H].
+  destruct (ge x (from_bits 0xc08ff00000000000)
+            && eq (DyadicExp.of_i64 (DyadicExp.to_i64 x)) x) eqn:G4; cbv iota in H.
+  { injection H as <-. apply Hp. exact (exp2_int_rule x up Fx G0 G4). }
+  apply (Hz (DyadicExp.ev_exp2 x) up (DyadicExp.exp2_start x)); [|exact H].
   intros n a Hn Ha. exact (ev_exp2_correct x n a Hn Ha). }
 rewrite (fin_not_nan x Fx), (fin_neq_inf x Fx), (fin_neq_ninf x Fx) in H. cbn [orb] in H.
 destruct (ge x (from_bits 0x4090000000000000)) eqn:G1; cbv iota in H.
@@ -556,7 +642,8 @@ Theorem exp2_dir_strict :
   forall x up v,
   DyadicExp.exp2_dir_with ziv_strict x up = Some v -> DyadicExp.exp2_dir x up = Some v.
 Proof.
-intros x up v. unfold DyadicExp.exp2_dir, DyadicExp.exp2_dir_with. dir_strict.
+intros x up v. unfold DyadicExp.exp2_dir, DyadicExp.exp2_dir_with, DyadicExp.exp2_dir_slow.
+dir_strict.
 Qed.
 
 Lemma exp10_dir_post :
@@ -576,7 +663,7 @@ destruct (lt x (from_bits 0x4073500000000000) && gt x (from_bits 0xc074400000000
   destruct (le DyadicExp.one x && le x (from_bits 0x4036000000000000) && eq x (ffloor x))
     eqn:G4; cbv iota in H.
   { injection H as <-. apply Hp. exact (exp10_int_rule x up Fx G4). }
-  apply (Hz (DyadicExp.ev_exp10 x) up 1%nat); [|exact H].
+  apply (Hz (DyadicExp.ev_exp10 x) up (DyadicExp.exp10_start x)); [|exact H].
   intros n a Hn Ha. exact (ev_exp10_correct x n a Hn Ha). }
 rewrite (fin_not_nan x Fx), (fin_neq_inf x Fx), (fin_neq_ninf x Fx) in H. cbn [orb] in H.
 destruct (ge x (from_bits 0x4073500000000000)) eqn:G1; cbv iota in H.

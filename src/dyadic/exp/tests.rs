@@ -217,7 +217,11 @@ fn regressions_hold() {
 }
 
 // The thresholds of the rules of `exp.rs` for the directions, of each function of `FUNCTIONS`,
-// and those of the bounds of `known`, where the evaluations have to give the same roundings.
+// those of the bounds of `known`, where the evaluations have to give the same roundings, and
+// the bounds of the ranges in which `ziv` starts at 2 limbs (`exp_start` and the others), on
+// each side of which the levels have to give the same roundings: 2^-30 (`START_SMALL`), -725
+// and 709.78 for e^x, 2^-30, -1022 and 1023.99 for 2^x, 2^-30, -319 and 308.25 for 10^x, and
+// 710.47 for sinh and cosh. tanh starts at 1 limb in the directions.
 const RULE_THRESHOLDS: [&[f64]; 6] = [
     &[
         710.0,
@@ -227,6 +231,9 @@ const RULE_THRESHOLDS: [&[f64]; 6] = [
         -745.1332191019412,
         f64::EPSILON / 4.0,
         f64::EPSILON / 2.0,
+        START_SMALL,
+        -725.0,
+        709.78,
     ],
     &[
         1024.0,
@@ -235,6 +242,8 @@ const RULE_THRESHOLDS: [&[f64]; 6] = [
         -1022.0,
         f64::EPSILON / 4.0,
         f64::EPSILON / 2.0,
+        START_SMALL,
+        1023.99,
     ],
     &[
         309.0,
@@ -245,9 +254,12 @@ const RULE_THRESHOLDS: [&[f64]; 6] = [
         f64::EPSILON / 8.0,
         1.0,
         22.0,
+        START_SMALL,
+        -319.0,
+        308.25,
     ],
-    &[711.0, 710.475860073944, TINY_HYP, SMALL, 1.0],
-    &[711.0, 710.475860073944, TINY_HYP, SMALL],
+    &[711.0, 710.475860073944, TINY_HYP, SMALL, 1.0, 710.47],
+    &[711.0, 710.475860073944, TINY_HYP, SMALL, 710.47],
     &[19.0, 18.714973875118524, TINY_HYP, SMALL, 1.0],
 ];
 
@@ -277,7 +289,8 @@ fn at_rule_thresholds(i: usize) -> Vec<f64> {
 
 // Each rule of `exp.rs` for the directions at its threshold and the 3 `f64`s on each side of
 // it, the thresholds of the bounds of `known`, where the evaluations have to give the same
-// roundings, and the special values (`at_rule_thresholds`).
+// roundings, the bounds of the ranges in which `ziv` starts at 2 limbs, and the special values
+// (`at_rule_thresholds`).
 #[test]
 fn rules_at_their_thresholds() {
     for i in 0..FUNCTIONS.len() {
@@ -293,16 +306,41 @@ fn rules_at_their_thresholds() {
 // between 0 and 2^-1074; the integers from 1 to 24 for 10^x, where 10^x is an `f64` up to 22,
 // 10^23 is the midpoint of two `f64`s, and 10^24 is neither; and for tanh, 19, the threshold
 // of its directions, and 27.5 ln 2, within an ulp of where 1 - tanh x = 2 / (e^2x + 1) is
-// 2^-54, as e^(55 ln 2) = 2^55.
+// 2^-54, as e^(55 ln 2) = 2^55. Also the bounds of the ranges in which `ziv_near` starts at
+// 2 limbs, which are those of `ziv` that `RULE_THRESHOLDS` names and 16 for tanh, on each side
+// of which the levels have to give the same roundings.
 #[test]
 fn near_rules_at_their_thresholds() {
     let thresholds: [&[f64]; 6] = [
-        &[710.0, -746.0, f64::EPSILON / 4.0],
-        &[1024.0, -1074.0, -1075.0, -1076.0, f64::EPSILON / 4.0],
-        &[309.0, -324.0, f64::EPSILON / 16.0],
-        &[711.0, TINY_NEAR, TINY_HYP],
-        &[711.0, TINY_NEAR, TINY_HYP],
-        &[19.0, 19.061547465398498, 20.0, TINY_NEAR],
+        &[
+            710.0,
+            -746.0,
+            f64::EPSILON / 4.0,
+            START_SMALL,
+            -725.0,
+            709.78,
+        ],
+        &[
+            1024.0,
+            -1074.0,
+            -1075.0,
+            -1076.0,
+            f64::EPSILON / 4.0,
+            START_SMALL,
+            -1022.0,
+            1023.99,
+        ],
+        &[
+            309.0,
+            -324.0,
+            f64::EPSILON / 16.0,
+            START_SMALL,
+            -319.0,
+            308.25,
+        ],
+        &[711.0, TINY_NEAR, TINY_HYP, 710.47],
+        &[711.0, TINY_NEAR, TINY_HYP, 710.47],
+        &[19.0, 19.061547465398498, 20.0, TINY_NEAR, 16.0],
     ];
     for (i, thresholds) in thresholds.iter().enumerate() {
         for &x in *thresholds {
@@ -434,8 +472,13 @@ fn integers() {
     }
 }
 
-// The exact enclosures of 2^n at the integers n other than 0 from -1074 to 1023, which no rule
-// settles: `Exp2` gives the point 2^n there, as (n - x) ln 2 = 0 (`ev_exp2_exact`).
+// The exact enclosures of 2^n at the integers n other than 0 from -1074 to 1023: `Exp2` gives
+// the point 2^n there, as (n - x) ln 2 = 0 (`ev_exp2_exact`). They settle, in the directions,
+// the integers below -1022, which the rule of `exp2_dir_slow` for the integers from -1022 to
+// 1023 leaves to `ziv`, and, to nearest, those from -1074 to -1022 at which the fast path fails,
+// which in builds for Haswell, for x86-64 and for x86-64 without an FMA was -1022 alone.
+// `exp2_at_the_integers` checks the levels in the directions and, to nearest, that none above
+// -1022 reaches `ziv_near`.
 #[test]
 fn exact_enclosures() {
     use crate::dyadic::tests::check_exact;
@@ -2285,6 +2328,163 @@ mod mpfr {
                 );
             }
             super::check(TANH, x);
+        }
+    }
+
+    // The function `i` at `x`, toward +∞ if `up` is `Some(true)`, toward -∞ if it is
+    // `Some(false)` and to nearest if it is `None`, with the levels that `ziv` and `ziv_near`
+    // used in it, `(level, failed)` as `ziv_level` gives them: level 0 where a rule or a fast
+    // path settled it. `ziv_level` has the `cfg` of this module.
+    fn with_level(i: usize, x: f64, up: Option<bool>) -> (f64, (usize, usize)) {
+        reset_ziv_level();
+        let y = match up {
+            Some(up) => FUNCTIONS[i].1(x, up),
+            None => NEAR[i](x),
+        };
+        (y, ziv_level())
+    }
+
+    // The roundings of `with_level`: toward -∞ and toward +∞, and to nearest.
+    const DIRECTED: &[Option<bool>] = &[Some(false), Some(true)];
+    const TO_NEAREST: &[Option<bool>] = &[None];
+    const ALL_THREE: &[Option<bool>] = &[Some(false), Some(true), None];
+
+    // One argument per call of `ziv` and `ziv_near` in `exp.rs` that starts at 2 limbs in a range
+    // of arguments, as (function, to nearest, x): for e^x, 2^x, 10^x, sinh and cosh, one at which
+    // the fast path fails in both directions, so that the function reaches `ziv` in both, and one
+    // at which it fails to nearest, so that it reaches `ziv_near`; and for tanh, whose directions
+    // start at 1 limb, one to nearest. Each comes from the arguments of that function in
+    // `src/cr/tests/mpfr/hard_cases.wc`: of those at which `exp_start` or the other function for
+    // its first level returns 2, the function reaches that call and the test at 2 limbs passes,
+    // in builds for Haswell, for x86-64 and for x86-64 without an FMA, it is the one with the
+    // highest h, the hardness that its comment there gives, with ties going to the first in the
+    // file.
+    const START_2_CASES: [(usize, bool, f64); 11] = [
+        (EXP, false, -1.4353822566968892e-8),  // h=113
+        (EXP, true, -3.435307718054454e1),     // h=111
+        (EXP2, false, 5.2123081440769376e-8),  // h=112
+        (EXP2, true, 1.8476455676928627e-3),   // h=112
+        (EXP10, false, 4.6076371772845026e-1), // h=118
+        (EXP10, true, 2.469348900175759e-8),   // h=113
+        (SINH, false, 3.576278686522675e-6),   // h=120
+        (SINH, true, 1.8761205749638746e-4),   // h=110
+        (COSH, false, 2.8610229492177742e-6),  // h=118
+        (COSH, true, 3.831029794315415e0),     // h=110
+        (TANH, true, 2.682209014895151e-6),    // h=116
+    ];
+
+    // Each argument of `START_2_CASES` reaches its call of `ziv` or `ziv_near`, which starts at
+    // 2 limbs, and the first test that it makes passes: `ziv_level` gives (2, 0). With a start at
+    // 1 limb it gave (2, 1), as the test at 1 limb failed, in builds for Haswell, for x86-64 and
+    // for x86-64 without an FMA. The function gives MPFR's roundings there, in both directions and
+    // to nearest (`check`).
+    #[test]
+    fn hard_cases_start_at_2() {
+        for (i, near, x) in START_2_CASES {
+            for &up in if near { TO_NEAREST } else { DIRECTED } {
+                let (_, level) = with_level(i, x, up);
+                assert!(
+                    level == (2, 0),
+                    "{}({x:e}), up = {up:?}: `ziv` at level {} after {} failed tests, not at \
+                     2 after none",
+                    FUNCTIONS[i].0,
+                    level.0,
+                    level.1
+                );
+            }
+            super::check(i, x);
+        }
+    }
+
+    // Arguments outside the ranges in which `exp_start` and the others return 2, as (function,
+    // roundings, x): the arguments of `src/cr/tests/mpfr/hard_cases.wc` at which the function
+    // reached `ziv` or `ziv_near` and returned at 1 limb when every call started at 1 limb, in
+    // builds for Haswell and without an FMA, each with the roundings in which it did, other than
+    // those of 2^x at the integers, where its enclosures are exact. All but two are next to
+    // underflow or overflow, with an h of at most 56, the hardness that its comment there gives:
+    // below, the results are subnormal or 0, and above, they are a little below 2^1024 in
+    // magnitude and do not overflow. The two others are 10^x at -2.41e-17 (h=108), where
+    // |x| < 2^-30, and tanh at 19.06 (h=102), where |x| >= 16.
+    const START_1_CASES: [(usize, &[Option<bool>], f64); 11] = [
+        (EXP, ALL_THREE, 709.782712893384),
+        (EXP, TO_NEAREST, -745.1332191019413),
+        (EXP, DIRECTED, -739.5880416574616),
+        (EXP2, ALL_THREE, 1023.9999999999999),
+        (EXP10, ALL_THREE, 308.2547155599167),
+        (EXP10, TO_NEAREST, -2.4108186663832177e-17),
+        (EXP10, TO_NEAREST, -323.60724533877976),
+        (EXP10, DIRECTED, -323.3062153431158),
+        (SINH, ALL_THREE, 710.4758600739437),
+        (COSH, ALL_THREE, 710.4758600739437),
+        (TANH, TO_NEAREST, 19.061547465398498),
+    ];
+
+    // Each argument of `START_1_CASES`, and for sinh and cosh its negation too, reaches its call
+    // of `ziv` or `ziv_near` in the roundings given, which starts at 1 limb there, and the test
+    // at 1 limb passes: `ziv_level` gives (1, 0). The function gives MPFR's roundings there, in
+    // both directions and to nearest (`check`).
+    #[test]
+    fn outside_cases_start_at_1() {
+        for (i, ups, x) in START_1_CASES {
+            let xs: &[f64] = if i == SINH || i == COSH {
+                &[x, -x]
+            } else {
+                &[x]
+            };
+            for &x in xs {
+                for &up in ups {
+                    let (_, level) = with_level(i, x, up);
+                    assert!(
+                        level == (1, 0),
+                        "{}({x:e}), up = {up:?}: `ziv` at level {} after {} failed tests, not \
+                         at 1 after none",
+                        FUNCTIONS[i].0,
+                        level.0,
+                        level.1
+                    );
+                }
+                super::check(i, x);
+            }
+        }
+    }
+
+    // The levels, as `ziv_level` gives them, of 2^m toward -∞ and toward +∞ at an integer m from
+    // -1074 to 1023 other than 0: (0, 0) from -1022 on, where the rule of `exp2_dir_slow` for the
+    // integers returns 2^m before `ziv`, and (1, 0) below, where `ziv` starts at 1 limb
+    // (`exp2_start`) and the exact enclosure of 2^m (`exact_enclosures`) passes the test at
+    // 1 limb. Without that rule, with `ziv` starting at 1 limb at every integer, this would be
+    // (1, 0) at every m.
+    fn exp2_dir_level(m: i32) -> (usize, usize) {
+        if m >= -1022 {
+            (0, 0)
+        } else {
+            (1, 0)
+        }
+    }
+
+    // 2^m at every integer m from -1074 to 1023 other than 0, where it is an `f64`, in both
+    // directions at the levels of `exp2_dir_level`, and to nearest from the fast path (level 0)
+    // from -1021 on, as the header of `exp.rs` says, and from -1074 to -1022 from the fast path
+    // or from the test at 1 limb of `ziv_near`, which starts at 1 limb there (`exp2_start`).
+    // `integers` compares the roundings with MPFR's.
+    #[test]
+    fn exp2_at_the_integers() {
+        for m in (-1074..=1023).filter(|&m| m != 0) {
+            let (x, want) = (f64::from(m), pow2(m));
+            for up in [false, true] {
+                let (y, level) = with_level(EXP2, x, Some(up));
+                assert!(
+                    y.to_bits() == want.to_bits() && level == exp2_dir_level(m),
+                    "exp2({m}), up = {up}: {y:e} at level {level:?}, not {want:e} at {:?}",
+                    exp2_dir_level(m)
+                );
+            }
+            let (y, level) = with_level(EXP2, x, None);
+            assert!(
+                y.to_bits() == want.to_bits()
+                    && (level == (0, 0) || (m <= -1022 && level == (1, 0))),
+                "exp2({m}) to nearest: {y:e} at level {level:?}, not {want:e}"
+            );
         }
     }
 }

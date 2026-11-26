@@ -27,10 +27,13 @@
 // that the kernel used, which `ziv_level` of `src/dyadic.rs` gives: the level at which it
 // returned, 1, 2, 4, 8, 16 or 32 limbs, 64 at the cap, or none where the kernel settled the
 // case without `ziv`, by a rule or as a special case, and how many rounding tests failed before
-// it. A case counts as retried if one did. `pow` and `pown` start Ziv's strategy at 2 limbs for
-// large exponents (`src/dyadic/pow.rs`), so that a case of theirs can reach level 2 without a
-// retry. `cbrt` and `hypot` never call `ziv` (`src/dyadic/root.rs`), so each of their cases is
-// at none.
+// it. A case counts as retried if one did. Some functions start Ziv's strategy past 1 limb, so
+// that a case of theirs can return past level 1 without a retry: `pown`, and `pow` at an
+// integer y from -2^31 to 2^31 - 1, at 2 limbs for large exponents, and `pow` at 4 limbs at
+// the other y (`src/dyadic/pow.rs`); `log10` and `asinh` at 2 limbs (`src/dyadic/log.rs`); and
+// e^x, 2^x, 10^x, sinh and cosh, and tanh rounded to nearest, at 2 limbs in the ranges where
+// `exp_start` and the other helpers of `src/dyadic/exp.rs` return 2. `cbrt` and `hypot` never
+// call `ziv` (`src/dyadic/root.rs`), so each of their cases is at none.
 // `soak` prints, for each function, how many cases returned at each level and how many of
 // those were retried, and then the cases past level 1: all of them if there are at most `KEPT`
 // (100), and otherwise at most `SHOWN` (20) of those at the two highest levels that they
@@ -1172,12 +1175,17 @@ fn switch_reaches_mpfr() {
     assert!(!use_mpfr());
 }
 
-// The levels that the kernel used, as the tests record them: none for a case that a rule or
-// the fast path of `exp`, `sin` or `pown` settles, the first level for most of the others, such
-// as `sin` with the fast path off, a retry for a case that `soak` found past level 1, which the
-// fast path settles and the kernel reaches only with the fast path off, and level 2 without a
-// retry for `pown` of a large exponent, which starts at 2 limbs, with the fast path off. The
-// MPFR backend does not call `ziv`.
+// The levels that the kernel used, as the tests record them, in calls that all round toward
+// -∞. With the fast path on: none for e^x at 0, which a rule settles, and for e^x and `sin` at
+// 0.5, e^x at 1.276253168049783e2 and `pown_rd(1.5, 1000)`, which their fast paths settle.
+// With the fast path off: level 1 without a retry for `sin` at 0.5, where `ziv` starts at 1
+// limb; level 2 without a retry for e^x at 1.276253168049783e2, where `exp_start` of
+// `src/dyadic/exp.rs` returns 2 (`soak` found this case at level 2 after a failed test at
+// level 1, when e^x started at 1 limb at every x); a retry, level 2 after a failed test at
+// level 1, for e^x at -4.440892098500627e-16 (-0x1.0000000000001p-51, a hard case from
+// CORE-MATH's `exp.wc` in `src/cr/tests/mpfr/hard_cases.wc`), where `exp_start` returns 1 as
+// |x| < 2^-30; and level 2 without a retry for `pown_rd(1.5, 1000)`, where `ziv` starts at 2
+// limbs for a large exponent. The MPFR backend does not call `ziv`.
 #[test]
 fn ziv_levels_recorded() {
     let levels = |f: &dyn Fn() -> f64| {
@@ -1194,9 +1202,11 @@ fn ziv_levels_recorded() {
     assert_eq!(first, (1, 0));
     assert_eq!(levels(&|| kernel::exp_rd(1.276253168049783e2)), (0, 0));
     dyadic::set_fast_path(false);
-    let retry = levels(&|| kernel::exp_rd(1.276253168049783e2));
+    let start_2 = levels(&|| kernel::exp_rd(1.276253168049783e2));
+    let retry = levels(&|| kernel::exp_rd(-4.440892098500627e-16));
     let pown = levels(&|| kernel::pown_rd(1.5, 1000));
     dyadic::set_fast_path(true);
+    assert_eq!(start_2, (2, 0));
     assert_eq!(retry, (2, 1));
     assert_eq!(pown, (2, 0));
     assert_eq!(levels(&|| kernel::pown_rd(1.5, 1000)), (0, 0));

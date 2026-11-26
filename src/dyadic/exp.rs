@@ -8,26 +8,26 @@
 //
 // Each function first settles some arguments by rules: NaN and ±∞, the arguments beyond a
 // threshold past which the results overflow or are below 2^-1075 in magnitude, those whose
-// results are within an ulp of 1 or of x, and the integers from 1 to 22 for 10^x, whose results
-// are `f64`s, there only where the fast path below fails at them. Ziv's strategy cannot settle
-// an argument whose result is an `f64` unless an enclosure has that `f64` as its bound in the
-// direction of the rounding, as the exact enclosures of 2^x at an integer x do, since the two
-// bounds of any other enclosure round to different `f64`s.
+// results are within an ulp of 1 or of x, and the integers from 1 to 22 for 10^x and from -1022
+// to 1023 for 2^x, whose results are `f64`s, there only where the fast path below fails at them.
+// Ziv's strategy cannot settle an argument whose result is an `f64` unless an enclosure has that
+// `f64` as its bound in the direction of the rounding, as the exact enclosures of 2^x at an integer
+// x do, since the two bounds of any other enclosure round to different `f64`s.
 // The only finite arguments whose results are `f64`s are 0 and, for 2^x and 10^x, the integers
 // whose powers are `f64`s, as e^r and tanh r are irrational for every rational r other than 0, sinh
 // r and cosh r too if e^r is not a quadratic irrational, which follows from the theorem of Hermite
 // and Lindemann, and 2^r and 10^r are rational, for a rational r, only for an integer r. The rules
-// settle them all but the integers other than 0 of 2^x, which the exact enclosures settle. The
+// settle them all but the integers of 2^x below -1022, which the exact enclosures settle. The
 // rules also keep the reductions below in range. `ziv` computes the rest from an `Eval`.
 //
-// The functions rounded to nearest have rules of the same kinds, with thresholds of their own:
-// |x| >= 20 for tanh, as tanh 19 is more than half an ulp below 1, and |x| < 2^-27
-// (`TINY_NEAR`) for sinh, cosh and tanh, as below 2^-26 tanh x can be more than half an ulp
-// from x, and the bounds that prove the rules of sinh and cosh, x + x^3 / 3 and 1 + t^2, do
-// not keep sinh x and cosh x within half an ulp of x and 1 up to 2^-26. Rounded to nearest,
-// Ziv's strategy cannot settle an argument whose result is the midpoint of two adjacent
-// `f64`s unless the midpoint is a bound of an enclosure, as in an exact one, since the two
-// bounds of an enclosure that holds it strictly inside round to different `f64`s.
+// The functions rounded to nearest have rules of the same kinds, other than for the integers of
+// 2^x, with thresholds of their own: |x| >= 20 for tanh, as tanh 19 is more than half an ulp
+// below 1, and |x| < 2^-27 (`TINY_NEAR`) for sinh, cosh and tanh, as below 2^-26 tanh x can be
+// more than half an ulp from x, and the bounds that prove the rules of sinh and cosh, x + x^3 / 3
+// and 1 + t^2, do not keep sinh x and cosh x within half an ulp of x and 1 up to 2^-26. Rounded
+// to nearest, Ziv's strategy cannot settle an argument whose result is the midpoint of two
+// adjacent `f64`s unless the midpoint is a bound of an enclosure, as in an exact one, since the
+// two bounds of an enclosure that holds it strictly inside round to different `f64`s.
 // 10^23 = 5^23 2^23, with 5^23 odd and in [2^53, 2^54), has a rule, and 2^-1075, 2^x at
 // x = -1075, an exact enclosure. No other result is a midpoint: 2^x at any other integer x
 // is an `f64`, below 2^-1075 or at least 2^1024; 10^x at an integer x is an `f64` for
@@ -68,12 +68,13 @@
 // cap of `ziv` or of `ziv_near`, nor that the evaluations do not panic.
 //
 // e^x, 2^x and 10^x try a fast path in double-double after their rules, but before those of 10^x
-// for the integers from 1 to 22 and, to nearest, 23, and before `ziv` and `ziv_near`
-// (`fast_exp`), whose rounding tests are in `src/dyadic/fast.rs`. Where a test fails, the
-// function calls `ziv` or `ziv_near` as before. At an integer x in its range, where
-// 2^x is an `f64`, the directed test fails, as it passes only where the result lies strictly
-// between two adjacent `f64`s, so that the exact enclosures settle x as above, and the test
-// rounded to nearest passes and returns 2^x. `rocq/theories/FastExpCore.v` bounds the
+// for the integers from 1 to 22 and, to nearest, 23, and of 2^x for the integers, and before
+// `ziv` and `ziv_near` (`fast_exp`), whose rounding tests are in `src/dyadic/fast.rs`. Where a
+// test fails, the function calls `ziv` or `ziv_near` as before. At an integer x in its range,
+// where 2^x is an `f64`, the directed test fails, as it passes only where the result lies
+// strictly between two adjacent `f64`s, so that the rule for the integers or, below -1022, the
+// exact enclosures settle x as above, and the test rounded to nearest passes and returns 2^x
+// at those above -1022. `rocq/theories/FastExpCore.v` bounds the
 // error of `fast_exp`, from `rocq/theories/FastExpReduce.v` for its reduction,
 // `rocq/theories/FastExpTables.v` for its tables and constants, and
 // `rocq/theories/FastExpPoly.v`, `rocq/theories/FastExpTbl.v` and
@@ -866,6 +867,99 @@ fn fast_tanh_near<const FMA: bool>(x: f64) -> Option<f64> {
     Some(if x < 0.0 { -r } else { r })
 }
 
+// The first level of `ziv` and `ziv_near` at the arguments that the rules and the fast path
+// leave: 2 limbs where `exp_start` and the others below return 2, and 1 limb elsewhere. A test
+// that passes gives the correct rounding at any level, so that a start at 2 limbs can change the
+// result only of a call whose test passes at 1 limb and fails at each of 2 to 32 limbs, which
+// `ziv_cap` or `ziv_near_cap` then computes at 64 limbs. When every call started at 1 limb,
+// with the fast paths on, no call in those ranges returned at 1 limb at the arguments of
+// `hard_cases`, `random_levels` and `full_hard_cases` in `src/cr/tests/mpfr/hard_cases.rs` (the
+// last with a clone of CORE-MATH of 2026-11-01), in builds for Haswell and without an FMA, other
+// than 2^x at the integers, whose results are `f64`s that an exact enclosure settles at 1 limb:
+// the rule of `exp2_dir_slow` for the integers from -1022 to 1023 returns those in these ranges
+// before `ziv`, and `exp2_start` returns 1 at x = -1022, the one integer from -1074 to 1023 at
+// which `ziv_near` returned. The calls counted are those that the fast paths leave to `ziv` and
+// `ziv_near`: when every call started at 1 limb with the fast paths off (`FUSHIMI_HC_KERNEL`
+// set), many of those that the fast paths settle returned at 1 limb in those ranges. That is
+// measured, not proved. Outside those ranges some calls returned at 1 limb: where |x| < 2^-30,
+// all of them below 2^-36 for e^x, 2^-44 for 2^x and 2^-47 for 10^x; next to underflow and
+// overflow: e^x at x <= -725.13 and x >= 709.7827, 2^x, other than at the integers, at
+// x <= -1063.78 and x >= 1023.99999, 10^x at x <= -319.73 and x >= 308.2547, and sinh x and
+// cosh x at |x| >= 710.47586; and tanh x rounded to nearest at |x| >= 17.26.
+
+// 2^-30, below which `exp_start`, `exp2_start` and `exp10_start` return 1.
+const START_SMALL: f64 = 1.0 / 1_073_741_824.0;
+
+// The first level of `ziv` and `ziv_near` for e^x: 2 for 2^-30 <= |x| and -725 < x < 709.78.
+#[inline(always)]
+fn exp_start(x: f64) -> usize {
+    if x.abs() >= START_SMALL && x > -725.0 && x < 709.78 {
+        2
+    } else {
+        1
+    }
+}
+
+// The first level for 2^x: 2 for 2^-30 <= |x| and -1022 < x < 1023.99. Strictly above -1022,
+// so that the integers from -1074 to -1022 that reach `ziv` or `ziv_near`, where an exact
+// enclosure settles 2^x at 1 limb, start at 1: those below -1022 in `exp2_dir_slow`, whose rule
+// for the integers starts at -1022, and -1022 itself in `exp2_near_with`.
+#[inline(always)]
+fn exp2_start(x: f64) -> usize {
+    if x.abs() >= START_SMALL && x > -1022.0 && x < 1023.99 {
+        2
+    } else {
+        1
+    }
+}
+
+// The first level for 10^x: 2 for 2^-30 <= |x| and -319 < x < 308.25.
+#[inline(always)]
+fn exp10_start(x: f64) -> usize {
+    if x.abs() >= START_SMALL && x > -319.0 && x < 308.25 {
+        2
+    } else {
+        1
+    }
+}
+
+// The first level for sinh x and cosh x, of t = |x|: 2 for t < 710.47. The rules for a tiny t
+// leave t >= 2^-27 (`TINY_NEAR`), so there is no bound below.
+#[inline(always)]
+fn hyp_start(t: f64) -> usize {
+    if t < 710.47 {
+        2
+    } else {
+        1
+    }
+}
+
+// The first level for sinh x in `sinh_dir_with`, out of line. With `hyp_start(x.abs())` there,
+// `cr::sinh_rd` and `cr::sinh_ru` kept the t = |x| of the test |x| < 711 live across the call of
+// `fast_sinh_dir`, which is out of line in a build without the dispatch, and spilled it to the
+// stack: one more instruction on every call that reaches the fast path (objdump and cachegrind,
+// in a crate that links `cr`, built for Haswell). So did a first level of x by two comparisons,
+// inlined, as LLVM folded them into a test of that t (objdump, in the same build). Out of line,
+// the code up to the return of the fast path is as with a constant first level, up to jump
+// offsets, and only the calls that reach `ziv` make one more call (objdump, in the same build).
+// `sinh_near_with`, `cosh_dir_with` and `cosh_near_with` showed no such step and call
+// `hyp_start`.
+#[inline(never)]
+fn sinh_start(x: f64) -> usize {
+    hyp_start(x.abs())
+}
+
+// The first level for tanh x rounded to nearest, of t = |x|: 2 for t < 16. `tanh_dir_with`
+// starts at 1.
+#[inline(always)]
+fn tanh_start(t: f64) -> usize {
+    if t < 16.0 {
+        2
+    } else {
+        1
+    }
+}
+
 /// e^x rounded toward +∞ if `up` and toward -∞ otherwise.
 #[inline(always)]
 pub(crate) fn exp(x: f64, up: bool) -> f64 {
@@ -900,7 +994,7 @@ fn exp_dir_with<const FMA: bool, const UP: bool>(x: f64) -> f64 {
         if let Some(r) = fast_exp_dir::<FMA>(x, UP) {
             r
         } else {
-            ziv(&Exp(x), UP, 1)
+            ziv(&Exp(x), UP, exp_start(x))
         }
     } else if x.is_nan() || x == f64::INFINITY {
         // NaN fails the test -746 < x < 710, as do ±∞ and the other x out of that range.
@@ -949,7 +1043,7 @@ fn exp_near_with<const FMA: bool>(x: f64) -> f64 {
         if let Some(r) = fast_exp_near::<FMA>(x) {
             r
         } else {
-            ziv_near(&Exp(x), 1)
+            ziv_near(&Exp(x), exp_start(x))
         }
     } else if x.is_nan() || x == f64::INFINITY {
         // NaN fails the test -746 < x < 710, as do ±∞ and the other x out of that range.
@@ -996,7 +1090,7 @@ fn exp2_dir_with<const FMA: bool, const UP: bool>(x: f64) -> f64 {
         if let Some(r) = fast_exp2_dir::<FMA>(x, UP) {
             r
         } else {
-            ziv(&Exp2(x), UP, 1)
+            exp2_dir_slow::<UP>(&Exp2(x))
         }
     } else if x.is_nan() || x == f64::INFINITY {
         // NaN fails the test -1075 <= x < 1024, as do ±∞ and the other x out of that range.
@@ -1008,6 +1102,33 @@ fn exp2_dir_with<const FMA: bool, const UP: bool>(x: f64) -> f64 {
     } else {
         // x < -1075.
         underflow(UP)
+    }
+}
+
+// What `exp2_dir_with` does where the fast path returns `None`, out of line, at the x of
+// `f = &Exp2(x)`: the rule for the integers from -1022 to 1023, and otherwise `ziv` from
+// `exp2_start(x)`. With the two inline after the fast path, the rule's return and an exit of
+// `exp2_dir::<false>` ended in the same two instructions, and LLVM merged them, so that the exit
+// jumped to the rule's: one more instruction at each x < -1022 that the fast path settled
+// (objdump and cachegrind, in a crate that links `cr`, built for Haswell). Out of line and of x,
+// also with `#[cold]` or with a run-time `up` in place of `UP`, the call was a tail call, and the
+// exit of `exp2_dir::<true>` for x >= 1024, which returns a constant, gained a register copy
+// (objdump, in the same build). Of the `&Exp2(x)` that `ziv` takes, which points into the frame
+// of `exp2_dir_with`, the call is not a tail call, and the code of `exp2_dir_with` differs from
+// when it called `ziv(&Exp2(x), UP, 1)` there only in that call, which no longer passes the
+// level and `UP`, and in addresses (objdump, in that build and in builds for x86-64, in both
+// copies of the dispatch, also with `fushimi_force_no_fma`).
+#[inline(never)]
+fn exp2_dir_slow<const UP: bool>(f: &Exp2) -> f64 {
+    let x = f.0;
+    if x >= -1022.0 && (x as i64) as f64 == x {
+        // 2^x for an integer x from -1022 to 1023 is the normal `f64` 2^x, where the fast
+        // path fails, as its directed test passes only strictly between two `f64`s. The
+        // test is exact, as |x| < 2^63 here, and makes no call, as `x.trunc()` does on
+        // x86-64 without SSE4.1.
+        two_pow(x as i64)
+    } else {
+        ziv(f, UP, exp2_start(x))
     }
 }
 
@@ -1042,7 +1163,7 @@ fn exp2_near_with<const FMA: bool>(x: f64) -> f64 {
         if let Some(r) = fast_exp2_near::<FMA>(x) {
             r
         } else {
-            ziv_near(&Exp2(x), 1)
+            ziv_near(&Exp2(x), exp2_start(x))
         }
     } else if x.is_nan() || x == f64::INFINITY {
         // NaN fails the test -1075 <= x < 1024, as do ±∞ and the other x out of that range.
@@ -1099,7 +1220,7 @@ fn exp10_dir_with<const FMA: bool, const UP: bool>(x: f64) -> f64 {
         } else if (1.0..=22.0).contains(&x) && x == x.floor() {
             POW10[x as usize]
         } else {
-            ziv(&Exp10(x), UP, 1)
+            ziv(&Exp10(x), UP, exp10_start(x))
         }
     } else if x.is_nan() || x == f64::INFINITY {
         // NaN fails the test -324 < x < 309, as do ±∞ and the other x out of that range.
@@ -1167,7 +1288,7 @@ fn exp10_near_with<const FMA: bool>(x: f64) -> f64 {
             // `1e23` is its rounding, ties to even.
             1e23
         } else {
-            ziv_near(&Exp10(x), 1)
+            ziv_near(&Exp10(x), exp10_start(x))
         }
     } else if x.is_nan() || x == f64::INFINITY {
         // NaN fails the test -324 < x < 309, as do ±∞ and the other x out of that range.
@@ -1214,7 +1335,7 @@ fn sinh_dir_with<const FMA: bool, const UP: bool>(x: f64) -> f64 {
         if let Some(r) = fast_sinh_dir::<FMA>(x, UP) {
             r
         } else {
-            ziv(&Sinh(x), UP, 1)
+            ziv(&Sinh(x), UP, sinh_start(x))
         }
     } else if x.is_nan() || x.is_infinite() {
         // NaN fails the test |x| < 711, as do ±∞ and the other x with |x| >= 711.
@@ -1256,7 +1377,7 @@ fn sinh_near_with<const FMA: bool>(x: f64) -> f64 {
         if let Some(r) = fast_sinh_near::<FMA>(x) {
             r
         } else {
-            ziv_near(&Sinh(x), 1)
+            ziv_near(&Sinh(x), hyp_start(x.abs()))
         }
     } else if x.is_nan() || x.is_infinite() {
         // NaN fails the test |x| < 711, as do ±∞ and the other x with |x| >= 711.
@@ -1336,7 +1457,7 @@ fn cosh_dir_with<const FMA: bool, const UP: bool>(a: f64) -> f64 {
         if let Some(r) = fast_cosh_dir::<FMA>(t, UP) {
             r
         } else {
-            ziv(&Cosh(t), UP, 1)
+            ziv(&Cosh(t), UP, hyp_start(t))
         }
     } else {
         // NaN fails the test t < 711, as do +∞ and the other t >= 711.
@@ -1398,7 +1519,7 @@ fn cosh_near_with<const FMA: bool>(a: f64) -> f64 {
         if let Some(r) = fast_cosh_near::<FMA>(t) {
             r
         } else {
-            ziv_near(&Cosh(t), 1)
+            ziv_near(&Cosh(t), hyp_start(t))
         }
     } else {
         // NaN fails the test t < 711, as do +∞ and the other t >= 711. For t >= 711, cosh t >
@@ -1487,7 +1608,7 @@ fn tanh_near_with<const FMA: bool>(x: f64) -> f64 {
         if let Some(r) = fast_tanh_near::<FMA>(x) {
             r
         } else {
-            ziv_near(&Tanh(x), 1)
+            ziv_near(&Tanh(x), tanh_start(x.abs()))
         }
     } else if x.is_nan() {
         // NaN fails the test |x| < 20, as do ±∞ and the other x with |x| >= 20.

@@ -2676,6 +2676,35 @@ Definition fast_tanh_near (fma : bool) (x : f64) : option f64 :=
   | None => None
   end.
 
+(** [k as f64] for an [i64] [k], which rounds to nearest, ties to even,
+    as [DyadicLog.of_i64] below. *)
+Definition of_i64 (k : Z) : f64 := binary_normalize 53 1024 _ _ mode_NE k 0 false.
+
+(** [START_SMALL]: 2^-30. *)
+Definition start_small : f64 := from_bits 0x3e10000000000000.
+
+(** The first levels of [ziv] and [ziv_near]: [fn exp_start(x: f64) ->
+    usize], [fn exp2_start(x: f64) -> usize] and [fn exp10_start(x: f64)
+    -> usize], and [fn hyp_start(t: f64) -> usize], [fn sinh_start(x:
+    f64) -> usize] and [fn tanh_start(t: f64) -> usize]. The proofs
+    need of them only that [exp2_start x] is at most 64, in
+    [DyExpExact.exp2_dir_exact_with]: the drivers' theorems hold at
+    every start. *)
+Definition exp_start (x : f64) : nat :=
+  if ge (fabs x) start_small && gt x (from_bits 0xc086a80000000000) (* -725.0 *)
+     && lt x (from_bits 0x40862e3d70a3d70a) (* 709.78 *) then 2 else 1.
+Definition exp2_start (x : f64) : nat :=
+  if ge (fabs x) start_small && gt x (from_bits 0xc08ff00000000000) (* -1022.0 *)
+     && lt x (from_bits 0x408fffeb851eb852) (* 1023.99 *) then 2 else 1.
+Definition exp10_start (x : f64) : nat :=
+  if ge (fabs x) start_small && gt x (from_bits 0xc073f00000000000) (* -319.0 *)
+     && lt x (from_bits 0x4073440000000000) (* 308.25 *) then 2 else 1.
+Definition hyp_start (t : f64) : nat :=
+  if lt t (from_bits 0x408633c28f5c28f6) (* 710.47 *) then 2 else 1.
+Definition sinh_start (x : f64) : nat := hyp_start (fabs x).
+Definition tanh_start (t : f64) : nat :=
+  if lt t (from_bits 0x4030000000000000) (* 16.0 *) then 2 else 1.
+
 (** The functions of the file with [ziv] a parameter: [exp_dir_with ziv] is
     [exp] with [ziv] for [Dyadic.ziv], and [exp_dir] after the section is
     [exp_dir_with Dyadic.ziv]. The proofs also apply them to a [ziv] that
@@ -2725,20 +2754,40 @@ Definition exp_dir_with (x : f64) (up : bool) : option f64 :=
   if lt (fabs x) tiny_exp then Some (near_one x up)
   else if lt x (from_bits 0x4086300000000000) (* 710.0 *)
           && gt x (from_bits 0xc087500000000000) (* -746.0 *) then
-    match fast_exp_dir false x up with Some r => Some r | None => ziv (ev_exp x) up 1 end
+    match fast_exp_dir false x up with
+    | Some r => Some r
+    | None => ziv (ev_exp x) up (exp_start x)
+    end
   else if is_nan x || eq x infinity then Some x
   else if eq x neg_infinity then Some zero
   else if ge x (from_bits 0x4086300000000000) (* 710.0 *) then Some (overflow up)
   else Some (underflow up).
 
+(** [fn exp2_dir_slow<const UP: bool>(f: &Exp2) -> f64], with [up] for
+    [UP] and [x] for the [f.0] of [f = &Exp2(x)]: the rule for the
+    integers from -1022 to 1023, where [(x as i64) as f64] is
+    [of_i64 (to_i64 x)], and otherwise [ziv]. Its test bounds the
+    integers by -1022 only, as [exp2_dir_with] calls it only at
+    [-1075 <= x < 1024]. [DyExp.v] and [DyExpExact.exp2_dir_exact_with]
+    prove it with [exp2_dir_with]. *)
+Definition exp2_dir_slow (x : f64) (up : bool) : option f64 :=
+  if ge x (from_bits 0xc08ff00000000000) (* -1022.0 *) && eq (of_i64 (to_i64 x)) x then
+    Some (two_pow (to_i64 x))
+  else ziv (ev_exp2 x) up (exp2_start x).
+
 (** [pub(crate) fn exp2(x: f64, up: bool) -> f64], with [exp2_dir] as
     [exp_dir] in [exp], where [(-1075.0..1024.0).contains(&x)] is
-    [-1075.0 <= x && x < 1024.0]. *)
+    [-1075.0 <= x && x < 1024.0]. The body calls
+    [exp2_dir_slow::<UP>(&Exp2(x))] where the fast path returns
+    [None]. *)
 Definition exp2_dir_with (x : f64) (up : bool) : option f64 :=
   if lt (fabs x) tiny_exp then Some (near_one x up)
   else if le (from_bits 0xc090cc0000000000) (* -1075.0 *) x
           && lt x (from_bits 0x4090000000000000) (* 1024.0 *) then
-    match fast_exp2_dir false x up with Some r => Some r | None => ziv (ev_exp2 x) up 1 end
+    match fast_exp2_dir false x up with
+    | Some r => Some r
+    | None => exp2_dir_slow x up
+    end
   else if is_nan x || eq x infinity then Some x
   else if eq x neg_infinity then Some zero
   else if ge x (from_bits 0x4090000000000000) (* 1024.0 *) then Some (overflow up)
@@ -2759,7 +2808,7 @@ Definition exp10_dir_with (x : f64) (up : bool) : option f64 :=
     | None =>
         if le one x && le x (from_bits 0x4036000000000000) (* 22.0 *) && eq x (ffloor x) then
           Some (pow10 (to_i64 x))
-        else ziv (ev_exp10 x) up 1
+        else ziv (ev_exp10 x) up (exp10_start x)
     end
   else if is_nan x || eq x infinity then Some x
   else if eq x neg_infinity then Some zero
@@ -2779,7 +2828,10 @@ Definition exp10_dir_with (x : f64) (up : bool) : option f64 :=
 Definition sinh_dir_with (x : f64) (up : bool) : option f64 :=
   if lt (fabs x) tiny_hyp then Some (away x up)
   else if lt (fabs x) (from_bits 0x4086380000000000) (* 711.0 *) then
-    match fast_sinh_dir false x up with Some r => Some r | None => ziv (ev_sinh x) up 1 end
+    match fast_sinh_dir false x up with
+    | Some r => Some r
+    | None => ziv (ev_sinh x) up (sinh_start x)
+    end
   else if is_nan x || (eq x infinity || eq x neg_infinity) then Some x
   else if ge x (from_bits 0x4086380000000000) (* 711.0 *) then Some (overflow up)
   else Some (opp (overflow (negb up))).
@@ -2815,7 +2867,10 @@ Definition cosh_dir_with (x : f64) (up : bool) : option f64 :=
   let t := fabs x in
   if lt t tiny_hyp then Some (near_one t up)
   else if lt t (from_bits 0x4086380000000000) (* 711.0 *) then
-    match fast_cosh_dir false t up with Some r => Some r | None => ziv (ev_cosh t) up 1 end
+    match fast_cosh_dir false t up with
+    | Some r => Some r
+    | None => ziv (ev_cosh t) up (hyp_start t)
+    end
   else Some (cosh_big t up).
 
 (** [pub(crate) fn tanh(x: f64, up: bool) -> f64], which returns
@@ -2868,7 +2923,10 @@ Definition exp_near_with (x : f64) : option f64 :=
   if lt (fabs x) tiny_exp then Some one
   else if lt x (from_bits 0x4086300000000000) (* 710.0 *)
           && gt x (from_bits 0xc087500000000000) (* -746.0 *) then
-    match fast_exp_near false x with Some r => Some r | None => ziv_near (ev_exp x) 1 end
+    match fast_exp_near false x with
+    | Some r => Some r
+    | None => ziv_near (ev_exp x) (exp_start x)
+    end
   else if is_nan x || eq x infinity then Some x
   else if eq x neg_infinity then Some zero
   else if ge x (from_bits 0x4086300000000000) (* 710.0 *) then Some infinity
@@ -2881,7 +2939,10 @@ Definition exp2_near_with (x : f64) : option f64 :=
   if lt (fabs x) tiny_exp then Some one
   else if le (from_bits 0xc090cc0000000000) (* -1075.0 *) x
           && lt x (from_bits 0x4090000000000000) (* 1024.0 *) then
-    match fast_exp2_near false x with Some r => Some r | None => ziv_near (ev_exp2 x) 1 end
+    match fast_exp2_near false x with
+    | Some r => Some r
+    | None => ziv_near (ev_exp2 x) (exp2_start x)
+    end
   else if is_nan x || eq x infinity then Some x
   else if eq x neg_infinity then Some zero
   else if ge x (from_bits 0x4090000000000000) (* 1024.0 *) then Some infinity
@@ -2904,7 +2965,7 @@ Definition exp10_near_with (x : f64) : option f64 :=
           Some (pow10 (to_i64 x))
         else if eq x (from_bits 0x4037000000000000) (* 23.0 *) then
           Some (from_bits 0x44b52d02c7e14af6)
-        else ziv_near (ev_exp10 x) 1
+        else ziv_near (ev_exp10 x) (exp10_start x)
     end
   else if is_nan x || eq x infinity then Some x
   else if eq x neg_infinity then Some zero
@@ -2915,7 +2976,10 @@ Definition exp10_near_with (x : f64) : option f64 :=
 Definition sinh_near_with (x : f64) : option f64 :=
   if lt (fabs x) tiny_near then Some x
   else if lt (fabs x) (from_bits 0x4086380000000000) (* 711.0 *) then
-    match fast_sinh_near false x with Some r => Some r | None => ziv_near (ev_sinh x) 1 end
+    match fast_sinh_near false x with
+    | Some r => Some r
+    | None => ziv_near (ev_sinh x) (hyp_start (fabs x))
+    end
   else if is_nan x || (eq x infinity || eq x neg_infinity) then Some x
   else if ge x (from_bits 0x4086380000000000) (* 711.0 *) then Some infinity
   else Some neg_infinity.
@@ -2931,14 +2995,20 @@ Definition cosh_near_with (x : f64) : option f64 :=
   let t := fabs x in
   if lt t tiny_near then Some one
   else if lt t (from_bits 0x4086380000000000) (* 711.0 *) then
-    match fast_cosh_near false t with Some r => Some r | None => ziv_near (ev_cosh t) 1 end
+    match fast_cosh_near false t with
+    | Some r => Some r
+    | None => ziv_near (ev_cosh t) (hyp_start t)
+    end
   else Some (cosh_big t true).
 
 (** [pub(crate) fn tanh_near(x: f64) -> f64] *)
 Definition tanh_near_with (x : f64) : option f64 :=
   if lt (fabs x) tiny_near then Some x
   else if lt (fabs x) (from_bits 0x4034000000000000) (* 20.0 *) then
-    match fast_tanh_near false x with Some r => Some r | None => ziv_near (ev_tanh x) 1 end
+    match fast_tanh_near false x with
+    | Some r => Some r
+    | None => ziv_near (ev_tanh x) (tanh_start (fabs x))
+    end
   else if is_nan x then Some x
   else if ge x (from_bits 0x4034000000000000) (* 20.0 *) then Some one
   else Some m_one.
