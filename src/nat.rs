@@ -11,9 +11,11 @@
 // loops in `rocq/theories/Limbs.v` and `rocq/theories/Knuth.v`, that each computes its
 // operation on integers and returns limbs with no zero limb at the top. `from_dec`, `from_hex`
 // and `-`, with which the grammar of `src/parse.rs` and `src/parse/rat.rs` compute the bounds
-// of a literal, and `to_dec`, which only the layout of the printed text uses, are not modelled;
-// that the first three return no zero limb at the top is checked by reading. The tests at the
-// end compare them all with `rug::Integer`.
+// of a literal, and `to_dec`, with `div_rem_ten19`, `div_ten19`, `top_digits` and
+// `write_digits`, which only the layout of the printed text uses, are not modelled; that the
+// first three return no zero limb at the top, and that `div_rem_ten19` leaves none, is checked
+// by reading. The tests at the end compare them all with `rug::Integer`, and the steps of
+// `to_dec` also with the arithmetic of `u128` and the `Display` of `u64`.
 
 use crate::limbs;
 use std::{
@@ -123,24 +125,37 @@ impl Nat {
     /// The decimal digits of `self`, with no zero in front, and `"0"` for 0.
     pub(crate) fn to_dec(&self) -> String {
         // The remainders of repeated divisions by 10^19 < 2^64 are the chunks of 19 digits,
-        // from the last one up. Only the top chunk is printed without its zeros in front.
-        const CHUNK: u64 = 10u64.pow(19);
-        let mut chunks = Vec::new();
-        let mut x = self.clone();
-        while !x.is_zero() {
-            let mut q = vec![0; x.0.len()];
-            chunks.push(limbs::div_rem_limb(&mut q, &x.0, CHUNK));
-            x = Self::from_limbs(q);
-        }
-        let mut s = match chunks.pop() {
-            None => return String::from("0"),
-            Some(top) => top.to_string(),
+        // from the last one up, until one limb, `top`, is left, which is printed without
+        // zeros in front: up to 20 digits. A number of one limb is its `top`, so it takes no
+        // division by 10^19, nor a copy of its limbs or a `Vec` of chunks.
+        let (top, chunks) = match self.0[..] {
+            [] => return String::from("0"),
+            [l] => (l, Vec::new()),
+            _ => {
+                // 10^(19 c) <= self < 2^(64 n) for `c` chunks and `n` limbs, so
+                // c < 64 n log10(2) / 19 < 1.014 n, which leaves room for the chunks of up to
+                // 71 limbs, more than `src/format.rs` prints.
+                let mut chunks = Vec::with_capacity(self.0.len() + 1);
+                let mut x = self.0.clone();
+                // A quotient of `x >= 2^64` is at least 2^64 / 10^19 > 1, so `x` keeps a limb.
+                while x.len() > 1 {
+                    chunks.push(div_rem_ten19(&mut x));
+                }
+                (x[0], chunks)
+            }
         };
-        s.reserve(19 * chunks.len());
-        for c in chunks.iter().rev() {
-            s.push_str(&format!("{:019}", c));
+        // `top` and the chunks from the top one down, appended to a `Vec` made with room for
+        // all of them, so that it is allocated once and not zeroed first.
+        let (t, n) = top_digits(top);
+        let mut s = Vec::with_capacity(n + 19 * chunks.len());
+        s.extend_from_slice(&t[20 - n..]);
+        for &c in chunks.iter().rev() {
+            let mut d = [0; 19];
+            write_digits(&mut d, c);
+            s.extend_from_slice(&d);
         }
-        s
+        // ASCII digits, which are UTF-8.
+        String::from_utf8(s).unwrap()
     }
 
     // `self := self * m + a` for `m > 0`, which keeps the top limb nonzero.
@@ -156,6 +171,91 @@ impl Nat {
 // 10^k = 5^k * 2^k. Panics if k does not fit a `u32`.
 fn pow10(k: u64) -> Nat {
     &Nat::pow5(u32::try_from(k).unwrap()) << k
+}
+
+// 10^19, the largest power of 10 below 2^64, which is at least 2^63.
+const TEN19: u64 = 10u64.pow(19);
+
+// `x := x / 10^19` and returns `x % 10^19`, for the limbs `x` of a `Nat`, which keep no zero
+// limb at the top.
+fn div_rem_ten19(x: &mut Vec<u64>) -> u64 {
+    // From the top limb down: `r < 10^19`, so `(r * 2^64 + l) / 10^19 < 2^64`.
+    let mut r = 0;
+    for l in x.iter_mut().rev() {
+        (*l, r) = div_ten19(r, *l);
+    }
+    // x / 10^19 >= x / 2^64, which has one limb less than `x`, so at most the top limb is 0.
+    if x.last() == Some(&0) {
+        x.pop();
+    }
+    r
+}
+
+// `(u / 10^19, u % 10^19)` for `u = u1 * 2^64 + u0` with `u1 < 10^19`, by the division of
+// two limbs by one with a reciprocal, Algorithm 4 of Möller and Granlund, "Improved division
+// by invariant integers", IEEE Transactions on Computers 60(2), 2011. 10^19 >= 2^63 is
+// normalized, so no shift is needed.
+fn div_ten19(u1: u64, u0: u64) -> (u64, u64) {
+    // The reciprocal v = floor((2^128 - 1) / d) - 2^64, below 2^64 as d >= 2^63.
+    const V: u64 = (u128::MAX / TEN19 as u128 - (1 << 64)) as u64;
+    let d = TEN19;
+    // (q1, q0) := v * u1 + u, which is below 2^128: it is u1 * floor((2^128 - 1) / d) + u0.
+    let q = u128::from(V) * u128::from(u1) + (u128::from(u1) << 64 | u128::from(u0));
+    // The candidate quotient q1 + 1 is at most one away from the quotient, and its remainder,
+    // computed mod 2^64, tells which way: the paper shows that the two corrections below give
+    // the quotient and the remainder.
+    let mut q1 = ((q >> 64) as u64).wrapping_add(1);
+    let mut r = u0.wrapping_sub(q1.wrapping_mul(d));
+    if r > q as u64 {
+        q1 = q1.wrapping_sub(1);
+        r = r.wrapping_add(d);
+    }
+    if r >= d {
+        q1 += 1;
+        r -= d;
+    }
+    (q1, r)
+}
+
+// "00", "01", ..., "99" as ASCII: the two digits of each number below 100, which the
+// `Display` of the integers in `core` reads from a table too, so that a division by 100 gives
+// two digits.
+const DEC_PAIRS: [[u8; 2]; 100] = {
+    let mut t = [[0; 2]; 100];
+    let mut i = 0;
+    while i < 100 {
+        t[i] = [b'0' + (i / 10) as u8, b'0' + (i % 10) as u8];
+        i += 1;
+    }
+    t
+};
+
+// The decimal digits of `c < 10^out.len()` as ASCII, with zeros in front to fill `out`.
+fn write_digits(out: &mut [u8], mut c: u64) {
+    // Two digits at a time from the end, and the first one alone if `out.len()` is odd. Each
+    // pass divides `c` by 100, so the one left for an odd `out.len()` is below 10.
+    let mut pairs = out.rchunks_exact_mut(2);
+    for o in &mut pairs {
+        o.copy_from_slice(&DEC_PAIRS[(c % 100) as usize]);
+        c /= 100;
+    }
+    if let [o] = pairs.into_remainder() {
+        debug_assert!(c < 10);
+        *o = b'0' + c as u8;
+    }
+}
+
+// The decimal digits of `c`, with no zero in front, and "0" for 0: the last `n` bytes of the
+// array, for the `n` that comes with it. A `u64` has at most 20 digits.
+fn top_digits(c: u64) -> ([u8; 20], usize) {
+    // `c > 0` has `ilog10(c) + 1` digits, so that `write_digits` writes them all, and no zero
+    // in front. `c | 1` has as many: it is `c` for an odd `c`, and `c + 1` for an even one,
+    // which is not 10^k - 1 (odd), so that `c + 1` is not 10^k. And `c | 1` is not 0, so
+    // `ilog10` needs no test for 0, and 0 gets one digit.
+    let n = (c | 1).ilog10() as usize + 1;
+    let mut d = [0; 20];
+    write_digits(&mut d[20 - n..], c);
+    (d, n)
 }
 
 // At least the number of limbs of 5^k: log2(5) < 149/64, so 5^k has at most
@@ -571,6 +671,82 @@ mod rug_tests {
             for y in &p {
                 check_dec(&(x * y));
             }
+        }
+    }
+
+    // `div_ten19` against the division of `u128`s, at the edges of each limb and at random
+    // limbs, with `u1 < 10^19`.
+    #[test]
+    fn div_ten19_against_u128() {
+        let d = TEN19;
+        let check = |u1: u64, u0: u64| {
+            let u = u128::from(u1) << 64 | u128::from(u0);
+            let q = u / u128::from(d);
+            let r = u % u128::from(d);
+            assert_eq!(div_ten19(u1, u0), (q as u64, r as u64), "{} {}", u1, u0);
+        };
+        let edges = [0, 1, d - 1, d, d + 1, 1 << 63, u64::MAX - 1, u64::MAX];
+        for u1 in [0, 1, 2, d / 2, d - 2, d - 1] {
+            for u0 in edges {
+                check(u1, u0);
+            }
+        }
+        // Three that take the second correction, the last one after the first. About 1 in
+        // 37,000 of the random pairs `(rng.below(d), rng.next())` below take it.
+        check(9_443_391_404_544_877_980, 18_434_464_838_440_772_485);
+        check(9_996_495_421_046_545_653, 18_150_718_620_628_027_899);
+        check(9_878_688_000_699_061_400, 18_163_098_614_498_518_574);
+        let mut rng = rng(6);
+        for _ in 0..n_cases() * 100 {
+            check(rng.below(d), rng.next());
+            // The remainder `d - 1` from the limb above.
+            check(d - 1, rng.next());
+        }
+    }
+
+    // `top_digits` and `write_digits` against the `Display` of `u64`, and `to_dec` of one limb:
+    // at 0, 9, 10, 99, 100, at 10^k - 1, 10^k and 10^k + 1, at u64::MAX and at random numbers
+    // of each count of digits from 1 to 20, with `write_digits` at every length from that
+    // count to 20.
+    #[test]
+    fn digit_writers_against_display() {
+        let mut xs = vec![0, 9, 10, 99, 100, TEN19 - 1, u64::MAX - 1, u64::MAX];
+        for k in 0..=19 {
+            let p = 10u64.pow(k);
+            xs.extend([p - 1, p, p + 1]);
+        }
+        let mut rng = rng(7);
+        for k in 1..=20 {
+            // [10^(k - 1), 10^k), or [10^19, 2^64 - 1) for k = 20.
+            let lo = 10u64.pow(k - 1);
+            let hi = 10u64.checked_pow(k).unwrap_or(u64::MAX);
+            for _ in 0..n_cases() / 10 {
+                xs.push(lo + rng.below(hi - lo));
+            }
+        }
+        for &x in &xs {
+            let s = x.to_string();
+            let (d, n) = top_digits(x);
+            assert_eq!(&d[20 - n..], s.as_bytes(), "{}", x);
+            for w in s.len()..=20 {
+                let mut out = vec![0; w];
+                write_digits(&mut out, x);
+                assert_eq!(out, format!("{:0w$}", x).as_bytes(), "{} {}", x, w);
+            }
+            check_dec(&Nat::from_u64(x));
+        }
+    }
+
+    // 2^(64 n) - 1, 2^(64 n) and 2^(64 n) + 1, the largest number of `n` limbs and the smallest
+    // two of `n + 1`, for each `n` up to 41, one limb more than `src/format.rs` prints.
+    #[test]
+    fn dec_all_ones_limbs() {
+        let one = Nat::from_u64(1);
+        for n in 1..=41 {
+            let x = Nat::from_limbs(vec![u64::MAX; n]);
+            check_dec(&x);
+            check_dec(&(&x + &one));
+            check_dec(&(&(&x + &one) + &one));
         }
     }
 
