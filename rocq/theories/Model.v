@@ -1208,36 +1208,17 @@ Definition shl (x : list Z) (k : Z) : list Z :=
   if is_zero x then nil
   else from_limbs (Limbs.shl_into (Z.to_nat (k / 64) + length x + 1) x k).
 
-(** [fn pow10(k: u64) -> Nat], where [u32::try_from(k).unwrap()] is
-    checked. *)
-Definition pow10 (k : Z) : option (list Z) :=
-  let* k32 := checked_u 32 k in
-  let* p := pow5 k32 in
-  Some (shl p k).
+(** [&x >> k], where [usize::try_from(k / 64).unwrap_or(usize::MAX)] and
+    [saturating_sub] are [Z.to_nat (k / 64)] and the subtraction of
+    [nat]s, which gives the same length on any target, as [x] has fewer
+    than [2 ^ 32] limbs. *)
+Definition shr (x : list Z) (k : Z) : list Z :=
+  from_limbs (Limbs.shr_into (length x - Z.to_nat (k / 64)) x k).
 
-(** [while *self >= pow10(d + 1) { d += 1 }], with fuel. *)
-Fixpoint digits10_loop (fuel : nat) (n : list Z) (d : Z) : option Z :=
-  match fuel with
-  | O => None
-  | S f =>
-      let* d1 := checked_u 64 (d + 1) in
-      let* p := pow10 d1 in
-      match Limbs.cmp n p with
-      | Lt => Some d
-      | _ => digits10_loop f n d1
-      end
-  end.
-
-(** [n.digits10()]. The fuel, one more than the number of bits, is more
-    than the number of steps, as [NatOps.v] proves. *)
-Definition digits10 (n : list Z) : option Z :=
-  let b := bits n in
-  if b =? 0 then Some 0 else
-  let* b1 := checked_u 64 (b - 1) in
-  let* t := checked_u 128 (b1 * 1233) in
-  let* d0 := checked_u 64 (t / 4096) in
-  let* d := digits10_loop (S (Z.to_nat b)) n d0 in
-  checked_u 64 (d + 1).
+(** [x.cmp(&y)] of [impl Ord for Nat], which is [limbs::cmp] of the limbs,
+    and through which [PartialOrd] compares, e.g. [x >= y] as whether it is
+    not [Less]. *)
+Definition cmp (x y : list Z) : comparison := Limbs.cmp x y.
 
 (** The limbs of a [Nat] that holds [z >= 0]: the only list of limbs with
     no zero limb at the top that holds it ([NatOps.v]). *)
@@ -1253,6 +1234,7 @@ Definition to_limbs (z : Z) : list Z := to_limbs_fuel (Z.to_nat (Z.log2 z + 1)) 
 Definition mul_z (a b : Z) : option Z :=
   let* l := mul (to_limbs a) (to_limbs b) in Some (Limbs.val l).
 Definition shl_z (a s : Z) : Z := Limbs.val (shl (to_limbs a) s).
+Definition shr_z (a s : Z) : Z := Limbs.val (shr (to_limbs a) s).
 Definition div_rem_z (a b : Z) : option (Z * Z) :=
   let* (q, r) := div_rem (to_limbs a) (to_limbs b) in Some (Limbs.val q, Limbs.val r).
 Definition bits_z (a : Z) : Z := bits (to_limbs a).
@@ -1261,7 +1243,7 @@ Definition low_u128_z (a : Z) : Z := low_u128 (to_limbs a).
 Definition pow5_z (k : Z) : option Z := let* l := pow5 k in Some (Limbs.val l).
 Definition add_z (a b : Z) : Z := Limbs.val (add (to_limbs a) (to_limbs b)).
 Definition from_u64_z (x : Z) : Z := Limbs.val (from_u64 x).
-Definition digits10_z (a : Z) : option Z := digits10 (to_limbs a).
+Definition cmp_z (a b : Z) : comparison := cmp (to_limbs a) (to_limbs b).
 
 End NatLimbs.
 
@@ -7928,28 +7910,103 @@ Definition format_cut_dec (n s t : Z) (away : bool) : option (Z * Z) :=
   if away && negb (NatLimbs.is_zero_z r) then Some (NatLimbs.add_z q (NatLimbs.from_u64_z 1), t)
   else Some (q, t).
 
+(** [fn cut(x: f64, t: i64, away: bool) -> (Nat, i64)], where [e.min(0)]
+    is [Z.min e 0], [exact_dec(x).0] is the first of the pair that
+    [format_exact_dec x] gives, and [Nat::from_u64(m)], [Nat::pow5(k)],
+    [&a * &b], [&a >> j] and [&a + &b] are [NatLimbs.from_u64_z m],
+    [NatLimbs.pow5_z k], [NatLimbs.mul_z a b], [NatLimbs.shr_z a j] and
+    [NatLimbs.add_z a b]. *)
+Definition format_cut (x : f64) (t : Z) (away : bool) : option (Z * Z) :=
+  let* (m, e) := format_decompose x in
+  let s := Z.min e 0 in
+  if t <=? s then format_exact_dec x
+  else if t <=? 0 then
+    let* te := checked_i 64 (t - e) in
+    (* [(t - e) as u64] *)
+    let j := te mod 2 ^ 64 in
+    let* nt := checked_i 64 (- t) in
+    (* [-t as u32] *)
+    let* p := NatLimbs.pow5_z (nt mod 2 ^ 32) in
+    let* n := NatLimbs.mul_z (NatLimbs.from_u64_z m) p in
+    let q := NatLimbs.shr_z n j in
+    (* [j >= 64 || m & ((1 << j) - 1) != 0] is only evaluated if [away],
+       and its second test only if [j < 64]. *)
+    let* inexact :=
+      if away then
+        if 64 <=? j then Some true
+        else
+          let* b := shl 64 1 j in
+          let* mask := checked_u 64 (b - 1) in
+          Some (negb (Z.land m mask =? 0))
+      else Some false in
+    if inexact then Some (NatLimbs.add_z q (NatLimbs.from_u64_z 1), t) else Some (q, t)
+  else
+    let* (n, _) := format_exact_dec x in
+    format_cut_dec n s t away.
+
 (** [fn fixed(x: f64, p: usize, up: bool) -> (Nat, i64)], where
     [ALL_DIGITS] is 1100. *)
 Definition format_fixed (x : f64) (p : Z) (up : bool) : option (Z * Z) :=
-  let* (n, s) := format_exact_dec x in
   (* [p.min(ALL_DIGITS) as i64] *)
   let c := (Z.min p 1100 + 2 ^ 63) mod 2 ^ 64 - 2 ^ 63 in
   let* t := checked_i 64 (- c) in
-  format_cut_dec n s t (format_away x up).
+  format_cut x t (format_away x up).
 
-(** [fn sci(x: f64, p: usize, up: bool) -> (Nat, i64)], where
-    [n.digits10()] is [NatLimbs.digits10_z n]. *)
+(** [fn ge_pow10(m: u64, e: i64, k: i64) -> bool], where
+    [Nat::from_u64(m)], [Nat::pow5(k)], [&a << s], [&a * &b] and [n.bits()]
+    are [NatLimbs.from_u64_z m], [NatLimbs.pow5_z k], [NatLimbs.shl_z a s],
+    [NatLimbs.mul_z a b] and [NatLimbs.bits_z n], and [a >= b] of [Nat]s is
+    whether [NatLimbs.cmp_z a b] is not [Lt]. *)
+Definition format_ge_pow10 (m e k : Z) : option bool :=
+  let m := NatLimbs.from_u64_z m in
+  if 0 <=? k then
+    (* [k as u32] *)
+    let* p := NatLimbs.pow5_z (k mod 2 ^ 32) in
+    if k <=? e then
+      let* ek := checked_i 64 (e - k) in
+      (* [(e - k) as u64] *)
+      match NatLimbs.cmp_z (NatLimbs.shl_z m (ek mod 2 ^ 64)) p with
+      | Lt => Some false
+      | _ => Some true
+      end
+    else
+      let* ke := checked_i 64 (k - e) in
+      (* [(k - e) as u64] *)
+      match NatLimbs.cmp_z m (NatLimbs.shl_z p (ke mod 2 ^ 64)) with
+      | Lt => Some false
+      | _ => Some true
+      end
+  else
+    (* [e >= k || ...] evaluates the rest only if [e < k]. *)
+    if k <=? e then Some true else
+    let* nk := checked_i 64 (- k) in
+    (* [-k as u32] *)
+    let* p := NatLimbs.pow5_z (nk mod 2 ^ 32) in
+    let* n := NatLimbs.mul_z m p in
+    let* ke := checked_i 64 (k - e) in
+    (* [(k - e) as u64] *)
+    Some (ke mod 2 ^ 64 <? NatLimbs.bits_z n).
+
+(** [fn lead(m: u64, e: i64) -> i64], where [i64::from] keeps the value,
+    and [>> 20] of an [i64] is [Z.shiftr], which rounds toward -∞ as Rust's
+    does. *)
+Definition format_lead (m e : Z) : option Z :=
+  let* b1 := checked_i 64 (e + 63) in
+  let* b := checked_i 64 (b1 - leading_zeros 64 m) in
+  let* gb := checked_i 64 (b * 315653) in
+  let g := Z.shiftr gb 20 in
+  let* g1 := checked_i 64 (g + 1) in
+  let* ge := format_ge_pow10 m e g1 in
+  if ge then Some g1 else Some g.
+
+(** [fn sci(x: f64, p: usize, up: bool) -> (Nat, i64)] *)
 Definition format_sci (x : f64) (p : Z) (up : bool) : option (Z * Z) :=
-  let* (n, s) := format_exact_dec x in
-  let* dg := NatLimbs.digits10_z n in
-  (* [n.digits10() as i64] *)
-  let dg := (dg + 2 ^ 63) mod 2 ^ 64 - 2 ^ 63 in
-  let* t1 := checked_i 64 (dg + s) in
-  let* t2 := checked_i 64 (t1 - 1) in
+  let* (m, e) := format_decompose x in
+  let* l := format_lead m e in
   (* [p.min(ALL_DIGITS) as i64] *)
   let c := (Z.min p 1100 + 2 ^ 63) mod 2 ^ 64 - 2 ^ 63 in
-  let* t := checked_i 64 (t2 - c) in
-  format_cut_dec n s t (format_away x up).
+  let* t := checked_i 64 (l - c) in
+  format_cut x t (format_away x up).
 
 (** [fn cut_bin(m: u64, j: u32, away: bool) -> u64] *)
 Definition format_cut_bin (m j : Z) (away : bool) : option Z :=

@@ -198,6 +198,35 @@ rewrite Z.pow_add_r by lia.
 apply Z.mul_lt_mono_nonneg; lia.
 Qed.
 
+Lemma nat_shr_correct :
+  forall x k, nat_ok x -> 0 <= k ->
+  nat_ok (NatLimbs.shr x k) /\ Limbs.val (NatLimbs.shr x k) = Limbs.val x / 2 ^ k.
+Proof.
+intros x k Hx Hk. unfold NatLimbs.shr.
+set (n := (length x - Z.to_nat (k / 64))%nat).
+destruct (shr_into_correct n x k (proj1 Hx) Hk) as (Hl & _ & Hv).
+destruct (from_limbs_correct _ Hl) as [Hok Hval].
+split; [exact Hok|]. rewrite Hval, Hv.
+pose proof (val_bounds x (proj1 Hx)) as [B0 B1].
+pose proof (Z.pow_pos_nonneg 2 k ltac:(lia) Hk) as P.
+assert (Hk64 : 0 <= k / 64 /\ 64 * (k / 64) <= k).
+{ split; [apply Z.div_pos | apply Z.mul_div_le]; lia. }
+destruct (Nat.le_gt_cases (Z.to_nat (k / 64)) (length x)) as [Hle|Hgt].
+- (* [val x / 2^k < 2^(64 len - k) <= 2^(64 n)], as [64 (k / 64) <= k]. *)
+  apply Z.mod_small. split; [apply Z.div_pos; lia|].
+  apply Z.div_lt_upper_bound; [lia|].
+  apply Z.lt_le_trans with (2 ^ (64 * Z.of_nat (length x))); [exact B1|].
+  rewrite <- Z.pow_add_r by lia. apply Z.pow_le_mono_r; [lia|].
+  unfold n. rewrite Nat2Z.inj_sub, Z2Nat.id by lia. lia.
+- (* No limb is left: [val x < 2^(64 len) <= 2^k], so the quotient is 0. *)
+  assert (Hd : Limbs.val x / 2 ^ k = 0).
+  { apply Z.div_small. split; [exact B0|].
+    apply Z.lt_le_trans with (2 ^ (64 * Z.of_nat (length x))); [exact B1|].
+    apply Z.pow_le_mono_r; [lia|].
+    apply Nat2Z.inj_lt in Hgt. rewrite Z2Nat.id in Hgt by lia. lia. }
+  rewrite Hd. apply Z.mod_0_l. apply Z.pow_nonzero; lia.
+Qed.
+
 (** [mul_add_u64] keeps the top limb nonzero for [m > 0]: the carry is
     pushed exactly when it is nonzero. *)
 Lemma mul_add_u64_correct :
@@ -291,109 +320,6 @@ assert (H0 : Z.land lo (hi * 2 ^ 64) = 0).
 rewrite <- Z.lxor_lor by exact H0. symmetry. now apply Z.add_nocarry_lxor.
 Qed.
 
-Lemma pow10_correct :
-  forall k, 0 <= k < 2 ^ 32 ->
-  exists p, NatLimbs.pow10 k = Some p /\ nat_ok p /\ Limbs.val p = 10 ^ k.
-Proof.
-intros k Hk. unfold NatLimbs.pow10.
-rewrite checked_u_some by lia.
-destruct (nat_pow5_correct k ltac:(lia)) as (p & E & Hp & Hv). rewrite E.
-destruct (nat_shl_correct p k Hp ltac:(lia)) as [Hok Hval].
-exists (NatLimbs.shl p k). split; [reflexivity|]. split; [exact Hok|].
-rewrite Hval, Hv, <- Z.pow_mul_l. reflexivity.
-Qed.
-
-Lemma pow10_lt_inv : forall d D, 0 <= D -> 10 ^ d < 10 ^ D -> d < D.
-Proof. intros d D HD H. apply (Z.pow_lt_mono_r_iff 10); lia. Qed.
-
-(** The loop of [digits10] from a [d] with [10^d <= n < 10^D]: each step
-    raises [d] by one until [n < 10^(d + 1)], which is at [d = D - 1]. *)
-Lemma digits10_loop_correct :
-  forall n D, nat_ok n -> Limbs.val n < 10 ^ D -> 10 ^ (D - 1) <= Limbs.val n -> D < 2 ^ 32 ->
-  forall fuel d, 0 <= d -> 10 ^ d <= Limbs.val n -> D - d <= Z.of_nat fuel ->
-  NatLimbs.digits10_loop fuel n d = Some (D - 1).
-Proof.
-intros n D Hn Ha Hd HD.
-assert (HD0 : 0 <= D).
-{ destruct (Z.lt_ge_cases D 0) as [H|H]; [|exact H].
-  rewrite (Z.pow_neg_r 10 D H) in Ha. pose proof (val_nonneg n (proj1 Hn)). lia. }
-induction fuel as [|f IH]; intros d Hd0 Hdn Hf.
-- exfalso. assert (d < D) by (apply pow10_lt_inv; lia). cbn [Z.of_nat] in Hf. lia.
-- assert (HdD : d < D) by (apply pow10_lt_inv; lia).
-  cbn [NatLimbs.digits10_loop]. rewrite checked_u_some by lia.
-  destruct (pow10_correct (d + 1) ltac:(lia)) as (p & E & Hp & Hv). rewrite E.
-  rewrite cmp_correct by first [exact (proj1 Hn) | exact (proj1 Hp)]. rewrite Hv.
-  rewrite Nat2Z.inj_succ in Hf.
-  destruct (Z.compare_spec (Limbs.val n) (10 ^ (d + 1))) as [H|H|H].
-  + apply IH; lia.
-  + assert (D - 1 < d + 1) by (apply pow10_lt_inv; lia). f_equal. lia.
-  + apply IH; lia.
-Qed.
-
-(** [10^d0 <= 2^l] for [d0 = l * 1233 / 4096], as [10^1233 < 2^4096]. *)
-Lemma pow10_le_pow2 : forall l, 0 <= l -> 10 ^ (l * 1233 / 4096) <= 2 ^ l.
-Proof.
-intros l Hl. set (d0 := l * 1233 / 4096).
-assert (Hd0 : 0 <= d0) by (apply Z.div_pos; lia).
-apply (proj2 (Z.pow_le_mono_l_iff (10 ^ d0) (2 ^ l) 1233
-  ltac:(apply Z.pow_nonneg; lia) ltac:(apply Z.pow_nonneg; lia) ltac:(lia))).
-rewrite <- !Z.pow_mul_r by lia.
-apply Z.le_trans with (2 ^ (4096 * d0)).
-- replace (d0 * 1233) with (1233 * d0) by ring. rewrite !Z.pow_mul_r by lia.
-  apply Z.pow_le_mono_l. split; [apply Z.pow_nonneg; lia|].
-  apply Z.lt_le_incl. vm_compute. reflexivity.
-- apply Z.pow_le_mono_r; [lia|]. unfold d0.
-  pose proof (Z.mul_div_le (l * 1233) 4096 ltac:(lia)). lia.
-Qed.
-
-Lemma nat_digits10_correct :
-  forall n, nat_ok n -> Zdigits radix10 (Limbs.val n) < 2 ^ 32 ->
-  NatLimbs.digits10 n = Some (Zdigits radix10 (Limbs.val n)).
-Proof.
-intros n Hn HD. unfold NatLimbs.digits10, NatLimbs.bits.
-rewrite bit_len_correct by exact (proj1 Hn).
-pose proof (val_nonneg n (proj1 Hn)) as Ha0.
-pose proof (digits10_loop_correct n (Zdigits radix10 (Limbs.val n)) Hn) as Hloop.
-revert Hloop HD Ha0. generalize (Limbs.val n) as a. intros a Hloop HD Ha0.
-destruct (Z.eq_dec a 0) as [->|Ha]; [reflexivity|].
-assert (Ha1 : 0 < a) by lia.
-pose proof (Zdigits_correct radix10 a) as [D1 D2].
-pose proof (Zdigits_gt_0 radix10 a Ha) as HD0.
-rewrite Z.abs_eq in D1, D2 by lia.
-change (radix_val radix10) with 10 in D1, D2.
-revert Hloop HD D1 D2 HD0. generalize (Zdigits radix10 a) as D.
-intros D Hloop HD D1 D2 HD0.
-pose proof (Z.log2_spec a Ha1) as [L1 L2].
-pose proof (Z.log2_nonneg a) as L0.
-(* [a < 10^D <= 16^D = 2^(4 D)], so [log2 a < 4 D]. *)
-assert (HL : Z.log2 a < 4 * D).
-{ apply (proj1 (Z.log2_lt_pow2 a (4 * D) Ha1)).
-  apply Z.lt_le_trans with (10 ^ D); [exact D2|].
-  rewrite Z.pow_mul_r by lia. apply Z.pow_le_mono_l. change (2 ^ 4) with 16. lia. }
-(* [2^(D - 1) <= 10^(D - 1) <= a < 2^(log2 a + 1)], so [D <= log2 a + 1]. *)
-assert (HDL : D <= Z.log2 a + 1).
-{ assert (H2 : 2 ^ (D - 1) < 2 ^ Z.succ (Z.log2 a)).
-  { apply Z.le_lt_trans with (10 ^ (D - 1)); [apply Z.pow_le_mono_l; lia | lia]. }
-  assert (H3 : 0 <= Z.succ (Z.log2 a)) by lia.
-  pose proof (proj2 (Z.pow_lt_mono_r_iff 2 (D - 1) _ ltac:(lia) H3) H2). lia. }
-unfold nat_bits. replace (a =? 0) with false by (symmetry; now apply Z.eqb_neq).
-cbv beta iota zeta.
-replace (Z.log2 a + 1 =? 0) with false by (symmetry; apply Z.eqb_neq; lia).
-replace (Z.log2 a + 1 - 1) with (Z.log2 a) by ring.
-rewrite (checked_u_some 64 (Z.log2 a)) by lia. cbv beta iota.
-rewrite (checked_u_some 128 (Z.log2 a * 1233)) by lia. cbv beta iota.
-(* The first guess [d0 = log2 a * 1233 / 4096]. *)
-assert (Hd0 : 0 <= Z.log2 a * 1233 / 4096) by (apply Z.div_pos; lia).
-pose proof (Z.mul_div_le (Z.log2 a * 1233) 4096 ltac:(lia)) as Hd1.
-rewrite (checked_u_some 64 (Z.log2 a * 1233 / 4096)) by lia. cbv beta iota.
-assert (Hdn : 10 ^ (Z.log2 a * 1233 / 4096) <= a).
-{ pose proof (pow10_le_pow2 (Z.log2 a) L0). lia. }
-assert (Hf : D - Z.log2 a * 1233 / 4096 <= Z.of_nat (S (Z.to_nat (Z.log2 a + 1)))).
-{ rewrite Nat2Z.inj_succ, Z2Nat.id by lia. lia. }
-rewrite (Hloop D2 D1 HD _ _ Hd0 Hdn Hf).
-replace (D - 1 + 1) with D by ring. apply checked_u_some. lia.
-Qed.
-
 (** ** The operations on the [Z]s that [Nat]s hold *)
 
 Lemma mul_z_correct : forall a b, 0 <= a -> 0 <= b -> NatLimbs.mul_z a b = Some (a * b).
@@ -410,6 +336,14 @@ intros a s Ha Hs. unfold NatLimbs.shl_z.
 destruct (to_limbs_correct a Ha) as [Oa Va].
 destruct (nat_shl_correct _ s Oa ltac:(lia)) as [_ V].
 rewrite V, Va, Z.shiftl_mul_pow2 by lia. reflexivity.
+Qed.
+
+Lemma shr_z_correct : forall a s, 0 <= a -> 0 <= s < 2 ^ 64 -> NatLimbs.shr_z a s = Z.shiftr a s.
+Proof.
+intros a s Ha Hs. unfold NatLimbs.shr_z.
+destruct (to_limbs_correct a Ha) as [Oa Va].
+destruct (nat_shr_correct _ s Oa ltac:(lia)) as [_ V].
+rewrite V, Va, Z.shiftr_div_pow2 by lia. reflexivity.
 Qed.
 
 Lemma div_rem_z_correct :
@@ -503,13 +437,10 @@ assert (H : limbs_ok (x :: nil)) by (constructor; [lia | constructor]).
 destruct (from_limbs_correct _ H) as [_ ->]. cbn [Limbs.val]. ring.
 Qed.
 
-(** [digits10] tests [pow10(d + 1)] up to the number of digits, which
-    [u32::try_from] needs below [2^32]. *)
-Lemma digits10_z_correct :
-  forall a,
-  0 <= a -> Zdigits radix10 a < 2 ^ 32 -> NatLimbs.digits10_z a = Some (Zdigits radix10 a).
+Lemma cmp_z_correct : forall a b, 0 <= a -> 0 <= b -> NatLimbs.cmp_z a b = Z.compare a b.
 Proof.
-intros a Ha HD. unfold NatLimbs.digits10_z.
+intros a b Ha Hb. unfold NatLimbs.cmp_z, NatLimbs.cmp.
 destruct (to_limbs_correct a Ha) as [Oa Va].
-rewrite nat_digits10_correct, Va; [reflexivity | exact Oa | now rewrite Va].
+destruct (to_limbs_correct b Hb) as [Ob Vb].
+rewrite cmp_correct by first [exact (proj1 Oa) | exact (proj1 Ob)]. now rewrite Va, Vb.
 Qed.

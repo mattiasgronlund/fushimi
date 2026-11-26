@@ -8,7 +8,7 @@
     bound in its direction into a rounding of its magnitude toward zero or
     away from it, which [format_away] tells. *)
 
-From Stdlib Require Import ZArith Reals Lra Lia.
+From Stdlib Require Import ZArith Reals Lra Lia Znumtheory.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
 From Fushimi Require Import Model Encoding Spec Decompose.
 From Fushimi Require NatOps.
@@ -74,6 +74,36 @@ destruct away; cbn [andb].
       apply eq_IZR in Hq'.
       pose proof (Z.div_mod n (beta ^ j)) as Hd. nia.
 - rewrite Zfloor_div by lia. ring.
+Qed.
+
+(** A number prime to [b] is prime to every power of [b]. *)
+Lemma rel_prime_pow :
+  forall a b k, 0 <= k -> rel_prime a b -> rel_prime a (b ^ k).
+Proof.
+intros a b k Hk Hab.
+apply (natlike_ind (fun k => rel_prime a (b ^ k))); [| |exact Hk]; cbv beta.
+- rewrite Z.pow_0_r. apply rel_prime_sym, rel_prime_1.
+- intros i Hi IH. rewrite Z.pow_succ_r by exact Hi. now apply rel_prime_mult.
+Qed.
+
+(** The odd factor [5^k] does not change whether [2^j] divides [m]. *)
+Lemma mod_pow2_mul_pow5 :
+  forall m j k, 0 <= j -> 0 <= k ->
+  ((m * 5 ^ k) mod 2 ^ j =? 0) = (m mod 2 ^ j =? 0).
+Proof.
+intros m j k Hj Hk.
+assert (H2 : 2 ^ j <> 0) by (apply Z.pow_nonzero; lia).
+(* [2^j] and [5^k] have no common factor, so by Gauss's lemma [2^j]
+   divides [5^k * m] only if it divides [m]. *)
+assert (Hr : rel_prime (2 ^ j) (5 ^ k)).
+{ apply rel_prime_pow; [exact Hk|].
+  apply rel_prime_sym, rel_prime_pow; [exact Hj|].
+  apply Zgcd_1_rel_prime. reflexivity. }
+apply Bool.eq_iff_eq_true. rewrite !Z.eqb_eq, !Z.mod_divide by exact H2.
+split; intros Hd.
+- apply (Gauss _ (5 ^ k)); [|exact Hr].
+  rewrite (Z.mul_comm (5 ^ k) m). exact Hd.
+- now apply Z.divide_mul_l.
 Qed.
 
 (** ** The steps *)
@@ -228,6 +258,107 @@ destruct (Z.leb_spec t s) as [Hle|Hlt].
     destruct (away && negb (n mod 10 ^ (t - s) =? 0)); lia.
   + remember (t - s) as j eqn:Hj. replace t with (s + j) by lia.
     rewrite round_FIX_cut by lia. reflexivity.
+Qed.
+
+(** [format_cut x t away] cuts the magnitude of a finite nonzero [x] as
+    [format_cut_dec] cuts its exact decimal [n * 10^s], and is that decimal
+    itself where [t <= s]. Where [e < t <= 0], it takes
+    [(m * 5^-t) >> (t - e)] for [n / 10^(t - s)], with [s = e], and tells
+    from the low bits of [m] whether [10^(t - s)] divides [n]. *)
+Lemma format_cut_correct :
+  forall x t away n s, is_finite x = true -> eq x zero = false ->
+  format_exact_dec x = Some (n, s) ->
+  format_cut x t away = format_cut_dec n s t away.
+Proof.
+intros x t away n s Fx Hz Hex.
+destruct (format_decompose_correct x Fx Hz) as (m & e & Hd & Hm & He & _).
+(* [format_exact_dec] gives [s = min e 0], and [n = m * 5^-e] if [e < 0]. *)
+assert (Hns : s = Z.min e 0 /\ (e < 0 -> n = m * 5 ^ (- e))).
+{ unfold format_exact_dec in Hex. rewrite Hd in Hex. cbv beta iota zeta in Hex.
+  rewrite NatOps.from_u64_z_correct in Hex by lia.
+  (* [destruct] puts the value of [0 <=? e] in [Hex] too. *)
+  destruct (Z.leb_spec 0 e) as [He0|He0].
+  - cbv beta iota in Hex.
+    injection Hex as _ Hs. split; [lia | intros; lia].
+  - rewrite checked_i_ok in Hex by lia.
+    cbv beta iota in Hex.
+    rewrite (Z.mod_small (- e) (2^32)) in Hex by lia.
+    rewrite NatOps.pow5_z_correct in Hex by lia. cbv beta iota in Hex.
+    assert (H5e : 0 < 5 ^ (- e)) by (apply Z.pow_pos_nonneg; lia).
+    rewrite NatOps.mul_z_correct in Hex by lia. cbv beta iota in Hex.
+    injection Hex as Hn Hs. split; [lia | intros _; congruence]. }
+destruct Hns as [Hs Hn].
+unfold format_cut. rewrite Hd. cbv beta iota zeta.
+destruct (Z.leb_spec t (Z.min e 0)) as [Hts|Hts]; cbv beta iota.
+{ (* [t <= s]: both are the exact decimal [(n, s)]. *)
+  rewrite Hex. unfold format_cut_dec. rewrite <- Hs in Hts.
+  now rewrite (proj2 (Z.leb_le t s) Hts). }
+destruct (Z.leb_spec t 0) as [Ht|Ht]; cbv beta iota.
+2:{ (* [0 < t]: [format_cut_dec] of the exact decimal, with [s = min e 0]. *)
+  rewrite Hex. cbv beta iota. now rewrite Hs. }
+(* [min e 0 < t <= 0], so [e < 0] and [e < t], and [format_exact_dec] gives
+   [n = m * 5^-e] and [s = e]. *)
+assert (Het : e < t) by lia.
+assert (Hse : s = e) by lia.
+assert (Hne : n = m * 5 ^ (- e)) by (apply Hn; lia).
+clear Hn Hs Hts Hex. subst n s.
+assert (H5e : 0 < 5 ^ (- e)) by (apply Z.pow_pos_nonneg; lia).
+(* The shift: [q = (m * 5^-t) >> (t - e) = m * 5^-t / 2^(t - e)]. *)
+rewrite (checked_i_ok 64 (t - e)) by lia. cbv beta iota zeta.
+rewrite (Z.mod_small (t - e) (2^64)) by lia.
+rewrite (checked_i_ok 64 (- t)) by lia. cbv beta iota.
+rewrite (Z.mod_small (- t) (2^32)) by lia.
+rewrite (NatOps.pow5_z_correct (- t)) by lia. cbv beta iota.
+assert (H5t : 0 < 5 ^ (- t)) by (apply Z.pow_pos_nonneg; lia).
+assert (HA : 0 <= m * 5 ^ (- t)) by nia.
+rewrite (NatOps.from_u64_z_correct m), (NatOps.mul_z_correct m (5 ^ (- t)))
+  by lia.
+cbv beta iota zeta.
+rewrite NatOps.shr_z_correct, Z.shiftr_div_pow2 by lia.
+(* The division: [n = m * 5^-e] by [5^(t - e) << (t - e) = 5^(t - e) *
+   2^(t - e)]. *)
+unfold format_cut_dec.
+assert (Hte : (t <=? e) = false) by (apply Z.leb_gt; lia).
+rewrite Hte, (checked_i_ok 64 (t - e)) by lia. cbv beta iota zeta.
+rewrite (Z.mod_small (t - e) (2^32)) by lia.
+rewrite (NatOps.pow5_z_correct (t - e)) by lia. cbv beta iota.
+assert (H5j : 0 < 5 ^ (t - e)) by (apply Z.pow_pos_nonneg; lia).
+assert (H2j : 0 < 2 ^ (t - e)) by (apply Z.pow_pos_nonneg; lia).
+rewrite NatOps.shl_z_correct, Z.shiftl_mul_pow2 by lia.
+assert (Hn0 : 0 <= m * 5 ^ (- e)) by nia.
+assert (Hb : 0 < 5 ^ (t - e) * 2 ^ (t - e)) by nia.
+rewrite NatOps.div_rem_z_correct by lia. cbv beta iota.
+assert (Hr0 : 0 <= m * 5 ^ (- e) mod (5 ^ (t - e) * 2 ^ (t - e)))
+  by (apply Z.mod_pos_bound; lia).
+rewrite NatOps.is_zero_z_correct by exact Hr0.
+(* [m * 5^-e = (m * 5^-t) * 5^(t - e)], so the quotient is the shift's,
+   and the remainder is [((m * 5^-t) mod 2^(t - e)) * 5^(t - e)], which is
+   0 exactly when [2^(t - e)] divides [m]. *)
+assert (Hsplit : m * 5 ^ (- e) = m * 5 ^ (- t) * 5 ^ (t - e)).
+{ rewrite <- Z.mul_assoc, <- Z.pow_add_r by lia.
+  now replace (- t + (t - e)) with (- e) by ring. }
+rewrite Hsplit, (Z.mul_comm (5 ^ (t - e)) (2 ^ (t - e))).
+rewrite Z.div_mul_cancel_r, Z.mul_mod_distr_r by lia.
+assert (Hz5 : (m * 5 ^ (- t) mod 2 ^ (t - e) * 5 ^ (t - e) =? 0) =
+              (m mod 2 ^ (t - e) =? 0)).
+{ rewrite <- (mod_pow2_mul_pow5 m (t - e) (- t)) by lia.
+  apply Bool.eq_iff_eq_true. rewrite !Z.eqb_eq, Z.mul_eq_0.
+  split; [intros [H|H]; lia | intros H; left; exact H]. }
+rewrite Hz5.
+destruct away; cbn [andb]; [|reflexivity].
+destruct (Z.leb_spec 64 (t - e)) as [H64|H64]; cbv beta iota.
+- (* [m < 2^53 < 2^(t - e)], so [m mod 2^(t - e)] is [m], which is not
+     0. *)
+  assert (Hp : 2 ^ 53 < 2 ^ (t - e)) by (apply Z.pow_lt_mono_r; lia).
+  rewrite (Z.mod_small m (2 ^ (t - e))) by lia.
+  rewrite (proj2 (Z.eqb_neq m 0)) by lia. reflexivity.
+- (* The mask [(1 << (t - e)) - 1] keeps the [t - e] low bits of [m]. *)
+  assert (Hp : 2 ^ (t - e) < 2 ^ 64) by (apply Z.pow_lt_mono_r; lia).
+  rewrite shl_ok by lia. cbv beta iota.
+  rewrite Z.mul_1_l, checked_u_ok by lia. cbv beta iota.
+  replace (2 ^ (t - e) - 1) with (Z.ones (t - e))
+    by (rewrite Z.ones_equiv; lia).
+  rewrite Z.land_ones by lia. reflexivity.
 Qed.
 
 (** [format_cut_bin m j away] is [m] rounded to a multiple of [2^j],

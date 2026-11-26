@@ -6,21 +6,21 @@
 // their carries, are computed in `u128`, by the loops of `src/limbs.rs`. `rocq/theories/Model.v`
 // transcribes the operations below that `scale` in `src/parse.rs` and the functions of
 // `src/format/digits.rs` call, `from_limbs`, `from_u64`, `is_zero`, `bits`, `low_u128`, `pow5`
-// with `mul_add_u64`, `div_rem`, `digits10` with `pow10` and `cmp`, `+`, `*` and `<<`, so it has
-// to be updated along with them. `rocq/theories/NatOps.v` proves, with the theorems about the
-// loops in `rocq/theories/Limbs.v` and `rocq/theories/Knuth.v`, that each computes its
-// operation on integers and returns limbs with no zero limb at the top. `from_dec`, `from_hex`
-// and `-`, with which the grammar of `src/parse.rs` and `src/parse/rat.rs` compute the bounds
-// of a literal, and `to_dec`, with `div_rem_ten19`, `div_ten19`, `top_digits` and
-// `write_digits`, which only the layout of the printed text uses, are not modelled; that the
-// first three return no zero limb at the top, and that `div_rem_ten19` leaves none, is checked
-// by reading. The tests at the end compare them all with `rug::Integer`, and the steps of
-// `to_dec` also with the arithmetic of `u128` and the `Display` of `u64`.
+// with `mul_add_u64`, `div_rem`, `cmp`, `+`, `*`, `<<` and `>>`, so it has to be updated along
+// with them. `rocq/theories/NatOps.v` proves, with the theorems about the loops in
+// `rocq/theories/Limbs.v` and `rocq/theories/Knuth.v`, that each computes its operation on
+// integers and returns limbs with no zero limb at the top. `from_dec`, `from_hex` and `-`, with
+// which the grammar of `src/parse.rs` and `src/parse/rat.rs` compute the bounds of a literal,
+// and `to_dec`, with `div_rem_ten19`, `div_ten19`, `top_digits` and `write_digits`, which only
+// the layout of the printed text uses, are not modelled; that the first three return no zero
+// limb at the top, and that `div_rem_ten19` leaves none, is checked by reading. The tests at
+// the end compare them all with `rug::Integer`, and the steps of `to_dec` also with the
+// arithmetic of `u128` and the `Display` of `u64`.
 
 use crate::limbs;
 use std::{
     cmp::Ordering,
-    ops::{Add, Mul, Shl, Sub},
+    ops::{Add, Mul, Shl, Shr, Sub},
 };
 
 // With no zero limb at the top, the derived `PartialEq` compares values.
@@ -104,24 +104,6 @@ impl Nat {
         (Self::from_limbs(q), Self::from_limbs(r))
     }
 
-    /// The number of decimal digits of `self`, which is 0 for 0: `10^(d - 1) <= self < 10^d`
-    /// otherwise.
-    pub(crate) fn digits10(&self) -> u64 {
-        let b = self.bits();
-        if b == 0 {
-            return 0;
-        }
-        // 1233/4096 < log10(2), so 10^d <= 2^(b - 1) <= self for this d: `self` has more than
-        // d digits. As log10(2) - 1233/4096 < 5 * 10^-6, d falls short of the number of digits
-        // less one by less than 1.31 + 5 * 10^-6 * b, so the loop raises it at most once for a
-        // `self` of fewer than 10^5 bits.
-        let mut d = u64::try_from(u128::from(b - 1) * 1233 / 4096).unwrap();
-        while *self >= pow10(d + 1) {
-            d += 1;
-        }
-        d + 1
-    }
-
     /// The decimal digits of `self`, with no zero in front, and `"0"` for 0.
     pub(crate) fn to_dec(&self) -> String {
         // The remainders of repeated divisions by 10^19 < 2^64 are the chunks of 19 digits,
@@ -166,11 +148,6 @@ impl Nat {
             self.0.push(carry);
         }
     }
-}
-
-// 10^k = 5^k * 2^k. Panics if k does not fit a `u32`.
-fn pow10(k: u64) -> Nat {
-    &Nat::pow5(u32::try_from(k).unwrap()) << k
 }
 
 // 10^19, the largest power of 10 below 2^64, which is at least 2^63.
@@ -346,6 +323,22 @@ impl Shl<u64> for &Nat {
     }
 }
 
+/// `self / 2^rhs`, rounded down.
+impl Shr<u64> for &Nat {
+    type Output = Nat;
+
+    // The `/` counts the limbs that the shift drops.
+    #[allow(clippy::suspicious_arithmetic_impl)]
+    fn shr(self, rhs: u64) -> Nat {
+        // The limbs from limb `rhs / 64` up, shifted by the remaining bits: the quotient is
+        // below 2^(64 (n - rhs / 64)) for the `n` limbs of `self`.
+        let j = usize::try_from(rhs / 64).unwrap_or(usize::MAX);
+        let mut out = vec![0; self.0.len().saturating_sub(j)];
+        limbs::shr_into(&mut out, &self.0, rhs);
+        Nat::from_limbs(out)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -482,13 +475,14 @@ mod rug_tests {
         assert_eq!(int(x), *y);
     }
 
-    // `to_dec` of `x` is the decimal digits that `rug` prints, and `digits10` is their number,
-    // or 0 for 0.
+    // `to_dec` of `x` is the decimal digits that `rug` prints.
     fn check_dec(x: &Nat) {
-        let s = int(x).to_string();
-        assert_eq!(x.to_dec(), s);
-        let d = if x.is_zero() { 0 } else { s.len() as u64 };
-        assert_eq!(x.digits10(), d, "{}", s);
+        assert_eq!(x.to_dec(), int(x).to_string());
+    }
+
+    // 10^k = 5^k * 2^k.
+    fn pow10(k: u32) -> Nat {
+        &Nat::pow5(k) << u64::from(k)
     }
 
     // Each operation of `x` and `y`, and of `x` and the shifts in `shifts`, against `rug`.
@@ -517,6 +511,7 @@ mod rug_tests {
         assert_eq!(x.is_zero(), a == 0);
         for &s in shifts {
             check(&(x << s), &Integer::from(&a << u32::try_from(s).unwrap()));
+            check(&(x >> s), &Integer::from(&a >> u32::try_from(s).unwrap()));
         }
     }
 
@@ -591,6 +586,12 @@ mod rug_tests {
         check(&r, &Integer::new());
         // No limbs are made for 0, however far it is shifted.
         check(&(&zero << u64::MAX), &Integer::new());
+        // Nor for a shift to the right past the top limb.
+        check(&(&zero >> u64::MAX), &Integer::new());
+        check(&(&x >> u64::MAX), &Integer::new());
+        check(&(&x >> 192), &Integer::new());
+        check(&(&x >> 191), &Integer::new());
+        check(&(&x >> 130), &Integer::from(1));
         assert_eq!(zero.bits(), 0);
         assert_eq!(zero.low_u128(), 0);
     }
@@ -757,7 +758,7 @@ mod rug_tests {
     fn dec_around_powers_of_ten() {
         let one = Nat::from_u64(1);
         for k in 0..=1100u32 {
-            let p = pow10(u64::from(k));
+            let p = pow10(k);
             check(&p, &Integer::from(Integer::u_pow_u(10, k)));
             check_dec(&(&p - &one));
             check_dec(&p);
@@ -765,11 +766,9 @@ mod rug_tests {
         }
     }
 
-    // 2^k - 1, 2^k and 2^k + 1. Of the numbers of k + 1 bits, 2^k is the smallest, where the
-    // estimate of `digits10` from the bits has the least room below the number of digits, and
-    // 2^(k + 1) - 1 the largest, where its loop raises the estimate the most. The last two `k`
-    // make numbers on both sides of the 10^5 bits up to which `digits10` says that its loop
-    // raises the estimate at most once.
+    // 2^k - 1, 2^k and 2^k + 1, the smallest and the largest numbers of k + 1 bits and the
+    // number after 2^k, up to 100,000 bits: `to_dec` of numbers far longer than the bounds that
+    // `src/format.rs` prints.
     #[test]
     fn dec_around_powers_of_two() {
         let one = Nat::from_u64(1);

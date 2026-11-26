@@ -10,7 +10,7 @@
 
 From Stdlib Require Import ZArith Reals Lra Lia.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
-From Fushimi Require Import Model Encoding Spec FormatCut.
+From Fushimi Require Import Model Encoding Spec FormatCut FormatLead.
 From Fushimi Require NatOps.
 
 Open Scope Z_scope.
@@ -58,10 +58,12 @@ Theorem format_fixed_correct :
 Proof.
 intros x p up Hx Hz Hp.
 destruct (format_exact_dec_correct x Hx Hz) as (n & s & Hex & Hn & Hs & Hxr).
-unfold format_fixed. rewrite Hex. cbv beta iota zeta.
+unfold format_fixed. cbv zeta.
 (* [p.min(ALL_DIGITS) as i64] is [min p 1100], and [-c] fits an [i64]. *)
 rewrite (as_i64_small (Z.min p 1100)) by lia.
-rewrite checked_i_64 by lia.
+rewrite checked_i_64 by lia. cbv beta iota.
+(* [format_cut] cuts [n * 10^s] as [format_cut_dec] does. *)
+rewrite (format_cut_correct x _ _ n s Hx Hz Hex).
 destruct (format_cut_dec_correct n s (- Z.min p 1100) (format_away x up))
   as (d & Hcut & Hd & Hr);
   [lia | change (2^62) with 4611686018427387904; lia ..
@@ -101,22 +103,33 @@ assert (Hmag :
   mag radix10 (IZR n * bpow radix10 s) = Zdigits radix10 n + s :> Z).
 { change (IZR n * bpow radix10 s)%R with (F2R (Float radix10 n s)).
   apply mag_F2R_Zdigits. lia. }
-unfold format_sci. rewrite Hex. cbv beta iota zeta.
-rewrite NatOps.digits10_z_correct by lia. cbv beta iota zeta.
-(* [n.digits10() as i64] and [p.min(ALL_DIGITS) as i64] keep their
-   values, and the exponents [t1], [t2] and [t] fit an [i64]. *)
-rewrite (as_i64_small (Zdigits radix10 n)) by lia.
-rewrite checked_i_64 by lia. cbv beta iota.
-rewrite checked_i_64 by lia. cbv beta iota.
+destruct (format_decompose_correct x Hx Hz) as (m & e & Hdc & Hm & He & Hxm).
+destruct (format_lead_correct m e Hm He) as (l & Hl & Hl1 & Hl2).
+(* [m * 2^e] and [n * 10^s] are both the magnitude of [x], so the
+   exponent [l] of its leading digit is [digits n + s - 1]. *)
+assert (Hme : (IZR m * bpow radix2 e = IZR n * bpow radix10 s)%R).
+{ apply (cond_Ropp_inj (Bsign x)). now rewrite <- Hxm, <- Hxr. }
+assert (Hl3 : l = Zdigits radix10 n + s - 1).
+{ assert (H : mag radix10 (IZR m * bpow radix2 e) = l + 1 :> Z).
+  { apply mag_unique. rewrite Rabs_pos_eq.
+    - replace (l + 1 - 1) with l by ring. now split.
+    - apply Rmult_le_pos; [apply IZR_le; lia | apply bpow_ge_0]. }
+  rewrite Hme, Hmag in H. lia. }
+unfold format_sci. rewrite Hdc. cbv beta iota zeta. rewrite Hl. cbv beta iota zeta.
+(* [p.min(ALL_DIGITS) as i64] keeps its value, and the exponent [t] fits
+   an [i64]. *)
 rewrite (as_i64_small (Z.min p 1100)) by lia.
 rewrite checked_i_64 by lia.
 set (t := Zdigits radix10 n + s - 1 - Z.min p 1100).
+replace (l - Z.min p 1100) with t by (unfold t; lia).
 destruct (format_cut_dec_correct n s t (format_away x up))
   as (d & Hcut & Hd & Hr);
   [lia | change (2^62) with 4611686018427387904; unfold t; lia ..
   | change (2^32) with 4294967296; unfold t; lia |].
 exists d, (Z.max s t).
-split; [exact Hcut |]. split; [exact Hd |].
+(* [format_cut] cuts [n * 10^s] as [format_cut_dec] does. *)
+split; [cbv beta iota; rewrite (format_cut_correct x _ _ n s Hx Hz Hex); exact Hcut |].
+split; [exact Hd |].
 rewrite Hxr, round_sign. f_equal.
 unfold format_away in Hr. rewrite Hr.
 destruct (Z.le_gt_cases p 1100) as [Hp1 | Hp1].

@@ -526,6 +526,42 @@ fn edges() {
     );
 }
 
+// Each power of two 2^k of an `f64`, from 2^-1074 to 2^1023, and the nonzero `f64`s next to
+// it, so that `lead` in `src/format/digits.rs` takes each binary exponent of an `f64`, and
+// `cut` takes each exponent `e` of `decompose` with its smallest and its largest significand
+// (but for `f64::MAX`, which `edges` has) and shifts by `t - e` at each `e < 0`, with `{:.0}`
+// at least.
+#[cfg(all(
+    target_pointer_width = "64",
+    any(target_os = "linux", target_os = "macos")
+))]
+#[test]
+fn powers_of_two() {
+    let mut report = Vec::new();
+    for k in -1074..=1023 {
+        // The biased exponent `k + 1023`, or for a subnormal 2^k, the bit `k + 1074`.
+        let b = if k >= -1022 {
+            ((k + 1023) as u64) << 52
+        } else {
+            1 << (k + 1074)
+        };
+        for x in [b - 1, b, b + 1].map(f64::from_bits) {
+            if x.is_finite() && x != 0.0 {
+                for x in [x, -x] {
+                    check_all(x, &mut report);
+                    check_large(x, &mut report);
+                }
+            }
+        }
+    }
+    assert!(
+        report.is_empty(),
+        "{} mismatches, the first:\n{}",
+        report.len(),
+        report[..report.len().min(10)].join("\n")
+    );
+}
+
 #[cfg(all(
     target_pointer_width = "64",
     any(target_os = "linux", target_os = "macos")
