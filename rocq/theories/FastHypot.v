@@ -42,14 +42,15 @@ intros y e. rewrite Rmult_assoc, <- bpow_plus, Z.add_opp_diag_l.
 change (bpow radix2 0) with 1. ring.
 Qed.
 
-(** [big] and [small] as both functions order them, by [ge] of the
-    absolute values as [hypot_odd] does ([DyHypotOdd.v]): finite, with
+(** [big] and [small] as both functions order them, by [gt] of the
+    absolute values ([DyadicRoot.abs_order]; where they are equal, it
+    returns [(|y|, |x|)], the same values): finite, with
     [0 < small <= big], and with the sum of the squares of [x] and [y]. *)
 Local Lemma order :
   forall x y,
   is_finite x = true -> is_finite y = true -> B2R x <> 0 -> B2R y <> 0 ->
   exists big small,
-  (if ge (fabs x) (fabs y) then (fabs x, fabs y) else (fabs y, fabs x)) = (big, small) /\
+  DyadicRoot.abs_order x y = (big, small) /\
   is_finite big = true /\ is_finite small = true /\ 0 < B2R small <= B2R big /\
   B2R x * B2R x + B2R y * B2R y = B2R big * B2R big + B2R small * B2R small.
 Proof.
@@ -63,16 +64,17 @@ pose proof (Rabs_pos_lt _ Hy) as Py.
 (* [r^2 = |r|^2]. *)
 assert (Sq : forall r, r * r = Rabs r * Rabs r)
   by (intros r; unfold Rabs; destruct (Rcase_abs r); ring).
-(* [ge a b] is [b <= a] for finite [a] and [b]. *)
-assert (G : ge (fabs x) (fabs y) = Rle_bool (B2R (fabs y)) (B2R (fabs x)))
-  by (unfold ge; apply Bleb_correct; assumption).
-rewrite G.
-destruct (Rle_bool_spec (B2R (fabs y)) (B2R (fabs x))) as [L | L].
+(* [gt a b] is [b < a] for finite [a] and [b]. *)
+assert (G : gt (fabs x) (fabs y) = Rlt_bool (B2R (fabs y)) (B2R (fabs x)))
+  by (unfold gt; apply Bltb_correct; assumption).
+unfold DyadicRoot.abs_order. cbv zeta. rewrite G.
+destruct (Rlt_bool_spec (B2R (fabs y)) (B2R (fabs x))) as [L | L].
 - exists (fabs x), (fabs y).
   split; [reflexivity |]. split; [exact Fax |]. split; [exact Fay |].
   rewrite Rx, Ry in *. split; [lra |].
   rewrite (Sq (B2R x)), (Sq (B2R y)). reflexivity.
-- exists (fabs y), (fabs x).
+- (* [|x| <= |y|], where a tie also takes [(|y|, |x|)]. *)
+  exists (fabs y), (fabs x).
   split; [reflexivity |]. split; [exact Fay |]. split; [exact Fax |].
   rewrite Rx, Ry in *. split; [lra |].
   rewrite (Sq (B2R x)), (Sq (B2R y)). ring.

@@ -6603,7 +6603,7 @@ End DyadicPow.
     [fast_cbrt_dir] and [fast_cbrt_near]. [FastHypotFar.v] proves the
     rule at a difference of 27 of [fast_hypot] and [fast_hypot_near],
     [FastHypotSum.v] and [FastHypotDd.v] [hypot_dd], and [FastHypot.v]
-    [hypot_exact], [fast_hypot] and [fast_hypot_near]. *)
+    [hypot_exact], [abs_order], [fast_hypot] and [fast_hypot_near]. *)
 Module DyadicRoot.
 
 (** [fn odd<N>(neg: bool, s: &[u64], e: i64, inexact: bool) -> Dyadic<N>]
@@ -6866,6 +6866,17 @@ Definition hypot_exact (big small h : f64) (e : Z) : option f64 :=
     else None
   else None.
 
+(** [fn abs_order(x: f64, y: f64) -> (f64, f64)], where [x.abs()] is
+    [fabs x], and the [bool] [gt], [ax > ay], is [g]. [FastHypot.v]
+    proves that, for finite nonzero [x] and [y], it returns finite [big]
+    and [small] with [0 < small <= big] and [big^2 + small^2 = x^2 + y^2]
+    (the local lemma [order]). *)
+Definition abs_order (x y : f64) : f64 * f64 :=
+  let ax := fabs x in
+  let ay := fabs y in
+  let g := gt ax ay in
+  (if g then ax else ay, if g then ay else ax).
+
 (** [fn fast_hypot(x: f64, y: f64, up: bool) -> Option<f64>] and [fn
     fast_hypot_near(x: f64, y: f64) -> Option<f64>], without the
     statements under [#[cfg(test)]], where [(v.to_bits() >> 52) as i64]
@@ -6873,7 +6884,7 @@ Definition hypot_exact (big small h : f64) (e : Z) : option f64 :=
     [to_bits big + 1], which stays within [u64] for a finite [big].
     [FastHypot.v] proves them. *)
 Definition fast_hypot (fma : bool) (x y : f64) (up : bool) : option f64 :=
-  let '(big, small) := if ge (fabs x) (fabs y) then (fabs x, fabs y) else (fabs y, fabs x) in
+  let '(big, small) := abs_order x y in
   if 27 <=? Z.shiftr (to_bits big) 52 - Z.shiftr (to_bits small) 52 then
     Some (if up then from_bits (to_bits big + 1) else big)
   else
@@ -6886,7 +6897,7 @@ Definition fast_hypot (fma : bool) (x y : f64) (up : bool) : option f64 :=
     | None => None
     end.
 Definition fast_hypot_near (fma : bool) (x y : f64) : option f64 :=
-  let '(big, small) := if ge (fabs x) (fabs y) then (fabs x, fabs y) else (fabs y, fabs x) in
+  let '(big, small) := abs_order x y in
   if 27 <=? Z.shiftr (to_bits big) 52 - Z.shiftr (to_bits small) 52 then Some big
   else
     match hypot_dd fma big small with

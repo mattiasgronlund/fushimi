@@ -454,6 +454,28 @@ fn hypot_exact(big: f64, small: f64, h: f64, e: i64) -> Option<f64> {
     None
 }
 
+// big = max(|x|, |y|) and small = min(|x|, |y|), for finite x and y (where |x| = |y|, it
+// returns (|y|, |x|), the same values), by one comparison that both selects take, the shape
+// of x86's `maxsd` and `minsd`. `rocq/theories/FastHypot.v` proves that, for finite nonzero x
+// and y, it returns finite big and small with 0 < small <= big and big^2 + small^2 = x^2 + y^2
+// (the local lemma `order`). In a crate that links `fushimi::cr`, counted with cachegrind
+// (with `--vex-guest-chase=no`, rustc 1.98.1) on every set of arguments but the hard cases, it
+// is `vminsd` and `vmaxsd` with no branch, built for Haswell, where `if x.abs() >= y.abs()` was
+// a branch whose direction is random on random arguments: 1.5 (to nearest) and 2.5 (toward -∞
+// and +∞) fewer instructions, one branch and about 0.5 mispredicts fewer per call of `hypot`.
+// It is `minsd` and `maxsd`, for 3.5 to 5.5 fewer instructions on those sets and again one
+// branch and about 0.5 mispredicts fewer, for x86-64 with `force-generic` and in the copy
+// without FMA of the build for x86-64 with the dispatch. In its FMA copy, LLVM had already
+// blended that pair without a branch, and the counts did not change. `f64::max` and `min` took
+// more instructions than this form, with a NaN fix-up each, and so did the bits as `u64`s,
+// with a round trip through the integer registers.
+#[inline(always)]
+fn abs_order(x: f64, y: f64) -> (f64, f64) {
+    let (ax, ay) = (x.abs(), y.abs());
+    let gt = ax > ay;
+    (if gt { ax } else { ay }, if gt { ay } else { ax })
+}
+
 // hypot(x, y) rounded toward +∞ if `up` and toward -∞ otherwise, and to nearest, by the fast
 // path, or `None` where the rounding test fails or `hypot_dd` returns `None`, for finite nonzero
 // x and y. Where the directed test fails, `hypot_exact` still returns hypot(x, y) if it is an
@@ -474,11 +496,7 @@ fn fast_hypot<const FMA: bool>(x: f64, y: f64, up: bool) -> Option<f64> {
     if !super::fast::fast_enabled() {
         return None;
     }
-    let (big, small) = if x.abs() >= y.abs() {
-        (x.abs(), y.abs())
-    } else {
-        (y.abs(), x.abs())
-    };
+    let (big, small) = abs_order(x, y);
     if (big.to_bits() >> 52) as i64 - (small.to_bits() >> 52) as i64 >= 27 {
         return Some(if up {
             f64::from_bits(big.to_bits() + 1)
@@ -504,11 +522,7 @@ fn fast_hypot_near<const FMA: bool>(x: f64, y: f64) -> Option<f64> {
     if !super::fast::fast_enabled() {
         return None;
     }
-    let (big, small) = if x.abs() >= y.abs() {
-        (x.abs(), y.abs())
-    } else {
-        (y.abs(), x.abs())
-    };
+    let (big, small) = abs_order(x, y);
     if (big.to_bits() >> 52) as i64 - (small.to_bits() >> 52) as i64 >= 27 {
         return Some(big);
     }
