@@ -5,7 +5,8 @@
 // `f64`s, midpoints and numbers just beside them, written as decimal, hexadecimal and `p/q`
 // literals give them, on subnormal numbers, on exponents up to `i32::MAX` and down to
 // `i32::MIN`, and on zeros of both signs. The literals also go through the grammar, and MPFR
-// gets their values as `literal_case` reads them, without the grammar.
+// gets their values as `literal_case` reads them, without the grammar. Those of
+// `long_literals` have about 10^3 and 10^4 digits, for `Nat::from_dec` of long numbers.
 // `huge_exponents_end_to_end`, which times literals whose exponents are huge from end to end,
 // needs no MPFR, so it is in `mod tests` of `src/parse.rs`, which also runs where the tests
 // have no MPFR.
@@ -241,6 +242,17 @@ impl Rng {
         s
     }
 
+    // The decimal `d * 10^k` of an `f64` or of a number beside it, as `near` makes them: its
+    // exact decimal, with zeros after the digits up to `n` digits if it has fewer, and then 1
+    // added, 1 taken away or neither, so that `d * 10^k` is that number or just beside it.
+    fn long_near(&mut self, n: usize) -> (Integer, i64) {
+        let x = f64::from_bits(self.float_bits());
+        let (m, e) = self.near(float_parts(x));
+        let (d, k) = decimal_of(m, e);
+        let pad = n.saturating_sub(d.to_string().len()) as i64;
+        (d * pow(10, pad) + self.range(-1, 1), k - pad)
+    }
+
     // An uncertain literal `m?r` `u` `e k`, as §12.11.4 c of the draft P1788/D9.5 defines it,
     // with a sign or none, and its letters in either case. The center `m` has 1 to 40 digits
     // and a point anywhere or none, or is an `f64` rounded to 1 to 40 significant digits, or
@@ -403,6 +415,18 @@ fn decimal_of(n: Integer, e: i64) -> (Integer, i64) {
     }
 }
 
+// The decimal `d * 10^k` for `k <= 0`, written with a point and the last `-k` digits of `d`
+// after it, with zeros in front where `d` has fewer digits.
+fn with_point(d: &str, k: i64) -> String {
+    let f = usize::try_from(-k).unwrap();
+    if f >= d.len() {
+        format!("0.{}{}", "0".repeat(f - d.len()), d)
+    } else {
+        let (int, frac) = d.split_at(d.len() - f);
+        format!("{}.{}", int, frac)
+    }
+}
+
 // The rational `(-1)^neg * num * 2^e2 * 5^e5 / den`, with `den > 0`, as the `Rat` that
 // `rational_to_f64` gets and as the integers of which the oracle makes its value.
 #[derive(Debug)]
@@ -449,8 +473,9 @@ fn ours(x: &Rat, infsup: InfSup) -> Outcome {
 // log2(5) = log2(10) - 1, and the subtraction is exact.
 const LOG2_5: f64 = LOG2_10 - 1.0;
 
-// log2(x) of a positive `x`, off by less than 2^-40 for `x` below 2^4096, which every `x`
-// here is.
+// log2(x) of a positive `x`, off by less than 2^-40 for `x` below 2^4096, and by less than
+// 2^-36 below 2^65536, which every `x` here is: those of `long_literals` have up to about
+// 10^4 + 360 digits, below 2^34500.
 fn log2(x: &Integer) -> f64 {
     // The top 64 bits as a float, times a power of two.
     let s = x.significant_bits().saturating_sub(64);
@@ -962,6 +987,47 @@ fn literals() {
                     format!("{}{}e{}", sign, n, k)
                 } else {
                     format!("{}0x{:x}p{}", sign, n, k)
+                }
+            }
+        };
+        check_literal(&s, report);
+    });
+}
+
+// Literals of about 10^3 digits, or one in eight of about 10^4, whose digits `Nat::from_dec`
+// reads: random digits as an integer, with an exponent `e-<k>` that puts them in or near the
+// range of `f64`, and over a number of about as many digits as `p/q`; and the digits of an
+// `f64` or of a number beside it that `long_near` makes, with a point, with an exponent, and
+// over a power of ten as `p/q`.
+#[test]
+fn long_literals() {
+    run("long_literals", 8, |rng, report| {
+        let sign = ["", "+", "-"][rng.below(3) as usize];
+        let base = if rng.below(8) == 0 { 10_000 } else { 1000 };
+        let n = (base + rng.range(-40, 40)) as usize;
+        let s = match rng.below(6) {
+            0 => format!("{}{}", sign, rng.dec_digits(n)),
+            1 => {
+                // The digits with a point after the first one, times 10^j for j from -330 to
+                // 310.
+                let k = n as i64 - 1 + rng.range(-310, 330);
+                format!("{}{}e-{}", sign, rng.dec_digits(n), k)
+            }
+            2 => {
+                // A positive `q` of 300 digits fewer to 320 more than `p`.
+                let p = rng.dec_digits(n);
+                let m = (n as i64 + rng.range(-300, 320)) as usize;
+                let q = format!("{}{}", rng.range(1, 9), rng.dec_digits(m - 1));
+                format!("{}{}/{}", sign, p, q)
+            }
+            kind => {
+                let (d, k) = rng.long_near(n);
+                let d = d.to_string();
+                match kind {
+                    3 => format!("{}{}", sign, with_point(&d, k)),
+                    4 => format!("{}{}e{}", sign, d, k),
+                    // `k <= 0`, so the denominator is 10^-k.
+                    _ => format!("{}{}/1{}", sign, d, "0".repeat(-k as usize)),
                 }
             }
         };

@@ -3,19 +3,21 @@
 //
 // A `Nat` is its 64-bit limbs, the least significant first, with no zero limb at the top, so
 // that 0 has no limbs and each number has exactly one representation. Products of limbs, with
-// their carries, are computed in `u128`, by the loops of `src/limbs.rs`. `rocq/theories/Model.v`
-// transcribes the operations below that `scale` in `src/parse.rs` and the functions of
-// `src/format/digits.rs` call, `from_limbs`, `from_u64`, `is_zero`, `bits`, `low_u128`, `pow5`
-// with `mul_add_u64`, `div_rem`, `cmp`, `+`, `*`, `<<` and `>>`, so it has to be updated along
-// with them. `rocq/theories/NatOps.v` proves, with the theorems about the loops in
-// `rocq/theories/Limbs.v` and `rocq/theories/Knuth.v`, that each computes its operation on
-// integers and returns limbs with no zero limb at the top. `from_dec`, `from_hex` and `-`, with
-// which the grammar of `src/parse.rs` and `src/parse/rat.rs` compute the bounds of a literal,
-// and `to_dec`, with `div_rem_ten19`, `div_ten19`, `top_digits` and `write_digits`, which only
-// the layout of the printed text uses, are not modelled; that the first three return no zero
-// limb at the top, and that `div_rem_ten19` leaves none, is checked by reading. The tests at
-// the end compare them all with `rug::Integer`, and the steps of `to_dec` also with the
-// arithmetic of `u128` and the `Display` of `u64`.
+// their carries, are computed in `u128`, by the loops of `src/limbs.rs` and, for `from_dec`, by
+// `mul_add_u128` below. `rocq/theories/Model.v` transcribes the operations below that `scale`
+// in `src/parse.rs` and the functions of `src/format/digits.rs` call, `from_limbs`, `from_u64`,
+// `is_zero`, `bits`, `low_u128`, `pow5` with `mul_add_u64`, `div_rem`, `cmp`, `+`, `*`, `<<`
+// and `>>`, so it has to be updated along with them. `rocq/theories/NatOps.v` proves, with the
+// theorems about the loops in `rocq/theories/Limbs.v` and `rocq/theories/Knuth.v`, that each
+// computes its operation on integers and returns limbs with no zero limb at the top.
+// `from_dec`, with `dec_chunks`, `dec_u128`, `mul_add_u128`, `push_u128` and `dec_limbs`, which
+// only `from_dec` uses, `from_hex` and `-`, with which the grammar of `src/parse.rs` and
+// `src/parse/rat.rs` compute the bounds of a literal, and `to_dec`, with `div_rem_ten19`,
+// `div_ten19`, `top_digits` and `write_digits`, which only the layout of the printed text uses,
+// are not modelled; that `from_dec`, `from_hex` and `-` return no zero limb at the top, and that
+// `div_rem_ten19` leaves none, is checked by reading. The tests at the end compare them all with
+// `rug::Integer`, and the steps of `to_dec` also with the arithmetic of `u128` and the `Display`
+// of `u64`.
 
 use crate::limbs;
 use std::{
@@ -43,13 +45,29 @@ impl Nat {
 
     /// The number that the decimal digits `s` spell, which the grammar makes nonempty.
     pub(crate) fn from_dec(s: &str) -> Self {
-        // 19 digits, below 10^19 < 2^64, at a time: n * 10^19 + the next 19. The first chunk
-        // takes the digits left over, so that each of the others has 19.
-        const CHUNK: usize = 19;
-        let (head, tail) = s.as_bytes().split_at(s.len() % CHUNK);
-        let mut n = Self(Vec::new());
-        for c in std::iter::once(head).chain(tail.chunks(CHUNK)) {
-            n.mul_add_u64(10u64.pow(c.len() as u32), digits(c, 10));
+        let s = s.as_bytes();
+        if s.len() <= 19 {
+            // Below 10^19 < 2^64: one limb, or none for 0.
+            let mut x = Vec::new();
+            push_u128(&mut x, u128::from(digits(s, 10)));
+            return Self(x);
+        }
+        // The first digits, at most `DEC_CUTOFF`, 38 at a time by `dec_chunks`, and the others
+        // 19 at a time, n * 10^19 + the next 19, by `mul_add_u64`. Up to `DEC_CUTOFF` digits
+        // there are no others; above it the others are a multiple of 19 that leaves
+        // DEC_CUTOFF - 18 to DEC_CUTOFF first digits, so fewer than all. One pass of
+        // `mul_add_u128` over the limbs of `n` for 38 digits, in place of two of `mul_add_u64`,
+        // saves the cost of a pass, but each of its steps takes two products of limbs, and once
+        // `n` is long, reading the digits 19 at a time took fewer instructions (see
+        // `DEC_CUTOFF`).
+        let rest = s.len().saturating_sub(DEC_CUTOFF).div_ceil(19) * 19;
+        let (head, tail) = s.split_at(s.len() - rest);
+        // Room for every limb, so that the loop below does not grow the `Vec` either.
+        let mut n = Self(dec_chunks(head, dec_limbs(s.len())));
+        // `mul_add_u64` keeps the top limb nonzero, and an `n` of 0, which has no limbs, gets
+        // the chunk as its limb if the chunk is not 0.
+        for c in tail.chunks_exact(19) {
+            n.mul_add_u64(TEN19, digits(c, 10));
         }
         n
     }
@@ -248,6 +266,88 @@ fn digits(s: &[u8], radix: u32) -> u64 {
     s.iter().fold(0, |n, &c| {
         n * u64::from(radix) + u64::from(char::from(c).to_digit(radix).unwrap())
     })
+}
+
+// 10^38, the largest power of 10 below 2^127.
+const TEN38: u128 = 10u128.pow(38);
+
+// The number of digits up to which `from_dec` reads them all 38 at a time. Of a longer number
+// it reads the first `DEC_CUTOFF - 18` to `DEC_CUTOFF` digits 38 at a time, so that the
+// others are a multiple of 19, and those 19 at a time. Of the cutoffs 1,000, 1,500, 2,000,
+// 2,500 and 3,000, 1,000 took the fewest instructions to parse interval literals of 10^4 and
+// 10^5 digits, as counted with cachegrind in a crate that links fushimi, built for Haswell
+// and for x86-64: past the first 1,000 or so digits, reading them 19 at a time took fewer
+// instructions than 38 at a time. Cutoffs below 1,000 were not counted.
+const DEC_CUTOFF: usize = 1000;
+
+// The limbs of the number that the ASCII decimal digits `s` spell, with no zero limb at the
+// top, in a `Vec` made with room for `cap` limbs, so that `from_dec` can make room for the
+// limbs that it adds after them too. Panics on a byte that is not a digit.
+fn dec_chunks(s: &[u8], cap: usize) -> Vec<u64> {
+    // 38 digits, below 10^38 < 2^127, at a time: x * 10^38 + the next 38. The first chunk
+    // takes the digits left over, so that each of the others has 38, and is all of `s` for
+    // fewer than 38 digits.
+    let (head, tail) = s.split_at(s.len() % 38);
+    let mut x = Vec::with_capacity(cap);
+    push_u128(&mut x, dec_u128(head));
+    // `x` holds the number that the digits so far spell, with no zero limb at the top. For a
+    // nonzero `x` of `n` limbs, x * 10^38 >= 2^(64 (n - 1)) * 10^38 > 2^(64 n + 62), so the
+    // carry is not 0, and its limbs pushed without a zero at the top keep the top limb
+    // nonzero. For `x = 0` the carry is the chunk.
+    for c in tail.chunks_exact(38) {
+        let carry = mul_add_u128(&mut x, TEN38, dec_u128(c));
+        push_u128(&mut x, carry);
+    }
+    x
+}
+
+// The number that the at most 38 ASCII decimal digits `s` spell, below 10^38: the digits in
+// front of the last 19, of which there are at most 19, times 10^19, plus the last 19.
+fn dec_u128(s: &[u8]) -> u128 {
+    let (hi, lo) = s.split_at(s.len().saturating_sub(19));
+    // (10^19 - 1) * 10^19 + 10^19 - 1 = 10^38 - 1 < 2^128.
+    u128::from(digits(hi, 10)) * u128::from(TEN19) + u128::from(digits(lo, 10))
+}
+
+// `x := (x * m + c) mod 2^(64 x.len())` for `m < 2^127` and `c < 2^127`. Returns the limbs
+// above the top one, `(x * m + c) >> (64 x.len())`, which is below 2^127.
+fn mul_add_u128(x: &mut [u64], m: u128, mut c: u128) -> u128 {
+    // m = m1 * 2^64 + m0 with m1 < 2^63.
+    let m0 = u128::from(m as u64);
+    let m1 = u128::from((m >> 64) as u64);
+    // Limb by limb from the bottom: after `i` limbs, x[..i] + c * 2^(64 i) is the old x[..i]
+    // times m plus the first c. For c = c1 * 2^64 + c0 and t = l * m0 + c0,
+    // l * m + c = t + (l * m1 + c1) * 2^64, so the limb is t mod 2^64 and the next carry
+    // l * m1 + c1 + t / 2^64.
+    for l in x.iter_mut() {
+        let l64 = u128::from(*l);
+        // l * m0 + c0 <= (2^64 - 1)^2 + 2^64 - 1 < 2^128.
+        let t = l64 * m0 + u128::from(c as u64);
+        *l = t as u64;
+        // l * m1 + c1 + t / 2^64 <= (2^64 - 1) (2^63 - 1) + 2^63 - 1 + 2^64 - 1 = 2^127 - 1,
+        // as c1 < 2^63, so each sum stays below 2^128 and the carry below 2^127.
+        c = l64 * m1 + (c >> 64) + (t >> 64);
+    }
+    c
+}
+
+// Pushes the limbs of `c` onto `x`, without a zero limb at the top: none for 0, one below
+// 2^64 and two above.
+fn push_u128(x: &mut Vec<u64>, c: u128) {
+    if c != 0 {
+        x.push(c as u64);
+    }
+    if c >> 64 != 0 {
+        x.push((c >> 64) as u64);
+    }
+}
+
+// At least the number of limbs of a number of `n` decimal digits: it is below 10^n, and
+// log2(10) < 213/64, so it has at most floor(213n/64) + 1 bits, and so at most
+// floor(213n/4096) + 1 limbs.
+fn dec_limbs(n: usize) -> usize {
+    // 213n fits a `u128`, and the bound, at most n for n > 0, a `usize`.
+    (n as u128 * 213 / 4096) as usize + 1
 }
 
 impl Ord for Nat {
@@ -659,6 +759,135 @@ mod rug_tests {
         check(&Nat::from_hex("fF"), &Integer::from(255));
     }
 
+    // `from_dec` of `s` is the number that `rug` reads.
+    fn check_from_dec(s: &str) {
+        check(&Nat::from_dec(s), &s.parse::<Integer>().unwrap());
+    }
+
+    // `n` random decimal digits.
+    fn random_digits(rng: &mut Rng, n: usize) -> String {
+        (0..n)
+            .map(|_| char::from(b'0' + rng.below(10) as u8))
+            .collect()
+    }
+
+    // `from_dec` of `n` digits for each `n` in `lens`: all nines, 10^(n - 1), all zeros, a one
+    // after zeros, ones at both ends, the digits that end in a run of zeros or nines, and
+    // random digits.
+    fn check_dec_lengths(lens: impl IntoIterator<Item = usize>, rng: &mut Rng) {
+        let z = |k: usize| "0".repeat(k);
+        for n in lens {
+            let half = n / 2;
+            let mut cases = vec![
+                "9".repeat(n),
+                format!("1{}", z(n - 1)),
+                z(n),
+                format!("{}1", z(n - 1)),
+                random_digits(rng, half) + &z(n - half),
+                random_digits(rng, half) + &"9".repeat(n - half),
+            ];
+            if n >= 2 {
+                cases.push(format!("1{}1", z(n - 2)));
+            }
+            for _ in 0..4 {
+                cases.push(random_digits(rng, n));
+            }
+            for s in &cases {
+                assert_eq!(s.len(), n);
+                check_from_dec(s);
+            }
+        }
+    }
+
+    // Each number of digits up to 80, where `from_dec` takes one limb up to 19 digits, a
+    // `u128` up to 38 and then one more chunk of 38 after each multiple of 38.
+    #[test]
+    fn dec_lengths_of_chunks() {
+        check_dec_lengths(1..=80, &mut rng(7));
+    }
+
+    // The numbers of digits around `DEC_CUTOFF`, and 10^3, 10^4 and, with optimization, 10^5.
+    // From DEC_CUTOFF - 39 to `DEC_CUTOFF`, where `from_dec` reads all the digits 38 at a time,
+    // the first chunk of `dec_chunks` takes each length from 0 to 37. Above `DEC_CUTOFF`, it
+    // reads the digits after the first ones 19 at a time, and each count of first digits, from
+    // DEC_CUTOFF - 18 to DEC_CUTOFF, comes with 1 to 4 chunks of 19 after it.
+    #[test]
+    fn dec_lengths_across_cutoff() {
+        let mut rng = rng(9);
+        let t = DEC_CUTOFF;
+        check_dec_lengths((t - 39..=t + 77).chain([t + 380, t + 381]), &mut rng);
+        check_dec_lengths([1000, 10_000], &mut rng);
+        if !cfg!(debug_assertions) {
+            check_dec_lengths([100_000], &mut rng);
+        }
+    }
+
+    // Random digits with a run of zeros or of nines that ends, starts or lies across the point
+    // where `from_dec` goes from 38 digits at a time to 19, or that covers all the digits before
+    // or after it, so that the number it has read at that point is 0, or the digits after it
+    // are all 0 or all 9.
+    #[test]
+    fn dec_runs_across_cutoff() {
+        let mut rng = rng(10);
+        for n in [
+            DEC_CUTOFF + 1,
+            DEC_CUTOFF + 19,
+            DEC_CUTOFF + 20,
+            3 * DEC_CUTOFF + 7,
+        ] {
+            // Where the digits read 19 at a time begin.
+            let p = n - (n - DEC_CUTOFF).div_ceil(19) * 19;
+            let runs = [1, 19, 38, 400]
+                .into_iter()
+                .flat_map(|w| [(p - w, p), (p, p + w), (p - w, p + w)])
+                .chain([(0, p), (p, n)])
+                .map(|(a, b)| (a, b.min(n)));
+            for (a, b) in runs {
+                for d in *b"09" {
+                    let mut s = random_digits(&mut rng, n).into_bytes();
+                    s[a..b].fill(d);
+                    check_from_dec(std::str::from_utf8(&s).unwrap());
+                }
+            }
+        }
+    }
+
+    // Up to 3 times `DEC_CUTOFF` decimal digits and at most 599 more, in runs of up to 600
+    // zeros, nines and random digits, so that whole chunks of 19 or 38 digits are often all 0
+    // or all 9.
+    #[test]
+    fn dec_long_digit_runs() {
+        let n = n_cases() / 50;
+        let mut rng = rng(11);
+        for _ in 0..n {
+            let len = 1 + rng.below(3 * DEC_CUTOFF as u64) as usize;
+            check_from_dec(&digit_runs(&mut rng, len, 600));
+        }
+        eprintln!("nat dec long digit runs: {} cases", n);
+    }
+
+    // `mul_add_u128` against `rug` on the patterns, at the ends of its bounds `m < 2^127` and
+    // `c < 2^127`: the carry is below 2^127, and the limbs and the carry are `x * m + c`.
+    #[test]
+    fn mul_add_u128_against_rug() {
+        let top = (1u128 << 127) - 1;
+        let ms = [1, 10, TEN38, top, 1 << 64, (1 << 64) - 1, 1 << 126 | 1];
+        let cs = [0, 1, TEN38 - 1, top, 1 << 64, u128::from(u64::MAX)];
+        for x in patterns() {
+            for &m in &ms {
+                for &c in &cs {
+                    let mut v = x.0.clone();
+                    let carry = mul_add_u128(&mut v, m, c);
+                    assert!(carry <= top);
+                    let want = int(&x) * Integer::from(m) + Integer::from(c);
+                    let got = Integer::from_digits(&v, Order::Lsf)
+                        + (Integer::from(carry) << (64 * v.len() as u32));
+                    assert_eq!(got, want, "{:?} {} {}", x, m, c);
+                }
+            }
+        }
+    }
+
     #[test]
     fn dec_of_patterns() {
         let t = 10u64.pow(19);
@@ -800,6 +1029,22 @@ mod rug_tests {
         }
     }
 
+    // At least `len` decimal digits, in runs of 1 to `max` zeros, nines or random digits.
+    fn digit_runs(rng: &mut Rng, len: usize, max: u64) -> String {
+        let mut s = String::with_capacity(len + max as usize);
+        while s.len() < len {
+            let kind = rng.below(3);
+            for _ in 0..1 + rng.below(max) {
+                s.push(match kind {
+                    0 => '0',
+                    1 => '9',
+                    _ => char::from(b'0' + rng.below(10) as u8),
+                });
+            }
+        }
+        s
+    }
+
     // Up to about 1200 decimal digits in runs of zeros, nines and random digits, so that whole
     // chunks of 19 digits are often all 0 or all 9, read by `from_dec` and printed back by
     // `to_dec`.
@@ -809,17 +1054,7 @@ mod rug_tests {
         let mut rng = rng(5);
         for _ in 0..n {
             let len = 1 + rng.below(1200) as usize;
-            let mut s = String::with_capacity(len + 40);
-            while s.len() < len {
-                let kind = rng.below(3);
-                for _ in 0..1 + rng.below(40) {
-                    s.push(match kind {
-                        0 => '0',
-                        1 => '9',
-                        _ => char::from(b'0' + rng.below(10) as u8),
-                    });
-                }
-            }
+            let s = digit_runs(&mut rng, len, 40);
             let x = Nat::from_dec(&s);
             check_dec(&x);
             let digits = s.trim_start_matches('0');
