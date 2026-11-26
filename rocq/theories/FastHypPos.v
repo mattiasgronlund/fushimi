@@ -1,10 +1,15 @@
 (** * The scaled result of the fast path of [sinh]
 
-    [DyadicExp.fast_sinh_pos] of [Model.v] returns, for [t >= 0], an
-    unevaluated sum [h + l] with [h] the rounding of [h + l] to nearest,
-    an exponent [e] and a bound [err = 2^-p] with [|sinh t 2^-e - (h +
-    l)| <= err], which the tests of [FastRoundErr.v] take, proved at [e =
-    1023] too in [FastRoundWide.v] ([fast_sinh_pos_correct]):
+    [DyadicExp.fast_sinh_pos] of [Model.v] makes no test for a tiny [t]:
+    [DyadicExp.sinh_dir_with] and [DyadicExp.sinh_near_with] call it,
+    through [fast_sinh_dir] and [fast_sinh_near], only after their rules
+    for a tiny [|x|], which leave [t >= 2^-27], and
+    [fast_sinh_pos_correct] and [fast_sinh_pos_fma] assume it. For such a
+    [t], it returns an unevaluated sum [h + l] with [h] the rounding of
+    [h + l] to nearest, an exponent [e] and a bound [err = 2^-p] with
+    [|sinh t 2^-e - (h + l)| <= err], which the tests of [FastRoundErr.v]
+    take, proved at [e = 1023] too in [FastRoundWide.v]
+    ([fast_sinh_pos_correct]):
     - [t > 709], where [fast_exp] returns [None]: [e^t / 2] from
       [fast_exp_edge_correct] of [FastExpEdge.v], with [err = 2^-68], where
       the term [e^-t / 2] it drops is at most [2^-73] once scaled and fits
@@ -650,20 +655,17 @@ Qed.
     nearest. *)
 Theorem fast_sinh_pos_correct :
   forall fma t h l e err,
-  is_finite t = true -> 0 <= B2R t ->
+  is_finite t = true -> 0 <= B2R t -> bpow radix2 (-27) <= B2R t ->
   DyadicExp.fast_sinh_pos fma t = Some (h, l, e, err) ->
   is_finite h = true /\ is_finite l = true /\ B2R h = RN (B2R h + B2R l) /\
   (-1021 <= e <= 1023)%Z /\
   exists p, (55 <= p <= 105)%Z /\ B2R err = bpow radix2 (- p) /\
     Rabs (sinh (B2R t) * bpow radix2 (- e) - (B2R h + B2R l)) <= bpow radix2 (- p).
 Proof.
-intros fma t h l e err Ft Ht H.
+intros fma t h l e err Ft Ht T1 H.
 unfold DyadicExp.fast_sinh_pos in H.
-assert (Fti : is_finite DyadicExp.tiny_near = true) by (vm_compute; reflexivity).
 assert (Fq : is_finite (from_bits 0x3fd0000000000000) = true) by (vm_compute; reflexivity).
 assert (F26 : is_finite (from_bits 0x403a000000000000) = true) by (vm_compute; reflexivity).
-destruct (lt t DyadicExp.tiny_near) eqn:L1; [discriminate H|].
-pose proof (lt_false _ _ Ft Fti L1) as T1. rewrite lit_tiny in T1.
 destruct (lt t (from_bits 0x3fd0000000000000)) eqn:L2.
 - pose proof (lt_true _ _ Ft Fq L2) as T2. rewrite lit_quarter in T2.
   change (bpow radix2 (-2)) with (/ 4) in T2.
@@ -708,16 +710,13 @@ Qed.
 (** [fast_sinh_pos] returns the same with and without an FMA. *)
 Theorem fast_sinh_pos_fma :
   forall t,
-  is_finite t = true -> 0 <= B2R t ->
+  is_finite t = true -> 0 <= B2R t -> bpow radix2 (-27) <= B2R t ->
   DyadicExp.fast_sinh_pos true t = DyadicExp.fast_sinh_pos false t.
 Proof.
-intros t Ft Ht.
+intros t Ft Ht T1.
 unfold DyadicExp.fast_sinh_pos.
-assert (Fti : is_finite DyadicExp.tiny_near = true) by (vm_compute; reflexivity).
 assert (Fq : is_finite (from_bits 0x3fd0000000000000) = true) by (vm_compute; reflexivity).
 assert (F26 : is_finite (from_bits 0x403a000000000000) = true) by (vm_compute; reflexivity).
-destruct (lt t DyadicExp.tiny_near) eqn:L1; [reflexivity|].
-pose proof (lt_false _ _ Ft Fti L1) as T1. rewrite lit_tiny in T1.
 destruct (lt t (from_bits 0x3fd0000000000000)) eqn:L2.
 - pose proof (lt_true _ _ Ft Fq L2) as T2. rewrite lit_quarter in T2.
   change (bpow radix2 (-2)) with (/ 4) in T2.

@@ -603,7 +603,7 @@ destruct (lt (fabs x) DyadicExp.tiny_near) eqn:G3; cbv iota in H.
 { injection H as <-. exact (odd_tiny_near sinh x sinh_odd sinh_tiny_bound Fx G3). }
 destruct (lt (fabs x) (from_bits 0x4086380000000000)) eqn:G4; cbv iota in H.
 { destruct (DyadicExp.fast_sinh_near false x) eqn:F; cbv iota in H.
-  { injection H as <-. exact (fast_sinh_near_correct false x _ Fx F). }
+  { injection H as <-. exact (fast_sinh_near_correct false x _ Fx (hyp_arg_near x Fx G3) F). }
   exact (ziv_near_strict_correct _ _ _ _ (fun n a Hn Ha => ev_sinh_correct x n a Hn Ha) H). }
 rewrite (fin_not_nan x Fx), (fin_neq_inf x Fx), (fin_neq_ninf x Fx) in H. cbn [orb] in H.
 destruct (ge x (from_bits 0x4086380000000000)) eqn:G1; cbv iota in H.
@@ -653,7 +653,7 @@ destruct (lt (fabs x) DyadicExp.tiny_near) eqn:G3; cbv iota in H.
 { injection H as <-. exact (odd_tiny_near tanh x tanh_odd tanh_tiny_bound Fx G3). }
 destruct (lt (fabs x) (from_bits 0x4034000000000000)) eqn:G4; cbv iota in H.
 { destruct (DyadicExp.fast_tanh_near false x) eqn:F; cbv iota in H.
-  { injection H as <-. exact (fast_tanh_near_correct false x _ Fx F). }
+  { injection H as <-. exact (fast_tanh_near_correct false x _ Fx (hyp_arg_near x Fx G3) F). }
   exact (ziv_near_strict_correct _ _ _ _ (fun n a Hn Ha => ev_tanh_correct x n a Hn Ha) H). }
 rewrite (fin_not_nan x Fx) in H. cbv iota in H.
 destruct (ge x (from_bits 0x4034000000000000)) eqn:G1; cbv iota in H.

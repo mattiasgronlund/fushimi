@@ -1669,7 +1669,8 @@ const HYP_BRANCHES: [(usize, f64, f64); 9] = [
 ];
 
 // (h, l, e, err) of the fast path of sinh, cosh or tanh (the function `i`) at t = |x|, as the
-// function computes them, or `None` out of the range of the fast path.
+// function computes them, or `None` out of the range of the fast path, for a t >= `TINY_NEAR`
+// if `i` is sinh or tanh, whose fast paths make no test for a smaller t (`fast_hyp_bound`).
 fn hyp_parts(i: usize, t: f64) -> Option<(f64, f64, i64, f64)> {
     match i {
         SINH => fast_sinh_pos::<HAS_FMA>(t),
@@ -2129,11 +2130,11 @@ mod mpfr {
         y
     }
 
-    // (h, l, e, err), from the fast path of the function `i` at t >= 0, are finite, with
-    // h = RN(h + l), e in [-1021, 1023] ([-1021, 1022] for tanh), err = 2^-p for an integer p
-    // in [55, 105], and |f(t) 2^-e - (h + l)| <= err, as `fast_sinh_pos_correct` in
-    // `rocq/theories/FastHypPos.v`, `fast_cosh_pos_correct` in `FastCoshPos.v` and
-    // `fast_tanh_pos_correct` in `FastTanhPos.v` state.
+    // (h, l, e, err), from the fast path of the function `i` at t >= 0 (t >= `TINY_NEAR` for
+    // sinh and tanh), are finite, with h = RN(h + l), e in [-1021, 1023] ([-1021, 1022] for
+    // tanh), err = 2^-p for an integer p in [55, 105], and |f(t) 2^-e - (h + l)| <= err, as
+    // `fast_sinh_pos_correct` in `rocq/theories/FastHypPos.v`, `fast_cosh_pos_correct` in
+    // `FastCoshPos.v` and `fast_tanh_pos_correct` in `FastTanhPos.v` state.
     // Returns |f(t) 2^-e - (h + l)| / err.
     fn check_hyp_parts(i: usize, t: f64, (h, l, e, err): (f64, f64, i64, f64)) -> f64 {
         let mut d = hyp(i, t) >> i32::try_from(e).unwrap();
@@ -2166,8 +2167,11 @@ mod mpfr {
     // every t from `TINY_NEAR` (sinh and tanh) or 0 (cosh) to about 710.47578 (sinh and cosh,
     // whose results reach 2^1024 near 710.48) or 353.5 (tanh, where -2t reaches the end -707 of
     // `fast_exp`), and none beyond: for sinh and cosh, the test checks that they take the t it
-    // tries up to 710.47, and none above 710.5. With `--nocapture`, prints the largest error
-    // found in each branch, as a fraction of err.
+    // tries up to 710.47, and none above 710.5. Those of sinh and tanh make no test for a t below
+    // `TINY_NEAR`, at which the rules of their callers for a tiny |x| return first
+    // (`hyp_thresholds` and `rules_at_shared_thresholds` check those rules at their thresholds),
+    // so the test tries them only from `TINY_NEAR` on. With `--nocapture`, prints the largest
+    // error found in each branch, as a fraction of err.
     #[test]
     fn fast_hyp_bound() {
         let mut rng = Rng(923);
@@ -2198,18 +2202,22 @@ mod mpfr {
         .flat_map(|x| around(x, 4))
         .filter(|&t| t >= 0.0)
         {
-            // The fast path takes every t in [start, end] and none above `last`.
+            // The fast path takes every t in [start, end] and none above `last`, and is not
+            // called below `start`.
             for (i, start, end, last) in [
                 (SINH, TINY_NEAR, 710.47, 710.5),
                 (COSH, 0.0, 710.47, 710.5),
                 (TANH, TINY_NEAR, 353.5, 353.5),
             ] {
+                if t < start {
+                    continue;
+                }
                 match hyp_parts(i, t) {
                     Some(parts) => {
-                        assert!(start <= t && t <= last, "{}({t:e})", FUNCTIONS[i].0);
+                        assert!(t <= last, "{}({t:e})", FUNCTIONS[i].0);
                         check_hyp_parts(i, t, parts);
                     }
-                    None => assert!(t < start || t > end, "{}({t:e})", FUNCTIONS[i].0),
+                    None => assert!(t > end, "{}({t:e})", FUNCTIONS[i].0),
                 }
             }
         }

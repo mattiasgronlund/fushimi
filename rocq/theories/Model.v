@@ -2541,10 +2541,10 @@ Definition fast_cosh_poly (fma : bool) (t : f64) : f64 * f64 :=
 
 (** [fn fast_sinh_pos(t: f64) -> Option<(f64, f64, i64, f64)>], where [?]
     is a [match], and the literals [0.25] and [26.0] are written with
-    [from_bits]. [FastHypPos.v] proves it. *)
+    [from_bits]. [FastHypPos.v] proves it for [t >= 2^-27], which the
+    rules for a tiny [|x|] of [sinh_dir_with] and [sinh_near_with] leave. *)
 Definition fast_sinh_pos (fma : bool) (t : f64) : option (f64 * f64 * Z * f64) :=
-  if lt t tiny_near then None
-  else if lt t (from_bits 0x3fd0000000000000) (* 0.25 *) then
+  if lt t (from_bits 0x3fd0000000000000) (* 0.25 *) then
     let '(sh, sl) := fast_sinh_poly fma t in
     let '(h, l, k) := Fast.normalize sh sl in
     Some (h, l, k, err63)
@@ -2585,10 +2585,10 @@ Definition fast_cosh_pos (fma : bool) (t : f64) : option (f64 * f64 * Z * f64) :
 
 (** [fn fast_tanh_pos(t: f64) -> Option<(f64, f64, i64, f64)>], where
     [-2.0 * t] is [mul m_two t], and the literal [0.125] is written with
-    [from_bits]. [FastTanhPos.v] proves it. *)
+    [from_bits]. [FastTanhPos.v] proves it for [t >= 2^-27], which the
+    rules for a tiny [|x|] of [tanh_dir_with] and [tanh_near_with] leave. *)
 Definition fast_tanh_pos (fma : bool) (t : f64) : option (f64 * f64 * Z * f64) :=
-  if lt t tiny_near then None
-  else if lt t (from_bits 0x3fc0000000000000) (* 0.125 *) then
+  if lt t (from_bits 0x3fc0000000000000) (* 0.125 *) then
     let '(sh, sl) := fast_sinh_poly fma t in
     let '(ch, cl) := fast_cosh_poly fma t in
     let '(qh, ql) := Fast.dd_div fma sh sl ch cl in

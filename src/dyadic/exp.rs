@@ -107,7 +107,9 @@
 // `rocq/theories/FastSinhSteps.v`), `rocq/theories/FastHypPos.v`,
 // `rocq/theories/FastCoshPos.v` and `rocq/theories/FastTanhPos.v` the bounds of
 // `fast_sinh_pos` and the others, and `rocq/theories/FastHyp.v` proves that the fast paths
-// return sinh x, cosh x and tanh x rounded, with and without an FMA.
+// return sinh x, cosh x and tanh x rounded, with and without an FMA, at the arguments that the
+// rules leave to them, which for sinh and tanh have |x| >= 2^-27, a bound that the fast paths
+// of sinh and tanh do not test.
 //
 // The fast path of x^y and x^n in `src/dyadic/pow.rs` also calls `fast_exp`, at y ln x in
 // double-double, and rounds its result with the bound `ERR67`. Where th, the high part of
@@ -706,9 +708,12 @@ fn fast_cosh_poly<const FMA: bool>(t: f64) -> (f64, f64) {
     (ch, c0 + (m0 + ul * 0.5))
 }
 
-// sinh t for t >= 0 as (h, l, e, err), with sinh t 2^-e within err of h + l, h = RN(h + l),
-// e in [-1021, 1023] and err = 2^-p for an integer p in [55, 105], or `None`; the rounding
-// tests check 1/2 < h < 2. Below 1/4, the Taylor polynomial, scaled to [1, 2). From 1/4,
+// sinh t for t >= 2^-27 (`TINY_NEAR`) as (h, l, e, err), with sinh t 2^-e within err of h + l,
+// h = RN(h + l), e in [-1021, 1023] and err = 2^-p for an integer p in [55, 105], or `None`;
+// the rounding tests check 1/2 < h < 2. It does not test for a smaller t: `fast_sinh_dir` and
+// `fast_sinh_near` pass it t = |x| only after the rules for a tiny |x|, |x| < `TINY_HYP` in
+// `sinh` (or, with the dispatch, in `sinh_dir_with`) and |x| < `TINY_NEAR` in
+// `sinh_near_with`. Below 1/4, the Taylor polynomial, scaled to [1, 2). From 1/4,
 // sinh t = (e^t - e^-t) / 2 with e^t = y 2^e from `fast_exp` and e^-t 2^-e = 2^-2e / y from
 // the quotient of `dd_div`; from 26 on, e^-t 2^-e < 2^-74 is left out. Always inlined, also in
 // a build without the dispatch, where LLVM kept it a function of its own, which `fast_sinh_dir`
@@ -719,9 +724,6 @@ fn fast_cosh_poly<const FMA: bool>(t: f64) -> (f64, f64) {
 // log-uniform in [2^-1022, 2^10), in a crate that links `cr`, built for Haswell (cachegrind).
 #[inline(always)]
 fn fast_sinh_pos<const FMA: bool>(t: f64) -> Option<(f64, f64, i64, f64)> {
-    if t < TINY_NEAR {
-        return None;
-    }
     if t < 0.25 {
         let (sh, sl) = fast_sinh_poly::<FMA>(t);
         let (h, l, k) = normalize(sh, sl);
@@ -780,7 +782,10 @@ fn fast_cosh_pos<const FMA: bool>(t: f64) -> Option<(f64, f64, i64, f64)> {
     }
 }
 
-// tanh t for t >= 0 as `fast_sinh_pos` returns sinh t. Below 1/8, sinh t / cosh t from the
+// tanh t for t >= 2^-27 as `fast_sinh_pos` returns sinh t, with no test for a smaller t either:
+// `fast_tanh_dir` and `fast_tanh_near` pass it t = |x| only after the rules for a tiny |x|,
+// |x| < `TINY_HYP` in `tanh` (or, with the dispatch, in `tanh_dir_with`) and |x| < `TINY_NEAR`
+// in `tanh_near_with`. Below 1/8, sinh t / cosh t from the
 // Taylor polynomials; from 1/8, (1 - w) / (1 + w) for w = e^-2t = wh + wl from `fast_exp`,
 // where 1 + wh and 1 - wh are exact in double-double by Fast2Sum [Dekker], as wh < 1. Both
 // scale the quotient to [1, 2), and err is 2^-63 below 1/8 and, from 1/8 on, the 2^-67 that
@@ -791,9 +796,6 @@ fn fast_cosh_pos<const FMA: bool>(t: f64) -> Option<(f64, f64, i64, f64)> {
 // to nearest on the log-uniform x.
 #[inline(always)]
 fn fast_tanh_pos<const FMA: bool>(t: f64) -> Option<(f64, f64, i64, f64)> {
-    if t < TINY_NEAR {
-        return None;
-    }
     if t < 0.125 {
         let (sh, sl) = fast_sinh_poly::<FMA>(t);
         let (ch, cl) = fast_cosh_poly::<FMA>(t);
@@ -842,10 +844,8 @@ fn fast_tanh_dir<const FMA: bool>(x: f64, up: bool) -> Option<f64> {
 
 // Always inlined, also in a build without the dispatch, where `sinh_near` is inlined in
 // `cr::sinh_rn` too: when only `sinh_near` was, `cr::sinh_rn` called this function out of line,
-// with a stack frame and a spill of x on the fast path. Inlined, the fast path follows the rule
-// of `sinh_near` for a tiny |x|, and LLVM drops the test t < 2^-27 of `fast_sinh_pos`, which
-// repeats that rule's test of |x| = t (objdump, in a crate that links `cr`, built for Haswell).
-// The same holds for `fast_tanh_near`.
+// with a stack frame and a spill of x on the fast path (objdump, in a crate that links `cr`,
+// built for Haswell). The same holds for `fast_tanh_near`.
 #[inline(always)]
 fn fast_sinh_near<const FMA: bool>(x: f64) -> Option<f64> {
     let (h, l, e, err) = fast_sinh_pos::<FMA>(x.abs())?;
@@ -1550,11 +1550,7 @@ level_entry! {
 }
 
 // The body of `tanh_dir`, with `FMA` for the products (`level_entry!`). One test sends NaN, ±∞
-// and |x| >= 19 to their rules, after the fast path. In a build with the dispatch, the fast
-// path then comes right after the rule for a tiny |x| and that test, where LLVM can see that
-// the test of `fast_tanh_pos` for t < 2^-27 fails, and drops it. In a build without it, `tanh`
-// makes the rule for a tiny |x| before it calls `tanh_dir`, which keeps the test (objdump, in a
-// crate that links `cr`).
+// and |x| >= 19 to their rules, after the fast path.
 #[inline(always)]
 fn tanh_dir_with<const FMA: bool, const UP: bool>(x: f64) -> f64 {
     if !TINY_IN_CALLER && x.abs() < TINY_HYP {

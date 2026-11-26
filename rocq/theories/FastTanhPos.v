@@ -1,10 +1,14 @@
 (** * The scaled result of the fast path of [tanh]
 
-    [DyadicExp.fast_tanh_pos] of [Model.v] returns, for [t >= 0], an
-    unevaluated sum [h + l] with [h] the rounding of [h + l] to nearest,
-    an exponent [k] and a bound [err = 2^-p] with [|tanh t 2^-k - (h +
-    l)| <= err], which the tests of [FastRoundErr.v] take
-    ([fast_tanh_pos_correct]):
+    [DyadicExp.fast_tanh_pos] of [Model.v] makes no test for a tiny [t]:
+    [DyadicExp.tanh_dir_with] and [DyadicExp.tanh_near_with] call it,
+    through [fast_tanh_dir] and [fast_tanh_near], only after their rules
+    for a tiny [|x|], which leave [t >= 2^-27], and
+    [fast_tanh_pos_correct] and [fast_tanh_pos_fma] assume it. For such a
+    [t], it returns an unevaluated sum [h + l] with [h] the rounding of
+    [h + l] to nearest, an exponent [k] and a bound [err = 2^-p] with
+    [|tanh t 2^-k - (h + l)| <= err], which the tests of [FastRoundErr.v]
+    take ([fast_tanh_pos_correct]):
     - [t >= 1/8]: [(1 - w) / (1 + w)] for [w = e^-2t] from
       [fast_exp_correct] of [FastExpCore.v], by the double-double quotient
       of [FastDiv.v], scaled by [Fast.normalize], with [err = 2^(-67-k)]
@@ -422,15 +426,13 @@ assert (H3 : Rabs (R - T) * (1 - / 316912650057057350374175801344) <= Rabs (R - 
 rewrite K67, K70. lra.
 Qed.
 
-(** The literals of [fast_tanh_pos]: [2^-27], [0.125] and [2^-63]. *)
+(** The literals of [fast_tanh_pos]: [0.125] and [2^-63]. *)
 Lemma th_lits :
-  (is_finite DyadicExp.tiny_near = true /\ B2R DyadicExp.tiny_near = bpow radix2 (-27)) /\
   (is_finite (from_bits 0x3fc0000000000000) = true /\
    B2R (from_bits 0x3fc0000000000000) = bpow radix2 (-3)) /\
   (is_finite DyadicExp.err63 = true /\ B2R DyadicExp.err63 = bpow radix2 (-63)).
 Proof.
-split; [|split].
-- exact (pow2_bits (-27) ltac:(lia)).
+split.
 - exact (pow2_bits (-3) ltac:(lia)).
 - exact (pow2_bits (-63) ltac:(lia)).
 Qed.
@@ -440,19 +442,17 @@ Qed.
     nearest. *)
 Theorem fast_tanh_pos_correct :
   forall fma t h l e err,
-  is_finite t = true -> 0 <= B2R t ->
+  is_finite t = true -> 0 <= B2R t -> bpow radix2 (-27) <= B2R t ->
   DyadicExp.fast_tanh_pos fma t = Some (h, l, e, err) ->
   is_finite h = true /\ is_finite l = true /\ B2R h = RN (B2R h + B2R l) /\
   (-1021 <= e <= 1022)%Z /\
   exists p, (55 <= p <= 105)%Z /\ B2R err = bpow radix2 (- p) /\
     Rabs (tanh (B2R t) * bpow radix2 (- e) - (B2R h + B2R l)) <= bpow radix2 (- p).
 Proof.
-intros fma t h l e err Ft Ht H.
-destruct th_lits as ((F27 & E27) & (F3 & E3) & (F63 & E63)).
+intros fma t h l e err Ft Ht H27 H.
+destruct th_lits as ((F3 & E3) & (F63 & E63)).
 assert (K3 : bpow radix2 (-3) = / 8) by reflexivity.
 unfold DyadicExp.fast_tanh_pos in H.
-destruct (lt t DyadicExp.tiny_near) eqn:L1; [discriminate H|].
-pose proof (gt_false DyadicExp.tiny_near t F27 Ft L1) as H27. rewrite E27 in H27.
 destruct (lt t (from_bits 0x3fc0000000000000)) eqn:L2.
 - (* [2^-27 <= t < 1/8]: the quotient of the polynomials, within [2^-63]
      of [tanh t 2^-k] as [|X - Y| <= eps X] and [X (1 - eps) <= Y < 2]
@@ -534,15 +534,13 @@ Qed.
 (** [fast_tanh_pos] returns the same with and without an FMA. *)
 Theorem fast_tanh_pos_fma :
   forall t,
-  is_finite t = true -> 0 <= B2R t ->
+  is_finite t = true -> 0 <= B2R t -> bpow radix2 (-27) <= B2R t ->
   DyadicExp.fast_tanh_pos true t = DyadicExp.fast_tanh_pos false t.
 Proof.
-intros t Ft Ht.
-destruct th_lits as ((F27 & E27) & (F3 & E3) & _).
+intros t Ft Ht H27.
+destruct th_lits as ((F3 & E3) & _).
 assert (K3 : bpow radix2 (-3) = / 8) by reflexivity.
 unfold DyadicExp.fast_tanh_pos.
-destruct (lt t DyadicExp.tiny_near) eqn:L1; [reflexivity|].
-pose proof (gt_false DyadicExp.tiny_near t F27 Ft L1) as H27. rewrite E27 in H27.
 destruct (lt t (from_bits 0x3fc0000000000000)) eqn:L2.
 - (* The polynomials and [dd_div] do not depend on [fma]. *)
   pose proof (gt_true (from_bits 0x3fc0000000000000) t F3 Ft L2) as H3.
