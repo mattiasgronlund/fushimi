@@ -2240,11 +2240,12 @@ opam install rocq-core.9.1.1 rocq-stdlib.9.0.0 coq-flocq.4.2.2 gappa.1.6.0 coq-g
 make -C rocq
 ```
 
-You can also use Docker, as CI does ([`ci-rocq.yml`](../.github/workflows/ci-rocq.yml)). The container runs as root, as apt needs to install MPFR and Boost, so the files that it writes in `rocq/` belong to root. `OPAMROOT` names the opam root of the image's user, `rocq`, and `OPAMROOTISOK` stops opam from warning that it runs as root.
+You can also use Docker, as CI does ([`ci-rocq.yml`](../.github/workflows/ci-rocq.yml)), with the same image, pinned by its digest. The container runs as root, as apt needs to install MPFR and Boost, so the files that it writes in `rocq/` belong to root. `OPAMROOT` names the opam root of the image's user, `rocq`, and `OPAMROOTISOK` stops opam from warning that it runs as root.
 
 ```bash
 docker run --rm --user root -e OPAMROOT=/home/rocq/.opam -e OPAMROOTISOK=1 \
-  -v "$PWD/rocq:/w" -w /w rocq/rocq-prover:9.1 \
+  -v "$PWD/rocq:/w" -w /w \
+  rocq/rocq-prover:9.1@sha256:9a1e969649a3cc3c6f310d5be5a842e2187384560337c6c0807aba9f8565efba \
   bash -c 'apt-get update -qq && apt-get install -y -qq libmpfr-dev libboost-dev &&
     opam install -y coq-flocq.4.2.2 gappa.1.6.0 coq-gappa.1.11.0 && make'
 ```

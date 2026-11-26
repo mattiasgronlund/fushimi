@@ -23,7 +23,8 @@ jobs:
 
       # Docker pulls the image by its digest and ignores the tag. To update
       # it, write the new tag and the Digest that
-      # `docker buildx imagetools inspect rocq/rocq-prover:<tag>` prints.
+      # `docker buildx imagetools inspect rocq/rocq-prover:<tag>` prints,
+      # here and in the Docker command of rocq/README.md, "Building".
       # The container runs as root, as apt needs to install MPFR and Boost,
       # which Gappa builds against, and root can write the compiled proofs
       # next to the sources in the checkout. OPAMROOT names the opam root of
