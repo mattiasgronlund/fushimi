@@ -6,9 +6,14 @@
 //
 // `rocq/theories/Model.v` transcribes both tables (`DyadicExp.T1` and `DyadicExp.T2`), so it
 // has to be updated along with them.
+//
+// They are `static`s, not `const`s, so that a build holds one copy of them: as `const`s, the
+// code of `cr`, where `fast_sinh_near` and `fast_tanh_near` are inlined, held its own copy of
+// the 2 KB, beside the one of the kernel (objdump, in a crate that links `cr`, built for
+// Haswell).
 
 /// 2^(i/4096) for i from 0 to 63.
-pub(super) const T1: [[u64; 2]; 64] = [
+pub(super) static T1: [[u64; 2]; 64] = [
     [0x3ff0000000000000, 0x0000000000000000],
     [0x3ff000b175effdc7, 0x3c9ae8e38c59c72a],
     [0x3ff00162f3904052, 0xbc57b5d0d58ea8f4],
@@ -76,7 +81,7 @@ pub(super) const T1: [[u64; 2]; 64] = [
 ];
 
 /// 2^(j/64) for j from 0 to 63.
-pub(super) const T2: [[u64; 2]; 64] = [
+pub(super) static T2: [[u64; 2]; 64] = [
     [0x3ff0000000000000, 0x0000000000000000],
     [0x3ff02c9a3e778061, 0xbc719083535b085d],
     [0x3ff059b0d3158574, 0x3c8d73e2a475b465],

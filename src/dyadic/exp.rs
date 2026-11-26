@@ -842,10 +842,9 @@ fn fast_tanh_dir<const FMA: bool>(x: f64, up: bool) -> Option<f64> {
 // Always inlined, also in a build without the dispatch, where `sinh_near` is inlined in
 // `cr::sinh_rn` too: when only `sinh_near` was, `cr::sinh_rn` called this function out of line,
 // with a stack frame and a spill of x on the fast path. Inlined, the fast path follows the rule
-// of `sinh_near` for a tiny |x|, LLVM drops the test t < 2^-27 of `fast_sinh_pos`, which repeats
-// that rule's test of |x| = t, and the code of `cr` holds its own copy of the 2 KB of tables `T1`
-// and `T2` of `fast_exp` (objdump, in a crate that links `cr`, built for Haswell). The same holds
-// for `fast_tanh_near`.
+// of `sinh_near` for a tiny |x|, and LLVM drops the test t < 2^-27 of `fast_sinh_pos`, which
+// repeats that rule's test of |x| = t (objdump, in a crate that links `cr`, built for Haswell).
+// The same holds for `fast_tanh_near`.
 #[inline(always)]
 fn fast_sinh_near<const FMA: bool>(x: f64) -> Option<f64> {
     let (h, l, e, err) = fast_sinh_pos::<FMA>(x.abs())?;
