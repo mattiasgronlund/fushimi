@@ -1328,7 +1328,8 @@ Print Assumptions dec_hypot_valid_point.
 (** The names whose types quantify over an MPFR anywhere, and those of
     them that [Valid.v] declares, for the check of [MpfrExamples.v] in the
     [Makefile]. They are searched here, as this file imports every module
-    whose theorems it prints, so that [Search] gives their short names.
+    of which it prints a theorem that quantifies over an MPFR, so that
+    [Search] gives their short names, which the [Example]s use.
     By default, [Search] hides the names whose qualified name contains
     [Private_], [_subproof] or [_subterm], such as those of the lemmas
     that [abstract] makes. The first line below has it show them too. *)
