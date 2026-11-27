@@ -6,13 +6,15 @@
 // `src/dyadic/log.rs` for ln x, log2 x, log10 x, asinh, acosh and atanh, whose results can be
 // negative (`round_dir_signed`, `round_near_signed`), `src/dyadic/trig.rs` for sin, cos and tan,
 // with the same tests, `src/dyadic/pow.rs` for x^y and x^n, `src/dyadic/atan.rs` for atan,
-// atan2, asin and acos, which put the sign back themselves, and `src/dyadic/root.rs` for cbrt,
-// which puts the sign back itself too, and hypot. `round_dir_signed` and `round_near_signed`
-// decide from the bits of h, its sign bit included, with no branch on the sign of h. log.rs and
-// trig.rs also call `round_dir_signed_branch` and `round_near_signed_branch`, which branch on
-// the sign of h. They do so where the forms without the branch cost more; the callers' comments
-// say which. sinh and tanh, and asinh and atanh near 0, round f(|x|) and put the sign of x back
-// on the result with `xor_sign`, rounded down, up or to nearest.
+// atan2, asin and acos, which put the sign back themselves, and `src/dyadic/root.rs` for cbrt
+// and hypot. `round_dir_signed` and `round_near_signed` decide from the bits of h, its sign bit
+// included, with no branch on the sign of h. log.rs and trig.rs also call
+// `round_dir_signed_branch` and `round_near_signed_branch`, which branch on the sign of h. They
+// do so where the forms without the branch cost more; the callers' comments say which. sinh and
+// tanh, and asinh and atanh near 0, round f(|x|) and put the sign of x back on the result with
+// `xor_sign`, rounded down, up or to nearest. So does cbrt rounded to nearest. cbrt rounded down
+// or up keeps `if x < 0.0 { -r } else { r }`, row 167's form: built for Haswell, that is a blend
+// with no jump.
 //
 // A fast path computes a scaled result y = f(x) 2^-e, for an integer e in [-1021, 1022], as an
 // unevaluated sum h + l of two `f64`s with h = RN(h + l), 1/2 < h < 2, and a proved bound
@@ -514,8 +516,8 @@ pub(crate) fn round_near_wide_err(h: f64, l: f64, e: i64, err: f64) -> Option<f6
 
 /// r with its sign bit xored with that of s: -r where s has its sign bit set, and r otherwise,
 /// for every r, NaNs and infinities included.
-// sinh and tanh, and asinh and atanh near 0 (the top of this file) round f(|x|) and put the
-// sign of x back with this, rather than with `if x < 0.0 { -r } else { r }`.
+// sinh and tanh, asinh and atanh near 0, and cbrt to nearest (the top of this file) round
+// f(|x|) and put the sign of x back with this, rather than with `if x < 0.0 { -r } else { r }`.
 // Rounded down or up, there the compare x < 0 also chose the direction of the rounding, and
 // with its two uses LLVM lowered the select to a jump on the sign of x, which is unpredictable
 // on arguments of mixed signs (row 117).
@@ -525,8 +527,9 @@ pub(crate) fn round_near_wide_err(h: f64, l: f64, e: i64, err: f64) -> Option<f6
 // branch fewer per call on x uniform in [-10, 10), 0.50 fewer mispredicted ones, and 0.51
 // (sinh) and 1.51 (tanh) fewer instructions. asinh and atanh rounded down or up, on x of random
 // sign near 0, take 1.51 fewer instructions, one branch fewer and 0.50 fewer mispredicted ones.
-// Rounded to nearest, these four take 1.00 fewer instructions per call, and as many branches,
-// on each of those sets of random x whose calls reach the restore (cachegrind, row 192).
+// Rounded to nearest, these four and cbrt take 1.00 fewer instructions per call, and as many
+// branches, on each of those sets of random x whose calls reach the restore (cachegrind,
+// row 192).
 #[inline(always)]
 pub(crate) fn xor_sign(r: f64, s: f64) -> f64 {
     f64::from_bits(r.to_bits() ^ (s.to_bits() & (1 << 63)))

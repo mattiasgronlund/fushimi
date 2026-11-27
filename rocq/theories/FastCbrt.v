@@ -18,7 +18,7 @@ From Stdlib Require Import ZArith Reals Lra Lia.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
 From Fushimi Require Import Model Elementary TwoSum DyDriver NearF64 FastCbrtStep.
 From Fushimi Require Import FastCbrtReduce.
-From Fushimi Require FastRoundErr FastSign RoundOpp NearCells RootReal.
+From Fushimi Require FastRoundErr FastSign RoundOpp NearCells RootReal Encoding.
 From Fushimi Require FastRound DyExpRules DyPowRules.
 
 Open Scope R_scope.
@@ -252,6 +252,7 @@ assert (Hp : (55 <= 65 <= 105)%Z) by lia.
 pose proof (FastRoundErr.round_near_err_correct h l e DyadicRoot.err_cbrt 65 r _
               Fh Fl Ehl He' Hp err_cbrt_R Hb R) as Hr.
 rewrite <- scale_back in Hr.
+rewrite Encoding.xor_sign_eq, (Encoding.Bsign_lt_zero x Fx Hx0).
 pose proof (FastSign.lt_zero_R x Fx) as Hs.
 destruct (lt x zero).
 - (* [x < 0]: [cbrt x = - cbrt (-x)], and rounding to nearest is odd. *)

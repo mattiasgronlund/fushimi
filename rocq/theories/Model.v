@@ -7142,7 +7142,7 @@ Definition fast_cbrt_near (fma : bool) (x : f64) : option f64 :=
   match fast_cbrt fma x with
   | Some (h, l, e) =>
     match Fast.round_near_err h l e err_cbrt with
-    | Some r => Some (if lt x zero then opp r else r)
+    | Some r => Some (Fast.xor_sign r x)
     | None => None
     end
   | None => None

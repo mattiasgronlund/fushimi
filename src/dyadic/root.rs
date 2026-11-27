@@ -83,7 +83,7 @@
 // Numer. Math. 18 (1971) (the exact product of two `f64`s without an FMA, and Fast2Sum).
 
 use super::{
-    fast::{dd_sqrt, fast_two_sum, round_dir_err, round_near_err, scale},
+    fast::{dd_sqrt, fast_two_sum, round_dir_err, round_near_err, scale, xor_sign},
     isqrt,
     level::level_entry,
     pow::odd_parts,
@@ -286,6 +286,21 @@ fn cbrt_exact(x: f64, h: f64, e: i64) -> Option<f64> {
 // down. `rocq/theories/FastCbrt.v` proves that what both return is cbrt x rounded
 // (`fast_cbrt_dir_correct`, `fast_cbrt_near_correct`), and that an FMA changes neither
 // (`fast_cbrt_dir_fma`, `fast_cbrt_near_fma`).
+// `fast_cbrt_near` takes the sign of the result from the sign bit of x with no jump on it
+// (`xor_sign`), which for the finite nonzero x here is the test x < 0. In a crate that links `cr`,
+// built for Haswell, that made cbrt to nearest take 1.00 fewer instructions per call, with as
+// many branches and mispredicted ones, on sets of 4,096 calls in [-10, 10), log-uniform over
+// every exponent, and of exact cubes, the last two of random sign, and 0.64 fewer on its hard
+// cases (cachegrind, row 192), as the restore takes 3 instructions where the blend it replaces
+// took 4.
+// `fast_cbrt_dir` keeps `if x < 0.0 { -r } else { r }`, which LLVM already lowers to a blend
+// with no jump (row 167). With `xor_sign` there, the mask of the sign bit of x stayed live
+// across the rounding and took one more callee-saved register, pushed and popped by the
+// function: built for Haswell, cbrt rounded down or up then took 1.00 more instructions per
+// call on the first two of those sets, 2.00 more on the exact cubes and 2.52 more on the hard
+// cases. A split on the sign of x before `round_dir_err` in its place added 0.49 to 0.51
+// mispredicted branches per call on each of those three sets, built for Haswell, for x86-64
+// on a CPU with FMA and without, and with `force-generic` (cachegrind, row 192).
 #[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 fn fast_cbrt_dir<const FMA: bool>(x: f64, up: bool) -> Option<f64> {
     let (h, l, e) = fast_cbrt::<FMA>(x)?;
@@ -310,7 +325,7 @@ fn fast_cbrt_dir<const FMA: bool>(x: f64, up: bool) -> Option<f64> {
 fn fast_cbrt_near<const FMA: bool>(x: f64) -> Option<f64> {
     let (h, l, e) = fast_cbrt::<FMA>(x)?;
     let r = round_near_err(h, l, e, ERR_CBRT)?;
-    Some(if x < 0.0 { -r } else { r })
+    Some(xor_sign(r, x))
 }
 
 level_entry! {
