@@ -304,6 +304,49 @@ exists (NatLimbs.from_limbs q), (NatLimbs.from_limbs r).
 split; [reflexivity|]. split; [exact Oq|]. split; [exact Or|]. split; lia.
 Qed.
 
+(** With no zero limb at the top, a smaller number has no more limbs. *)
+Lemma nat_ok_length_le :
+  forall x y, nat_ok x -> nat_ok y -> Limbs.val y <= Limbs.val x ->
+  (length y <= length x)%nat.
+Proof.
+intros x y Hx Hy Hle.
+destruct (Nat.le_gt_cases (length y) (length x)) as [H|H]; [exact H|].
+exfalso.
+destruct y as [|b y']; [cbn [length] in H; lia|].
+(* [val y >= 2^(64 (length y - 1)) >= 2^(64 length x) > val x]. *)
+pose proof (proj1 (nat_ok_iff_val (b :: y') (proj1 Hy) ltac:(discriminate)) Hy) as Hlow.
+pose proof (val_bounds x (proj1 Hx)) as [_ Bx].
+assert (Hp : 2 ^ (64 * Z.of_nat (length x)) <= 2 ^ (64 * Z.of_nat (length (b :: y') - 1)))
+  by (apply Z.pow_le_mono_r; cbn [length] in *; lia).
+lia.
+Qed.
+
+(** [&x - &y] for [y <= x]: [limbs::sub_assign] gives [x - y], as [y] has
+    no more limbs than [x], with no borrow. *)
+Lemma nat_sub_correct :
+  forall x y, nat_ok x -> nat_ok y -> Limbs.val y <= Limbs.val x ->
+  exists z, NatLimbs.sub x y = Some z /\ nat_ok z /\
+  Limbs.val z = Limbs.val x - Limbs.val y.
+Proof.
+intros x y Hx Hy Hle. unfold NatLimbs.sub, NatLimbs.cmp.
+rewrite cmp_correct by first [exact (proj1 Hx) | exact (proj1 Hy)].
+pose proof (nat_ok_length_le x y Hx Hy Hle) as Hl.
+destruct (Limbs.sub_assign x y false) as [s c] eqn:E.
+destruct (sub_assign_correct x y false s c (proj1 Hx) (proj1 Hy) Hl E) as (Hs & Hlen & Hv).
+cbn [Z.b2z] in Hv.
+(* No borrow: [val s - 2^(64 length x) < 0 <= val x - val y] otherwise. *)
+assert (Hc : c = false).
+{ destruct c; [|reflexivity]. exfalso. cbn [Z.b2z] in Hv.
+  pose proof (val_bounds s Hs) as [S0 S1]. rewrite Hlen in S1. lia. }
+subst c. cbn [Z.b2z] in Hv.
+destruct (from_limbs_correct s Hs) as [Hok Hval].
+assert (Hnlt : Z.compare (Limbs.val x) (Limbs.val y) <> Lt)
+  by (intros H; apply (proj1 (Z.compare_lt_iff _ _)) in H; lia).
+exists (NatLimbs.from_limbs s).
+destruct (Z.compare (Limbs.val x) (Limbs.val y)); [| contradiction |];
+  cbn [fst]; (split; [reflexivity|]); split; [exact Hok | lia | exact Hok | lia].
+Qed.
+
 (** [Z.lor] of the low limb and the high limb shifted by 64 bits is their
     sum, as their bits are apart. *)
 Lemma lor_low_high :
@@ -443,4 +486,22 @@ intros a b Ha Hb. unfold NatLimbs.cmp_z, NatLimbs.cmp.
 destruct (to_limbs_correct a Ha) as [Oa Va].
 destruct (to_limbs_correct b Hb) as [Ob Vb].
 rewrite cmp_correct by first [exact (proj1 Oa) | exact (proj1 Ob)]. now rewrite Va, Vb.
+Qed.
+
+Lemma sub_z_correct : forall a b, 0 <= b <= a -> NatLimbs.sub_z a b = Some (a - b).
+Proof.
+intros a b Hab. unfold NatLimbs.sub_z.
+destruct (to_limbs_correct a ltac:(lia)) as [Oa Va], (to_limbs_correct b ltac:(lia)) as [Ob Vb].
+destruct (nat_sub_correct _ _ Oa Ob ltac:(lia)) as (z & E & _ & Vz).
+rewrite E, Vz, Va, Vb. reflexivity.
+Qed.
+
+(** [assert!(self >= rhs, "subtraction below zero")] *)
+Lemma sub_z_lt : forall a b, 0 <= a < b -> NatLimbs.sub_z a b = None.
+Proof.
+intros a b Hab. unfold NatLimbs.sub_z, NatLimbs.sub, NatLimbs.cmp.
+destruct (to_limbs_correct a ltac:(lia)) as [Oa Va], (to_limbs_correct b ltac:(lia)) as [Ob Vb].
+rewrite cmp_correct by first [exact (proj1 Oa) | exact (proj1 Ob)].
+rewrite Va, Vb. replace (a ?= b) with Lt by (symmetry; apply (proj2 (Z.compare_lt_iff a b)); lia).
+reflexivity.
 Qed.

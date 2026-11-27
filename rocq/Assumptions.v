@@ -280,6 +280,9 @@ Print Assumptions NatOps.pow5_z_correct.
 Print Assumptions NatOps.add_z_correct.
 Print Assumptions NatOps.from_u64_z_correct.
 Print Assumptions NatOps.cmp_z_correct.
+Print Assumptions NatOps.nat_sub_correct.
+Print Assumptions NatOps.sub_z_correct.
+Print Assumptions NatOps.sub_z_lt.
 Print Assumptions DyRound.dround_width.
 Print Assumptions DyRound.encl_round_width.
 Print Assumptions DyRound.round_correct.

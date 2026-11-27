@@ -1143,8 +1143,8 @@ End Limbs.
 (** ** Nat
 
     The operations of [Nat] in [src/nat.rs] that [scale] and the
-    functions of [src/format/digits.rs] below call. A [Nat] is its limbs,
-    with no zero limb at the top. *)
+    functions of [src/format/digits.rs] below call, and [-]. A [Nat] is
+    its limbs, with no zero limb at the top. *)
 Module NatLimbs.
 
 (** [fn from_limbs(v: Vec<u64>) -> Nat]: the zero limbs at the top go. *)
@@ -1220,6 +1220,15 @@ Definition shr (x : list Z) (k : Z) : list Z :=
     not [Less]. *)
 Definition cmp (x y : list Z) : comparison := Limbs.cmp x y.
 
+(** [&x - &y] of [impl Sub]: [assert!(self >= rhs)] is [None] where
+    [cmp x y] is [Lt], and the borrow that [limbs::sub_assign] returns is
+    dropped. *)
+Definition sub (x y : list Z) : option (list Z) :=
+  match cmp x y with
+  | Lt => None
+  | _ => Some (from_limbs (fst (Limbs.sub_assign x y false)))
+  end.
+
 (** The limbs of a [Nat] that holds [z >= 0]: the only list of limbs with
     no zero limb at the top that holds it ([NatOps.v]). *)
 Fixpoint to_limbs_fuel (f : nat) (z : Z) : list Z :=
@@ -1244,6 +1253,8 @@ Definition pow5_z (k : Z) : option Z := let* l := pow5 k in Some (Limbs.val l).
 Definition add_z (a b : Z) : Z := Limbs.val (add (to_limbs a) (to_limbs b)).
 Definition from_u64_z (x : Z) : Z := Limbs.val (from_u64 x).
 Definition cmp_z (a b : Z) : comparison := cmp (to_limbs a) (to_limbs b).
+Definition sub_z (a b : Z) : option Z :=
+  let* l := sub (to_limbs a) (to_limbs b) in Some (Limbs.val l).
 
 End NatLimbs.
 
