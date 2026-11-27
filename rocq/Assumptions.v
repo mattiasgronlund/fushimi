@@ -29,10 +29,11 @@
     [SideTheorems.v] and [DyPointSide.v], and those about the exact
     results of the kernel's functions, from [ExpQuadratic.v] to
     [DyAtanExact.v], are required the same way, and so are [FormatCut.v]
-    and [FormatLead.v], on which [FormatDec.v] builds. [exp_not_quadratic]
-    of [ExpQuadratic.v] is a definition, a premise of the four theorems
-    for [sinh], [cosh], [asinh] and [acosh] and of their forms with a
-    driver, so the lines below do not print it. *)
+    and [FormatLead.v], on which [FormatDec.v] builds, and [NatDigits.v],
+    about the digits that [Nat] reads. [exp_not_quadratic] of
+    [ExpQuadratic.v] is a definition, a premise of the four theorems for
+    [sinh], [cosh], [asinh] and [acosh] and of their forms with a driver,
+    so the lines below do not print it. *)
 
 From Fushimi Require Import Encoding AddRu SubRu TwoProduct MulRu DivRu SqrtRdRu AddOdd
   EmulatedFma MulAddRuSlow MulAddRu Integer IntegerDec RoundTiesEven Trunc Round Sign Abs MaxMin
@@ -74,6 +75,7 @@ From Fushimi Require KahanMcDonald DyTrigPos SideTight SideTheorems DyPointSide.
 From Fushimi Require ExpQuadratic PowFactor ExpIrrational CosNiven CosIrrational DyExactDriver
   DyExactPoint DyTrigExact DyExpPoint DyExpExact DyLogSeries DyLogPoint DyLogExact DyAtanExact.
 From Fushimi Require FormatCut FormatLead.
+From Fushimi Require NatDigits.
 
 Print Assumptions add1_ru_fast_correct.
 Print Assumptions add_ru_correct.
@@ -283,6 +285,7 @@ Print Assumptions NatOps.cmp_z_correct.
 Print Assumptions NatOps.nat_sub_correct.
 Print Assumptions NatOps.sub_z_correct.
 Print Assumptions NatOps.sub_z_lt.
+Print Assumptions NatDigits.from_hex_correct.
 Print Assumptions DyRound.dround_width.
 Print Assumptions DyRound.encl_round_width.
 Print Assumptions DyRound.round_correct.

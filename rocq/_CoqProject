@@ -135,6 +135,7 @@ theories/Limbs.v
 theories/KnuthStep.v
 theories/Knuth.v
 theories/NatOps.v
+theories/NatDigits.v
 theories/ParseScale.v
 theories/ParseRound.v
 theories/ParseHull.v

@@ -1143,8 +1143,10 @@ End Limbs.
 (** ** Nat
 
     The operations of [Nat] in [src/nat.rs] that [scale] and the
-    functions of [src/format/digits.rs] below call, and [-]. A [Nat] is
-    its limbs, with no zero limb at the top. *)
+    functions of [src/format/digits.rs] below call, [-] and
+    [Nat::from_hex], with the functions of that file that they call. A
+    [Nat] is its limbs, with no zero limb at the top. A [&str] or a
+    [&[u8]] is the list of its bytes, as [Z]s: [s.as_bytes()] is [s]. *)
 Module NatLimbs.
 
 (** [fn from_limbs(v: Vec<u64>) -> Nat]: the zero limbs at the top go. *)
@@ -1228,6 +1230,56 @@ Definition sub (x y : list Z) : option (list Z) :=
   | Lt => None
   | _ => Some (from_limbs (fst (Limbs.sub_assign x y false)))
   end.
+
+(** [char::from(c).to_digit(radix)] of a byte [c], for
+    [2 <= radix <= 36]: the digits 0 to 9, then the letters a to z, and A
+    to Z, for 10 to 35, and [None] for any other byte or for a digit that
+    is not below [radix]. *)
+Definition to_digit (c radix : Z) : option Z :=
+  let* d :=
+    if (48 <=? c) && (c <=? 57) then Some (c - 48)
+    else if (97 <=? c) && (c <=? 122) then Some (c - 87)
+    else if (65 <=? c) && (c <=? 90) then Some (c - 55)
+    else None in
+  if d <? radix then Some d else None.
+
+(** [fn digits(s: &[u8], radix: u32) -> u64]: the [fold], where
+    [to_digit(radix).unwrap()] is [None] for a byte that is not a digit,
+    and [n * radix + d] is checked as one, as the product is at most the
+    sum. *)
+Fixpoint digits_from (s : list Z) (radix n : Z) : option Z :=
+  match s with
+  | nil => Some n
+  | c :: s' =>
+      let* d := to_digit c radix in
+      let* n' := checked_u 64 (n * radix + d) in
+      digits_from s' radix n'
+  end.
+
+Definition digits (s : list Z) (radix : Z) : option Z := digits_from s radix 0.
+
+(** [s.rchunks(k)] for [k > 0]: the pieces of [k] bytes from the end, the
+    last of which is the first [length s mod k] bytes if that is not 0. *)
+Fixpoint take_rchunks (j k : nat) (s : list Z) : list (list Z) :=
+  match j with
+  | O => nil
+  | S j' => skipn (length s - k) s :: take_rchunks j' k (firstn (length s - k) s)
+  end.
+
+Definition rchunks (k : nat) (s : list Z) : list (list Z) :=
+  take_rchunks ((length s + k - 1) / k) k s.
+
+(** [.map(f).collect()] into a [Vec], which is [None] if [f] is [None]
+    for any piece. *)
+Fixpoint map_some (f : list Z -> option Z) (l : list (list Z)) : option (list Z) :=
+  match l with
+  | nil => Some nil
+  | c :: l' => let* v := f c in let* vs := map_some f l' in Some (v :: vs)
+  end.
+
+(** [fn from_hex(s: &str) -> Nat] *)
+Definition from_hex (s : list Z) : option (list Z) :=
+  let* v := map_some (fun c => digits c 16) (rchunks 16 s) in Some (from_limbs v).
 
 (** The limbs of a [Nat] that holds [z >= 0]: the only list of limbs with
     no zero limb at the top that holds it ([NatOps.v]). *)
