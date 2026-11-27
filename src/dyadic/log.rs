@@ -117,7 +117,7 @@ use super::{
     exp::{away, mul_int, toward_zero, ERR67, POW10, SH3, TINY_HYP, TINY_NEAR},
     fast::{
         dd_div, dd_sqrt, fast_two_sum, normalize as normalize_pos, round_dir_err, round_dir_signed,
-        round_near_err, round_near_signed, two_sum,
+        round_near_err, round_near_signed, two_sum, xor_sign,
     },
     level::level_entry,
     ziv, ziv_near, Dyadic, Encl, Eval,
@@ -724,8 +724,14 @@ fn fast_atanh<const FMA: bool>(x: f64) -> Option<(f64, f64, i64)> {
 // nearest, by the fast path, or `None` where its rounding test fails or acosh x = 0. Near 0
 // (asinh and atanh) and near 1 (acosh), the series round with the bound `ERR67` and
 // `round_dir_err`/`round_near_err`; asinh and atanh are odd, so for x < 0, f(x) rounded up is
-// -f(-x) rounded down. Elsewhere the results are within 2^-68 and round with
-// `round_dir_signed`/`round_near_signed`. `rocq/theories/FastAhyp.v` proves them.
+// -f(-x) rounded down, and the direction and the sign of the result come from the sign bit of
+// x with no jump on it (`xor_sign`), which differs from x < 0 only at x = -0 and at a NaN with
+// its sign bit set, which the rules for a tiny |x| and for NaN take first. Elsewhere the
+// results are within 2^-68 and round with `round_dir_signed`/`round_near_signed`. In a crate
+// that links `cr`, built for Haswell, `xor_sign` near 0 saves asinh and atanh rounded down or
+// up 1.51 instructions, one conditional branch and half a mispredicted one per call, and to
+// nearest 1.00 instruction, on 4,096 random x of random sign with |x| < 2^-8, and with
+// 2^-9 <= |x| < 2^-8 (cachegrind, row 192). `rocq/theories/FastAhyp.v` proves them.
 // Always inlined, as are the drivers `asinh` to `atanh_near` below: with the near branches
 // inside, LLVM no longer inlined the drivers into `cr::asinh_rd` and the others, where `up` is
 // a constant, which cost up to about 8 instructions per call also on the arguments outside the
@@ -735,8 +741,8 @@ fn fast_asinh_dir<const FMA: bool>(x: f64, up: bool) -> Option<f64> {
     let t = x.abs();
     if t < AHYP_NEAR {
         let (h, l, k) = odd_series(t, ASINH_ODD);
-        let r = round_dir_err(h, l, k, ERR67, up != (x < 0.0))?;
-        return Some(if x < 0.0 { -r } else { r });
+        let r = round_dir_err(h, l, k, ERR67, up != x.is_sign_negative())?;
+        return Some(xor_sign(r, x));
     }
     let (h, l, k) = fast_asinh::<FMA>(x)?;
     round_dir_signed(h, l, k, up)
@@ -757,8 +763,8 @@ fn fast_atanh_dir<const FMA: bool>(x: f64, up: bool) -> Option<f64> {
     let t = x.abs();
     if t < AHYP_NEAR {
         let (h, l, k) = odd_series(t, ATANH_ODD);
-        let r = round_dir_err(h, l, k, ERR67, up != (x < 0.0))?;
-        return Some(if x < 0.0 { -r } else { r });
+        let r = round_dir_err(h, l, k, ERR67, up != x.is_sign_negative())?;
+        return Some(xor_sign(r, x));
     }
     let (h, l, k) = fast_atanh::<FMA>(x)?;
     round_dir_signed(h, l, k, up)
@@ -770,7 +776,7 @@ fn fast_asinh_near<const FMA: bool>(x: f64) -> Option<f64> {
     if t < AHYP_NEAR {
         let (h, l, k) = odd_series(t, ASINH_ODD);
         let r = round_near_err(h, l, k, ERR67)?;
-        return Some(if x < 0.0 { -r } else { r });
+        return Some(xor_sign(r, x));
     }
     let (h, l, k) = fast_asinh::<FMA>(x)?;
     round_near_signed(h, l, k)
@@ -792,7 +798,7 @@ fn fast_atanh_near<const FMA: bool>(x: f64) -> Option<f64> {
     if t < AHYP_NEAR {
         let (h, l, k) = odd_series(t, ATANH_ODD);
         let r = round_near_err(h, l, k, ERR67)?;
-        return Some(if x < 0.0 { -r } else { r });
+        return Some(xor_sign(r, x));
     }
     let (h, l, k) = fast_atanh::<FMA>(x)?;
     round_near_signed(h, l, k)

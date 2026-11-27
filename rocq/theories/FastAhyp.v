@@ -10,9 +10,10 @@
       [FastAhypNear1.v]), and the tests [Fast.round_dir_err] and
       [Fast.round_near_err] of [FastRoundErr.v] round it with [err =
       2^-67]. [asinh] and [atanh] are odd: for [x < 0] the wrappers round
-      [f(|x|)] in the other direction and negate it, as [FastHyp.v] does
-      for [sinh] and [tanh]. [fast_acosh_near1] returns [None] at [x = 1],
-      where [acosh x = 0] ([fast_acosh_one]).
+      [f(|x|)] in the other direction and negate it, both by the sign bit
+      of [x] ([Fast.xor_sign]), as [FastHyp.v] does for [sinh] and
+      [tanh]. [fast_acosh_near1] returns [None] at [x = 1], where [acosh x
+      = 0] ([fast_acosh_one]).
     - above: [fast_asinh_pos_correct] ([FastAhypAsinh.v]),
       [fast_acosh_correct] ([FastAhypAcosh.v]) and [fast_atanh_pos_correct]
       ([FastAhypAtanh.v]) show that [DyadicLog.fast_asinh_pos],
@@ -194,22 +195,29 @@ Qed.
 (** For [2^-27 <= |x| < 2^-8], the test [Fast.round_dir_err] at [err =
     2^-67] rounds [f(|x|)]. An odd [f] at [x < 0] is [-f(|x|)]: rounding
     [f(|x|)] in the other direction and negating it rounds [f(x)]
-    ([DyPown.rounds_odd]), as [odd_dir] of [FastHyp.v] does. *)
+    ([DyPown.rounds_odd]), as [odd_dir] of [FastHyp.v] does, by the sign
+    bit of [x], which is the test [x < 0] as [x <> 0] here
+    ([Encoding.Bsign_lt_zero] and [Encoding.xor_sign_eq]). *)
 Local Lemma odd_dir :
   forall f c x up v,
   odd_bound f c -> (forall r, -1 < r < 1 -> f (- r) = - f r) -> is_finite x = true ->
   bpow radix2 (-27) <= Rabs (B2R x) < bpow radix2 (-8) ->
   (let '(h, l, k) := DyadicLog.odd_series (fabs x) c in
-   match Fast.round_dir_err h l k DyadicExp.err67 (xorb up (lt x zero)) with
-   | Some r => Some (if lt x zero then opp r else r)
+   match Fast.round_dir_err h l k DyadicExp.err67 (xorb up (Bsign x)) with
+   | Some r => Some (Fast.xor_sign r x)
    | None => None
    end) = Some v ->
   rounds up (f (B2R x)) v.
 Proof.
 intros f c x up v P O Fx Hx H.
+assert (Hs : Bsign x = lt x zero).
+{ apply Encoding.Bsign_lt_zero; [exact Fx |]. intros Hz. destruct Hx as [Hx _].
+  rewrite Hz, Rabs_R0 in Hx. pose proof (bpow_gt_0 radix2 (-27)). lra. }
 destruct (DyadicLog.odd_series (fabs x) c) as [[h l] k] eqn:E.
+rewrite Hs in H.
 destruct (Fast.round_dir_err h l k DyadicExp.err67 (xorb up (lt x zero))) as [r|] eqn:R;
   [| discriminate H].
+rewrite Encoding.xor_sign_eq, Hs in H.
 injection H as <-.
 assert (Ht : bpow radix2 (-27) <= B2R (fabs x) < bpow radix2 (-8)) by (rewrite fabs_R; exact Hx).
 destruct (P (fabs x) h l k (fabs_finite x Fx) Ht E) as (Fh & Fl & Eh & Hk & Hb).
@@ -234,14 +242,18 @@ Local Lemma odd_near :
   bpow radix2 (-27) <= Rabs (B2R x) < bpow radix2 (-8) ->
   (let '(h, l, k) := DyadicLog.odd_series (fabs x) c in
    match Fast.round_near_err h l k DyadicExp.err67 with
-   | Some r => Some (if lt x zero then opp r else r)
+   | Some r => Some (Fast.xor_sign r x)
    | None => None
    end) = Some v ->
   near_round (f (B2R x)) v.
 Proof.
 intros f c x v P O Fx Hx H.
+assert (Hs : Bsign x = lt x zero).
+{ apply Encoding.Bsign_lt_zero; [exact Fx |]. intros Hz. destruct Hx as [Hx _].
+  rewrite Hz, Rabs_R0 in Hx. pose proof (bpow_gt_0 radix2 (-27)). lra. }
 destruct (DyadicLog.odd_series (fabs x) c) as [[h l] k] eqn:E.
 destruct (Fast.round_near_err h l k DyadicExp.err67) as [r|] eqn:R; [| discriminate H].
+rewrite Encoding.xor_sign_eq, Hs in H.
 injection H as <-.
 assert (Ht : bpow radix2 (-27) <= B2R (fabs x) < bpow radix2 (-8)) by (rewrite fabs_R; exact Hx).
 destruct (P (fabs x) h l k (fabs_finite x Fx) Ht E) as (Fh & Fl & Eh & Hk & Hb).

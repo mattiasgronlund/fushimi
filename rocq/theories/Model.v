@@ -4131,14 +4131,15 @@ Definition fast_atanh (fma : bool) (x : f64) : option (f64 * f64 * Z) :=
     [acosh] and [atanh], and [fn fast_asinh_near(x: f64) ->
     Option<f64>] and the others, as [fast_ln_dir] and [DyadicExp]'s
     [fast_sinh_dir], where [x.abs()] is [fabs x], [ERR67] is
-    [DyadicExp.err67], [up != (x < 0.0)] is [xorb up (lt x zero)], and
-    an early [return] is the [if]. [FastAhyp.v] proves them. *)
+    [DyadicExp.err67], [up != x.is_sign_negative()] is [xorb up (Bsign x)],
+    as [x] is not NaN here, and an early [return] is the [if]. [FastAhyp.v]
+    proves them. *)
 Definition fast_asinh_dir (fma : bool) (x : f64) (up : bool) : option f64 :=
   let t := fabs x in
   if lt t ahyp_near then
     let '(h, l, k) := odd_series t ASINH_ODD in
-    match Fast.round_dir_err h l k DyadicExp.err67 (xorb up (lt x zero)) with
-    | Some r => Some (if lt x zero then opp r else r)
+    match Fast.round_dir_err h l k DyadicExp.err67 (xorb up (Bsign x)) with
+    | Some r => Some (Fast.xor_sign r x)
     | None => None
     end
   else
@@ -4155,8 +4156,8 @@ Definition fast_atanh_dir (fma : bool) (x : f64) (up : bool) : option f64 :=
   let t := fabs x in
   if lt t ahyp_near then
     let '(h, l, k) := odd_series t ATANH_ODD in
-    match Fast.round_dir_err h l k DyadicExp.err67 (xorb up (lt x zero)) with
-    | Some r => Some (if lt x zero then opp r else r)
+    match Fast.round_dir_err h l k DyadicExp.err67 (xorb up (Bsign x)) with
+    | Some r => Some (Fast.xor_sign r x)
     | None => None
     end
   else
@@ -4166,7 +4167,7 @@ Definition fast_asinh_near (fma : bool) (x : f64) : option f64 :=
   if lt t ahyp_near then
     let '(h, l, k) := odd_series t ASINH_ODD in
     match Fast.round_near_err h l k DyadicExp.err67 with
-    | Some r => Some (if lt x zero then opp r else r)
+    | Some r => Some (Fast.xor_sign r x)
     | None => None
     end
   else
@@ -4184,7 +4185,7 @@ Definition fast_atanh_near (fma : bool) (x : f64) : option f64 :=
   if lt t ahyp_near then
     let '(h, l, k) := odd_series t ATANH_ODD in
     match Fast.round_near_err h l k DyadicExp.err67 with
-    | Some r => Some (if lt x zero then opp r else r)
+    | Some r => Some (Fast.xor_sign r x)
     | None => None
     end
   else

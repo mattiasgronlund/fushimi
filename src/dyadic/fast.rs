@@ -7,8 +7,9 @@
 // negative (`round_dir_signed`, `round_near_signed`), `src/dyadic/trig.rs` for sin, cos and tan,
 // with the same tests, `src/dyadic/pow.rs` for x^y and x^n, `src/dyadic/atan.rs` for atan,
 // atan2, asin and acos, which put the sign back themselves, and `src/dyadic/root.rs` for cbrt,
-// which puts the sign back itself too, and hypot. sinh and tanh round f(|x|) and put the sign
-// of x back on the result with `xor_sign`, rounded down, up or to nearest.
+// which puts the sign back itself too, and hypot. sinh and tanh, and asinh and atanh near 0,
+// round f(|x|) and put the sign of x back on the result with `xor_sign`, rounded down, up or to
+// nearest.
 //
 // A fast path computes a scaled result y = f(x) 2^-e, for an integer e in [-1021, 1022], as an
 // unevaluated sum h + l of two `f64`s with h = RN(h + l), 1/2 < h < 2, and a proved bound
@@ -510,8 +511,8 @@ pub(crate) fn round_near_wide_err(h: f64, l: f64, e: i64, err: f64) -> Option<f6
 
 /// r with its sign bit xored with that of s: -r where s has its sign bit set, and r otherwise,
 /// for every r, NaNs and infinities included.
-// sinh and tanh (the top of this file) round f(|x|) and put the sign of x back with this, rather
-// than with `if x < 0.0 { -r } else { r }`.
+// sinh and tanh, and asinh and atanh near 0 (the top of this file) round f(|x|) and put the
+// sign of x back with this, rather than with `if x < 0.0 { -r } else { r }`.
 // Rounded down or up, there the compare x < 0 also chose the direction of the rounding, and
 // with its two uses LLVM lowered the select to a jump on the sign of x, which is unpredictable
 // on arguments of mixed signs (row 117).
@@ -519,8 +520,10 @@ pub(crate) fn round_near_wide_err(h: f64, l: f64, e: i64, err: f64) -> Option<f6
 // mask share one test of the sign bit of x, and the restore takes no jump. In a crate that
 // links `cr`, built for Haswell, sinh and tanh rounded down or up then take one conditional
 // branch fewer per call on x uniform in [-10, 10), 0.50 fewer mispredicted ones, and 0.51
-// (sinh) and 1.51 (tanh) fewer instructions. Rounded to nearest, both take 1.00 fewer
-// instructions per call there, and as many branches (cachegrind, row 192).
+// (sinh) and 1.51 (tanh) fewer instructions. asinh and atanh rounded down or up, on x of random
+// sign near 0, take 1.51 fewer instructions, one branch fewer and 0.50 fewer mispredicted ones.
+// Rounded to nearest, these four take 1.00 fewer instructions per call, and as many branches,
+// on each of those sets of random x whose calls reach the restore (cachegrind, row 192).
 #[inline(always)]
 pub(crate) fn xor_sign(r: f64, s: f64) -> f64 {
     f64::from_bits(r.to_bits() ^ (s.to_bits() & (1 << 63)))
