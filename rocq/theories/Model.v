@@ -1143,10 +1143,11 @@ End Limbs.
 (** ** Nat
 
     The operations of [Nat] in [src/nat.rs] that [scale] and the
-    functions of [src/format/digits.rs] below call, [-] and
-    [Nat::from_hex], with the functions of that file that they call. A
-    [Nat] is its limbs, with no zero limb at the top. A [&str] or a
-    [&[u8]] is the list of its bytes, as [Z]s: [s.as_bytes()] is [s]. *)
+    functions of [src/format/digits.rs] below call, [-],
+    [Nat::from_hex] and [Nat::from_dec], with the functions of that file
+    that they call. A [Nat] is its limbs, with no zero limb at the top. A
+    [&str] or a [&[u8]] is the list of its bytes, as [Z]s: [s.as_bytes()]
+    is [s], and [s.split_at(k)] is [(firstn k s, skipn k s)]. *)
 Module NatLimbs.
 
 (** [fn from_limbs(v: Vec<u64>) -> Nat]: the zero limbs at the top go. *)
@@ -1258,6 +1259,17 @@ Fixpoint digits_from (s : list Z) (radix n : Z) : option Z :=
 
 Definition digits (s : list Z) (radix : Z) : option Z := digits_from s radix 0.
 
+(** [s.chunks_exact(k)] for [k > 0]: the pieces of [k] bytes from the
+    front, without the [length s mod k] bytes left at the end. *)
+Fixpoint take_chunks (j k : nat) (s : list Z) : list (list Z) :=
+  match j with
+  | O => nil
+  | S j' => firstn k s :: take_chunks j' k (skipn k s)
+  end.
+
+Definition chunks_exact (k : nat) (s : list Z) : list (list Z) :=
+  take_chunks (length s / k) k s.
+
 (** [s.rchunks(k)] for [k > 0]: the pieces of [k] bytes from the end, the
     last of which is the first [length s mod k] bytes if that is not 0. *)
 Fixpoint take_rchunks (j k : nat) (s : list Z) : list (list Z) :=
@@ -1280,6 +1292,81 @@ Fixpoint map_some (f : list Z -> option Z) (l : list (list Z)) : option (list Z)
 (** [fn from_hex(s: &str) -> Nat] *)
 Definition from_hex (s : list Z) : option (list Z) :=
   let* v := map_some (fun c => digits c 16) (rchunks 16 s) in Some (from_limbs v).
+
+(** [const TEN19: u64], [const TEN38: u128] and [const DEC_CUTOFF: usize] *)
+Definition TEN19 : Z := 10 ^ 19.
+Definition TEN38 : Z := 10 ^ 38.
+Definition DEC_CUTOFF : nat := 1000.
+
+(** [fn push_u128(x: &mut Vec<u64>, c: u128)], returning the new [x] *)
+Definition push_u128 (x : list Z) (c : Z) : list Z :=
+  let x1 := if c =? 0 then x else x ++ c mod 2 ^ 64 :: nil in
+  if Z.shiftr c 64 =? 0 then x1 else x1 ++ Z.shiftr c 64 mod 2 ^ 64 :: nil.
+
+(** [fn dec_u128(s: &[u8]) -> u128], where [saturating_sub] is the
+    subtraction of [nat]s, and the [u128] product and sum are checked as
+    one. *)
+Definition dec_u128 (s : list Z) : option Z :=
+  let k := (length s - 19)%nat in
+  let* h := digits (firstn k s) 10 in
+  let* l := digits (skipn k s) 10 in
+  checked_u 128 (h * TEN19 + l).
+
+(** [fn mul_add_u128(x: &mut [u64], m: u128, c: u128) -> u128], returning
+    the new [x] and the carry, with [m as u64] and [(m >> 64) as u64] as
+    [m0] and [m1]. Each [u128] product is checked as one with the sums
+    that follow it, as it is at most their final sum. *)
+Fixpoint mul_add_u128_from (x : list Z) (m0 m1 c : Z) : option (list Z * Z) :=
+  match x with
+  | nil => Some (nil, c)
+  | l :: x' =>
+      let* t := checked_u 128 (l * m0 + c mod 2 ^ 64) in
+      let* c' := checked_u 128 (l * m1 + Z.shiftr c 64 + Z.shiftr t 64) in
+      let* (r, c'') := mul_add_u128_from x' m0 m1 c' in
+      Some (t mod 2 ^ 64 :: r, c'')
+  end.
+
+Definition mul_add_u128 (x : list Z) (m c : Z) : option (list Z * Z) :=
+  mul_add_u128_from x (m mod 2 ^ 64) (Z.shiftr m 64 mod 2 ^ 64) c.
+
+(** The [for] loop of [dec_chunks], over the chunks of 38 digits. *)
+Fixpoint dec_chunks_loop (cs : list (list Z)) (x : list Z) : option (list Z) :=
+  match cs with
+  | nil => Some x
+  | c :: cs' =>
+      let* d := dec_u128 c in
+      let* (x', carry) := mul_add_u128 x TEN38 d in
+      dec_chunks_loop cs' (push_u128 x' carry)
+  end.
+
+(** [fn dec_chunks(s: &[u8], cap: usize) -> Vec<u64>], where
+    [Vec::with_capacity(cap)] only reserves memory, so that [cap], and the
+    [dec_limbs] that [from_dec] passes as it, are not modelled. *)
+Definition dec_chunks (s : list Z) : option (list Z) :=
+  let k := (length s mod 38)%nat in
+  let* h := dec_u128 (firstn k s) in
+  dec_chunks_loop (chunks_exact 38 (skipn k s)) (push_u128 nil h).
+
+(** The [for] loop of [from_dec], over the chunks of 19 digits. *)
+Fixpoint from_dec_loop (cs : list (list Z)) (n : list Z) : option (list Z) :=
+  match cs with
+  | nil => Some n
+  | c :: cs' =>
+      let* d := digits c 10 in
+      let* n' := mul_add_u64 n TEN19 d in
+      from_dec_loop cs' n'
+  end.
+
+(** [fn from_dec(s: &str) -> Nat], where [saturating_sub] is the
+    subtraction of [nat]s and [a.div_ceil(19)] is [(a + 18) / 19]. *)
+Definition from_dec (s : list Z) : option (list Z) :=
+  if (length s <=? 19)%nat then
+    let* d := digits s 10 in Some (push_u128 nil d)
+  else
+    let rest := ((length s - DEC_CUTOFF + 18) / 19 * 19)%nat in
+    let k := (length s - rest)%nat in
+    let* x := dec_chunks (firstn k s) in
+    from_dec_loop (chunks_exact 19 (skipn k s)) x.
 
 (** The limbs of a [Nat] that holds [z >= 0]: the only list of limbs with
     no zero limb at the top that holds it ([NatOps.v]). *)
