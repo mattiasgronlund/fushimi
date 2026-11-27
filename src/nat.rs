@@ -4,20 +4,20 @@
 // A `Nat` is its 64-bit limbs, the least significant first, with no zero limb at the top, so
 // that 0 has no limbs and each number has exactly one representation. Products of limbs, with
 // their carries, are computed in `u128`, by the loops of `src/limbs.rs` and, for `from_dec`, by
-// `mul_add_u128` below. `rocq/theories/Model.v` transcribes the operations below that `scale`
-// in `src/parse.rs` and the functions of `src/format/digits.rs` call, `from_limbs`, `from_u64`,
-// `is_zero`, `bits`, `low_u128`, `pow5` with `mul_add_u64`, `div_rem`, `cmp`, `+`, `*`, `<<`
-// and `>>`, so it has to be updated along with them. `rocq/theories/NatOps.v` proves, with the
-// theorems about the loops in `rocq/theories/Limbs.v` and `rocq/theories/Knuth.v`, that each
-// computes its operation on integers and returns limbs with no zero limb at the top.
-// `from_dec`, with `dec_chunks`, `dec_u128`, `mul_add_u128`, `push_u128` and `dec_limbs`, which
-// only `from_dec` uses, `from_hex` and `-`, with which the grammar of `src/parse.rs` and
-// `src/parse/rat.rs` compute the bounds of a literal, and `to_dec`, with `div_rem_ten19`,
-// `div_ten19`, `top_digits` and `write_digits`, which only the layout of the printed text uses,
-// are not modelled; that `from_dec`, `from_hex` and `-` return no zero limb at the top, and that
-// `div_rem_ten19` leaves none, is checked by reading. The tests at the end compare them all with
-// `rug::Integer`, and the steps of `to_dec` also with the arithmetic of `u128` and the `Display`
-// of `u64`.
+// `mul_add_u128` below. `rocq/theories/Model.v` transcribes each function and constant below,
+// outside the tests, but `pow5_limbs` and `dec_limbs`, which only give the capacity of a `Vec`,
+// so it has to be updated along with them. `rocq/theories/NatOps.v` proves, with the theorems
+// about the loops in `rocq/theories/Limbs.v` and `rocq/theories/Knuth.v`, that `from_limbs`,
+// `from_u64`, `is_zero`, `bits`, `low_u128`, `pow5` with `mul_add_u64`, `div_rem`, `cmp`, `+`,
+// `-`, `*`, `<<` and `>>` compute their operations on integers, and
+// `rocq/theories/NatDigits.v` and `rocq/theories/NatFromDec.v` that `from_hex` and `from_dec`,
+// with which the grammar of `src/parse.rs` reads the numbers of a literal, return the number
+// that their ASCII digits spell. Each of them that returns a `Nat` returns one with no zero
+// limb at the top. `rocq/theories/NatToDec.v` proves, with `div_ten19` in
+// `rocq/theories/NatDivTen19.v`, that `to_dec`, which only the layout of the printed text
+// uses, writes the decimal digits of its number, with no zero in front. The tests at the end
+// compare them all with `rug::Integer`, and the steps of `to_dec` also with the arithmetic of
+// `u128` and the `Display` of `u64`.
 
 use crate::limbs;
 use std::{

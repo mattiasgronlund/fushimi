@@ -137,6 +137,8 @@ theories/Knuth.v
 theories/NatOps.v
 theories/NatDigits.v
 theories/NatFromDec.v
+theories/NatDivTen19.v
+theories/NatToDec.v
 theories/ParseScale.v
 theories/ParseRound.v
 theories/ParseHull.v

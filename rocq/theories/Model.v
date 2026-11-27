@@ -234,6 +234,13 @@ Definition leading_zeros (w a : Z) : Z :=
 Definition trailing_zeros (w a : Z) : Z :=
   if a =? 0 then w else Z.log2 (Z.land a (- a)).
 
+(** [a.ilog10()] for an unsigned integer [a], which panics for [a = 0]:
+    the largest [k] with [10 ^ k <= a], one less than the number of
+    decimal digits of [a], [Zdigits radix10 a]. *)
+Definition radix10 : radix := Build_radix 10 eq_refl.
+Definition ilog10 (a : Z) : option Z :=
+  if a =? 0 then None else Some (Zdigits radix10 a - 1).
+
 (** [a / b] and [a % b] for unsigned integers [a] and [b]. The quotient
     rounds toward zero, which for [a, b >= 0] is the floor that [Z.div]
     computes. *)
@@ -1142,12 +1149,11 @@ End Limbs.
 
 (** ** Nat
 
-    The operations of [Nat] in [src/nat.rs] that [scale] and the
-    functions of [src/format/digits.rs] below call, [-],
-    [Nat::from_hex] and [Nat::from_dec], with the functions of that file
-    that they call. A [Nat] is its limbs, with no zero limb at the top. A
-    [&str] or a [&[u8]] is the list of its bytes, as [Z]s: [s.as_bytes()]
-    is [s], and [s.split_at(k)] is [(firstn k s, skipn k s)]. *)
+    The operations of [Nat] in [src/nat.rs], with the functions of that
+    file that they call. A [Nat] is its limbs, with no zero limb at the
+    top. A [&str] or a [&[u8]] is the list of its bytes, as [Z]s, and so is
+    a [String]: [s.as_bytes()] is [s], and [s.split_at(k)] is
+    [(firstn k s, skipn k s)]. *)
 Module NatLimbs.
 
 (** [fn from_limbs(v: Vec<u64>) -> Nat]: the zero limbs at the top go. *)
@@ -1367,6 +1373,118 @@ Definition from_dec (s : list Z) : option (list Z) :=
     let k := (length s - rest)%nat in
     let* x := dec_chunks (firstn k s) in
     from_dec_loop (chunks_exact 19 (skipn k s)) x.
+
+(** [const V: u64] of [div_ten19], by its formula. *)
+Definition div_ten19_V : Z := ((2 ^ 128 - 1) / TEN19 - 2 ^ 64) mod 2 ^ 64.
+
+(** [fn div_ten19(u1: u64, u0: u64) -> (u64, u64)], where the [u128]
+    product [V * u1] is checked as one with the sum, [<< 64] of a [u128] is
+    [Z.shiftl] mod [2 ^ 128], [as u64] keeps the low 64 bits,
+    [wrapping_add], [wrapping_sub] and [wrapping_mul] of [u64]s are mod
+    [2 ^ 64], and [q1 += 1] and [r -= d] are checked. *)
+Definition div_ten19 (u1 u0 : Z) : option (Z * Z) :=
+  let* q := checked_u 128 (div_ten19_V * u1 + Z.lor (Z.shiftl u1 64 mod 2 ^ 128) u0) in
+  let q1 := (Z.shiftr q 64 mod 2 ^ 64 + 1) mod 2 ^ 64 in
+  let r := (u0 - (q1 * TEN19) mod 2 ^ 64) mod 2 ^ 64 in
+  let '(q1, r) :=
+    if q mod 2 ^ 64 <? r then ((q1 - 1) mod 2 ^ 64, (r + TEN19) mod 2 ^ 64)
+    else (q1, r) in
+  if TEN19 <=? r then
+    let* q1' := checked_u 64 (q1 + 1) in
+    let* r' := checked_u 64 (r - TEN19) in
+    Some (q1', r')
+  else Some (q1, r).
+
+(** [fn div_rem_ten19(x: &mut Vec<u64>) -> u64], returning the new [x]
+    and the remainder: [div_ten19] from the top limb down, the tail first,
+    then [pop] of a zero limb at the top. *)
+Fixpoint div_rem_ten19_from (x : list Z) : option (list Z * Z) :=
+  match x with
+  | nil => Some (nil, 0)
+  | l :: x' =>
+      let* (qs, r) := div_rem_ten19_from x' in
+      let* (q, r') := div_ten19 r l in
+      Some (q :: qs, r')
+  end.
+
+Definition div_rem_ten19 (x : list Z) : option (list Z * Z) :=
+  let* (q, r) := div_rem_ten19_from x in
+  Some (match q with nil => nil | _ => if last q 0 =? 0 then removelast q else q end, r).
+
+(** [DEC_PAIRS[i]] for [i < 100]: the value that the [const] block gives
+    it, the two ASCII digits of [i]. *)
+Definition dec_pair (i : Z) : list Z := 48 + i / 10 :: 48 + i mod 10 :: nil.
+
+(** [k] passes of the [for] loop of [write_digits] over
+    [out.rchunks_exact_mut(2)]: the last [2 k] bytes of [out], and the [c]
+    that they leave. *)
+Fixpoint write_pairs (k : nat) (c : Z) : list Z * Z :=
+  match k with
+  | O => (nil, c)
+  | S k' => let (w, c') := write_pairs k' (c / 100) in (w ++ dec_pair (c mod 100), c')
+  end.
+
+(** [fn write_digits(out: &mut [u8], c: u64)] for [n = out.len()],
+    returning the new [out]: [into_remainder] is the first byte if [n] is
+    odd, [debug_assert!(c < 10)] is [None] where it fails, and
+    [b'0' + c as u8] is checked. *)
+Definition write_digits (n : nat) (c : Z) : option (list Z) :=
+  let (w, c') := write_pairs (n / 2) c in
+  if (n mod 2 =? 1)%nat then
+    if c' <? 10 then let* b := checked_u 8 (48 + c' mod 2 ^ 8) in Some (b :: w) else None
+  else Some w.
+
+(** [fn top_digits(c: u64) -> ([u8; 20], usize)], where [as usize] keeps
+    the value. *)
+Definition top_digits (c : Z) : option (list Z * nat) :=
+  let* l := ilog10 (Z.lor c 1) in
+  let n := Z.to_nat (l + 1) in
+  let* w := write_digits n c in
+  Some (repeat 0 (20 - n) ++ w, n).
+
+(** The [while] loop of [to_dec], with fuel: [NatToDec.v] proves that
+    the [2 * length x] that [to_dec] gives is enough. The remainders are
+    consed, so that the list holds them in the order of
+    [chunks.iter().rev()], the top one first, and [x[0]] is
+    [Limbs.limb x 0]. *)
+Fixpoint to_dec_loop (fuel : nat) (x chunks : list Z) : option (Z * list Z) :=
+  match fuel with
+  | O => None
+  | S f =>
+      if (1 <? length x)%nat then
+        let* (x', c) := div_rem_ten19 x in to_dec_loop f x' (c :: chunks)
+      else Some (Limbs.limb x 0, chunks)
+  end.
+
+(** The [for] loop of [to_dec] over the chunks, from the top one down,
+    which appends the 19 digits of each to [s]. *)
+Fixpoint to_dec_chunks (cs s : list Z) : option (list Z) :=
+  match cs with
+  | nil => Some s
+  | c :: cs' => let* d := write_digits 19 c in to_dec_chunks cs' (s ++ d)
+  end.
+
+(** [String::from_utf8(s).unwrap()] for bytes [s] that are all ASCII,
+    which is [s]. It is [None] for any other [s], also where the Rust
+    accepts it, so that [Some t] means that the Rust returns [t]. *)
+Definition from_utf8 (s : list Z) : option (list Z) :=
+  if forallb (fun b => b <? 128) s then Some s else None.
+
+(** [fn to_dec(&self) -> String], where [String::from("0")] is the byte
+    of the digit 0, and [Vec::with_capacity] only reserves memory. *)
+Definition to_dec (x : list Z) : option (list Z) :=
+  match x with
+  | nil => Some (48 :: nil)
+  | _ =>
+      let* (top, chunks) :=
+        match x with
+        | l :: nil => Some (l, nil)
+        | _ => to_dec_loop (2 * length x) x nil
+        end in
+      let* (t, n) := top_digits top in
+      let* s := to_dec_chunks chunks (skipn (20 - n) t) in
+      from_utf8 s
+  end.
 
 (** The limbs of a [Nat] that holds [z >= 0]: the only list of limbs with
     no zero limb at the top that holds it ([NatOps.v]). *)
@@ -7728,9 +7846,10 @@ Definition transmute_class2 (c : Z) : option (IntervalClass * IntervalClass) :=
     of [NatLimbs] above on those limbs, through the wrapper of [NatLimbs]
     on [Z]s, such as [NatLimbs.mul_z] for [&a * &b]. [NatOps.v] proves what
     each wrapper computes, and that the loops of [NatLimbs] return limbs
-    with no zero limb at the top. That the operations of [src/nat.rs] that
-    are not modelled, such as [Nat::from_dec], [Nat::from_hex] and [-],
-    return such limbs too is checked by reading, not proved. *)
+    with no zero limb at the top. Of [-], [Nat::from_hex] and
+    [Nat::from_dec], with which the grammar computes the [Nat]s of a
+    literal, [nat_sub_correct] in [NatOps.v], [from_hex_correct] in
+    [NatDigits.v] and [from_dec_correct] in [NatFromDec.v] prove it too. *)
 
 (** [enum InfSup { Inf, Sup }], which says whether a bound is the lower or
     the upper one. [as_rnd_t] is not Rust: it names the direction in which
@@ -8009,7 +8128,6 @@ Definition number_to_f64 (n : Number) (infsup : InfSup) : option F64 :=
     [u64], as on 64-bit targets: the model does not cover 32-bit targets,
     on which it is [u32]. *)
 
-Definition radix10 : radix := Build_radix 10 eq_refl.
 Definition radix16 : radix := Build_radix 16 eq_refl.
 
 (** [fn decompose(x: f64) -> (u64, i64)], where [!(1 << 63)] of a [u64]
