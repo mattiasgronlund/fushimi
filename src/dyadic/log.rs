@@ -116,8 +116,9 @@ use super::{
     consts::{ln10, ln2},
     exp::{away, mul_int, toward_zero, ERR67, POW10, SH3, TINY_HYP, TINY_NEAR},
     fast::{
-        dd_div, dd_sqrt, fast_two_sum, normalize as normalize_pos, round_dir_err, round_dir_signed,
-        round_near_err, round_near_signed, two_sum, xor_sign,
+        dd_div, dd_sqrt, fast_two_sum, normalize as normalize_pos, round_dir, round_dir_err,
+        round_dir_signed, round_dir_signed_branch, round_near_err, round_near_signed,
+        round_near_signed_branch, two_sum, xor_sign,
     },
     level::level_entry,
     ziv, ziv_near, Dyadic, Encl, Eval,
@@ -528,7 +529,16 @@ pub(super) fn ln_acc<const FMA: bool>(x: f64) -> (f64, f64) {
 }
 
 // ln x, log2 x and log10 x rounded toward +∞ if `up` and toward -∞ otherwise, and to nearest,
-// by the fast path, or `None` where its rounding test fails or x = 1.
+// by the fast path, or `None` where its rounding test fails or x = 1. Rounded down or up, they
+// round with `round_dir_signed`, with no branch on the sign of h, which is negative for x < 1.
+// In a crate that links `cr`, built for Haswell, they then take 3.28 to 6.55 fewer instructions
+// and one conditional branch fewer per call than with the branch (`round_dir_signed_branch`),
+// on sets of 4,096 random x: in [0.1, 10), in two sets of random exponents, and within 2^-8 of
+// 1, and half a mispredicted branch fewer on the last three, where about half the x are below
+// 1; on their hard cases, 4.21 to 5.25 fewer instructions (cachegrind, row 192). To nearest
+// they keep the branch (`round_near_signed_branch`), as the form without it,
+// `round_near_signed`, took 1.98 to 2.91 more instructions per call on those sets, and 1.73 to
+// 2.02 more on the hard cases. Both went the same way in both copies of the build for x86-64.
 #[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 fn fast_ln_dir<const FMA: bool>(x: f64, up: bool) -> Option<f64> {
     let (h, l, k) = fast_ln::<FMA>(x)?;
@@ -554,19 +564,19 @@ fn fast_log10_dir<const FMA: bool>(x: f64, up: bool) -> Option<f64> {
 #[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 fn fast_ln_near<const FMA: bool>(x: f64) -> Option<f64> {
     let (h, l, k) = fast_ln::<FMA>(x)?;
-    round_near_signed(h, l, k)
+    round_near_signed_branch(h, l, k)
 }
 
 #[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 fn fast_log2_near<const FMA: bool>(x: f64) -> Option<f64> {
     let (h, l, k) = fast_log_by::<FMA>(x, C2, ONE)?;
-    round_near_signed(h, l, k)
+    round_near_signed_branch(h, l, k)
 }
 
 #[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 fn fast_log10_near<const FMA: bool>(x: f64) -> Option<f64> {
     let (h, l, k) = fast_log_by::<FMA>(x, C10, LG2)?;
-    round_near_signed(h, l, k)
+    round_near_signed_branch(h, l, k)
 }
 
 // The bounds of the fast paths of asinh, acosh and atanh: asinh t and atanh t below `AHYP_NEAR`
@@ -727,11 +737,34 @@ fn fast_atanh<const FMA: bool>(x: f64) -> Option<(f64, f64, i64)> {
 // -f(-x) rounded down, and the direction and the sign of the result come from the sign bit of
 // x with no jump on it (`xor_sign`), which differs from x < 0 only at x = -0 and at a NaN with
 // its sign bit set, which the rules for a tiny |x| and for NaN take first. Elsewhere the
-// results are within 2^-68 and round with `round_dir_signed`/`round_near_signed`. In a crate
-// that links `cr`, built for Haswell, `xor_sign` near 0 saves asinh and atanh rounded down or
-// up 1.51 instructions, one conditional branch and half a mispredicted one per call, and to
-// nearest 1.00 instruction, on 4,096 random x of random sign with |x| < 2^-8, and with
-// 2^-9 <= |x| < 2^-8 (cachegrind, row 192). `rocq/theories/FastAhyp.v` proves them.
+// results are within 2^-68 and round with
+// `round_dir_signed_branch`/`round_near_signed_branch`, except atanh to nearest, with
+// `round_near_signed`, and acosh rounded down or up, whose h is positive, with `round_dir`.
+// In a crate that links `cr`, built for Haswell, `xor_sign` near 0 saves asinh and atanh
+// rounded down or up 1.51 instructions, one conditional branch and half a mispredicted one per
+// call, and to nearest 1.00 instruction, on 4,096 random x of random sign with |x| < 2^-8, and
+// with 2^-9 <= |x| < 2^-8 (cachegrind, row 192). Elsewhere each takes, of the form with the
+// branch on the sign of h and one without it, a form that lost on none of the sets of 4,096
+// random x and the hard cases counted in such crates, built for Haswell and for x86-64, in its
+// copies with FMA and without (row 192). asinh rounded down or up keeps the branch: without
+// it, it saved up to 1.62 instructions and up to one branch per call at Haswell, but its hard
+// cases took 0.47 to 0.92 more mispredicted branches per call there, beyond the spread of the
+// layouts at every pairing, in code the change did not touch, where those of the old code moved
+// by up to 3.11 in a build that changed only other functions; that is for a timing row to judge.
+// asinh to nearest keeps it, as `round_near_signed`, for up to one branch fewer, took 1.74 to
+// 3.51 more instructions per call for x86-64 (1.23 to 3.48 without FMA). atanh rounded down or up
+// keeps it, as without it the copies for x86-64 saved and restored a callee-saved register
+// (`push rbx`) also on the paths that return before the far arm: 2 more instructions per call
+// (4.5 to 5.0 without FMA) on the sets whose calls mostly take those paths. atanh to nearest
+// takes `round_near_signed`: one branch and half a mispredicted one fewer per call at Haswell,
+// at equal instructions, and 13.5 fewer instructions for x86-64 (9.5 without FMA), where LLVM
+// inlines it into atanh and called the form with the branch out of line, on random x of random
+// sign, nearly all with 2^-8 <= |x| < 1. acosh rounded down or up takes `round_dir`: 4.00 fewer
+// instructions and one branch fewer per call at Haswell on random x, nearly all above 1 + 2^-8,
+// and 3.62 fewer on its hard cases. acosh to nearest keeps the branch, which its h > 0 never
+// takes, as `round_near` took 1.00 more instruction per call in the FMA copy for x86-64 on x in
+// [1, 1 + 2^-8), which the series take, though 3.00 fewer and one branch fewer above that.
+// `rocq/theories/FastAhyp.v` proves them.
 // Always inlined, as are the drivers `asinh` to `atanh_near` below: with the near branches
 // inside, LLVM no longer inlined the drivers into `cr::asinh_rd` and the others, where `up` is
 // a constant, which cost up to about 8 instructions per call also on the arguments outside the
@@ -745,7 +778,7 @@ fn fast_asinh_dir<const FMA: bool>(x: f64, up: bool) -> Option<f64> {
         return Some(xor_sign(r, x));
     }
     let (h, l, k) = fast_asinh::<FMA>(x)?;
-    round_dir_signed(h, l, k, up)
+    round_dir_signed_branch(h, l, k, up)
 }
 
 #[inline(always)]
@@ -755,7 +788,7 @@ fn fast_acosh_dir<const FMA: bool>(x: f64, up: bool) -> Option<f64> {
         return round_dir_err(h, l, k, ERR67, up);
     }
     let (h, l, k) = fast_acosh::<FMA>(x)?;
-    round_dir_signed(h, l, k, up)
+    round_dir(h, l, k, up)
 }
 
 #[inline(always)]
@@ -767,7 +800,7 @@ fn fast_atanh_dir<const FMA: bool>(x: f64, up: bool) -> Option<f64> {
         return Some(xor_sign(r, x));
     }
     let (h, l, k) = fast_atanh::<FMA>(x)?;
-    round_dir_signed(h, l, k, up)
+    round_dir_signed_branch(h, l, k, up)
 }
 
 #[inline(always)]
@@ -779,7 +812,7 @@ fn fast_asinh_near<const FMA: bool>(x: f64) -> Option<f64> {
         return Some(xor_sign(r, x));
     }
     let (h, l, k) = fast_asinh::<FMA>(x)?;
-    round_near_signed(h, l, k)
+    round_near_signed_branch(h, l, k)
 }
 
 #[inline(always)]
@@ -789,7 +822,7 @@ fn fast_acosh_near<const FMA: bool>(x: f64) -> Option<f64> {
         return round_near_err(h, l, k, ERR67);
     }
     let (h, l, k) = fast_acosh::<FMA>(x)?;
-    round_near_signed(h, l, k)
+    round_near_signed_branch(h, l, k)
 }
 
 #[inline(always)]

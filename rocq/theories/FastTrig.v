@@ -82,24 +82,32 @@ assert (Hle : Rabs y <= 1) by (unfold Rabs; destruct (Rcase_abs y); lra).
 destruct (Rle_lt_or_eq_dec _ _ Hle) as [L | L]; [exact L | contradiction].
 Qed.
 
-(** [fast_sin_dir] and [fast_cos_dir] round [h + l] by [fast_round_dir],
-    and where its test fails, by the rule for results next to ±1 of
-    [FastTrigOne.v], which takes [|y| < 1]. *)
+(** [fast_sin_dir] and [fast_cos_dir] round [h + l] by [round]
+    ([fast_round_dir_branch] for [sin], [fast_round_dir] for [cos]), which
+    [Hround] proves, and where its test fails, by the rule for results next
+    to ±1 of [FastTrigOne.v], which takes [|y| < 1]. *)
 Local Lemma dir_or_one :
+  forall round : f64 -> f64 -> bool -> option f64,
+  (forall h l up v y,
+   is_finite h = true -> is_finite l = true -> B2R h = RN (B2R h + B2R l) ->
+   bpow radix2 (-1000) <= Rabs (B2R h) <= bpow radix2 1000 ->
+   Rabs (y - (B2R h + B2R l)) <= 3 * bpow radix2 (-71) * Rabs y ->
+   round h l up = Some v ->
+   rounds up y v) ->
   forall h l up v y,
   is_finite h = true -> is_finite l = true -> B2R h = RN (B2R h + B2R l) ->
   bpow radix2 (-1000) <= Rabs (B2R h) <= bpow radix2 1000 ->
   Rabs (y - (B2R h + B2R l)) <= bpow radix2 (-71) * Rabs y -> Rabs y < 1 ->
-  match DyadicTrig.fast_round_dir h l up with
+  match round h l up with
   | Some w => Some w
   | None => DyadicTrig.fast_one_dir h up
   end = Some v ->
   rounds up y v.
 Proof.
-intros h l up v y Fh Fl Hrn Hh Hy Hy1 H.
-destruct (DyadicTrig.fast_round_dir h l up) as [w|] eqn:R.
+intros round Hround h l up v y Fh Fl Hrn Hh Hy Hy1 H.
+destruct (round h l up) as [w|] eqn:R.
 - injection H as <-.
-  apply (FastTrigRound.fast_round_dir_correct h l up w y Fh Fl Hrn Hh); [|exact R].
+  apply (Hround h l up w y Fh Fl Hrn Hh); [|exact R].
   assert (0 <= bpow radix2 (-71) * Rabs y)
     by (apply Rmult_le_pos; [apply bpow_ge_0 | apply Rabs_pos]).
   lra.
@@ -116,7 +124,8 @@ intros fma x up v Fx Hx H. unfold DyadicTrig.fast_sin_dir in H.
 destruct fma; [rewrite (FastTrigCore.fast_sin_fma x Hx) in H|].
 all: destruct (DyadicTrig.fast_sin false x) as [[h l]|] eqn:E; [|discriminate H].
 all: destruct (FastTrigCore.fast_sin_correct x h l Fx Hx E) as (Fh & Fl & Hrn & Hh & Herr).
-all: apply (dir_or_one h l up v _ Fh Fl Hrn Hh Herr); [|exact H].
+all: apply (dir_or_one DyadicTrig.fast_round_dir_branch FastTrigRound.fast_round_dir_branch_correct
+    h l up v _ Fh Fl Hrn Hh Herr); [|exact H].
 all: apply abs_lt_one; [apply SIN_bound | exact (FastTrigOne.sin_not_one x Fx)].
 Qed.
 
@@ -130,7 +139,8 @@ intros fma t up v Ft Ht H. unfold DyadicTrig.fast_cos_dir in H.
 destruct fma; [rewrite (FastTrigCore.fast_cos_fma t Ht) in H|].
 all: destruct (DyadicTrig.fast_cos false t) as [[h l]|] eqn:E; [|discriminate H].
 all: destruct (FastTrigCore.fast_cos_correct t h l Ft Ht E) as (Fh & Fl & Hrn & Hh & Herr).
-all: apply (dir_or_one h l up v _ Fh Fl Hrn Hh Herr); [|exact H].
+all: apply (dir_or_one DyadicTrig.fast_round_dir FastTrigRound.fast_round_dir_correct
+    h l up v _ Fh Fl Hrn Hh Herr); [|exact H].
 all: apply abs_lt_one; [apply COS_bound | apply (FastTrigOne.cos_not_one t Ft)].
 all: intros Z; rewrite Z, Rabs_R0 in Ht; pose proof (bpow_gt_0 radix2 (-27)); lra.
 Qed.

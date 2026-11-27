@@ -4,8 +4,8 @@
     [fast_log10_correct] ([FastLogBy.v]) show that [DyadicLog.fast_ln]
     and [DyadicLog.fast_log_by] of [Model.v] return [h + l] within
     [2^-68] of the result scaled by [2^-k], with [1/2 < |h| < 2], so that
-    [Fast.round_dir_signed] and [Fast.round_near_signed] of [FastSign.v]
-    apply. The result is never 0 except at [x = 1], where
+    [Fast.round_dir_signed] and [Fast.round_near_signed_branch] of
+    [FastSign.v] apply. The result is never 0 except at [x = 1], where
     [DyadicLog.normalize] returns [None] ([fast_ln_one],
     [fast_log2_one]). The theorems [fast_ln_dir_correct] and the others
     prove the fast paths of the three functions in all three roundings,
@@ -142,7 +142,7 @@ Proof.
 intros fma x v Fx Hx H. unfold DyadicLog.fast_ln_near in H.
 destruct (DyadicLog.fast_ln fma x) as [[[h l] k]|] eqn:E; [|discriminate H].
 destruct (fast_ln_correct fma x h l k Fx Hx E) as (Fh & Fl & Hrn & Hh & Hk & Hy).
-pose proof (round_near_signed_correct h l k v _ Fh Fl Hrn Hh Hk Hy H) as R.
+pose proof (round_near_signed_branch_correct h l k v _ Fh Fl Hrn Hh Hk Hy H) as R.
 rewrite unscale in R. exact R.
 Qed.
 
@@ -155,7 +155,7 @@ intros fma x v Fx Hx H. unfold DyadicLog.fast_log2_near in H.
 destruct (DyadicLog.fast_log_by fma x DyadicLog.C2 DyadicLog.ONE) as [[[h l] k]|] eqn:E;
   [|discriminate H].
 destruct (fast_log2_correct fma x h l k Fx Hx E) as (Fh & Fl & Hrn & Hh & Hk & Hy).
-pose proof (round_near_signed_correct h l k v _ Fh Fl Hrn Hh Hk Hy H) as R.
+pose proof (round_near_signed_branch_correct h l k v _ Fh Fl Hrn Hh Hk Hy H) as R.
 rewrite unscale in R. exact R.
 Qed.
 
@@ -168,7 +168,7 @@ intros fma x v Fx Hx H. unfold DyadicLog.fast_log10_near in H.
 destruct (DyadicLog.fast_log_by fma x DyadicLog.C10 DyadicLog.LG2) as [[[h l] k]|] eqn:E;
   [|discriminate H].
 destruct (fast_log10_correct fma x h l k Fx Hx E) as (Fh & Fl & Hrn & Hh & Hk & Hy).
-pose proof (round_near_signed_correct h l k v _ Fh Fl Hrn Hh Hk Hy H) as R.
+pose proof (round_near_signed_branch_correct h l k v _ Fh Fl Hrn Hh Hk Hy H) as R.
 rewrite unscale in R. exact R.
 Qed.
 

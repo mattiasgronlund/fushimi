@@ -1,14 +1,16 @@
 (** * The rounding of the fast paths of [sin], [cos] and [tan]
 
-    [DyadicTrig.fast_round_dir h l up] and [DyadicTrig.fast_round_near h l]
-    of [Model.v] round a real [y] of either sign from [h + l] within a
-    relative [3 * 2^-71] of it, with [h = RN(h + l)] and [2^-1000 <= |h| <=
-    2^1000]: they scale [h] and [l] by the power of two that brings [|h|]
-    into [1, 2), which turns the relative bound into an absolute [2^-68]
-    ([unscale]), and call [Fast.round_dir_signed] or
-    [Fast.round_near_signed], which take the sign and which [FastSign.v]
-    proves. [fast_round_dir_correct] and [fast_round_near_correct] state
-    the two roundings. *)
+    [DyadicTrig.fast_round_dir h l up], [DyadicTrig.fast_round_dir_branch h
+    l up] and [DyadicTrig.fast_round_near h l] of [Model.v] round a real
+    [y] of either sign from [h + l] within a relative [3 * 2^-71] of it,
+    with [h = RN(h + l)] and [2^-1000 <= |h| <= 2^1000]: they scale [h] and
+    [l] by the power of two that brings [|h|] into [1, 2), which turns the
+    relative bound into an absolute [2^-68] ([unscale]), and call
+    [Fast.round_dir_signed], [Fast.round_dir_signed_branch] or
+    [Fast.round_near_signed_branch], which take the sign and which
+    [FastSign.v] proves. [fast_round_dir_correct],
+    [fast_round_dir_branch_correct] and [fast_round_near_correct] state the
+    three roundings. *)
 
 From Stdlib Require Import ZArith Reals Lra Lia.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN Mult_error.
@@ -228,6 +230,27 @@ replace (y * bpow radix2 (- Generic.exponent h) * bpow radix2 (Generic.exponent 
 exact H.
 Qed.
 
+Theorem fast_round_dir_branch_correct :
+  forall h l up v y,
+  is_finite h = true -> is_finite l = true -> B2R h = RN (B2R h + B2R l) ->
+  bpow radix2 (-1000) <= Rabs (B2R h) <= bpow radix2 1000 ->
+  Rabs (y - (B2R h + B2R l)) <= 3 * bpow radix2 (-71) * Rabs y ->
+  DyadicTrig.fast_round_dir_branch h l up = Some v ->
+  rounds up y v.
+Proof.
+intros h l up v y Fh Fl Hrn Hh Hy Hv.
+unfold DyadicTrig.fast_round_dir_branch, DyadicTrig.fast_unscale in Hv.
+cbv beta iota zeta in Hv.
+change (Z.land (Z.shiftr (to_bits h) 52) 2047 - 1023)%Z with (Generic.exponent h) in Hv.
+replace (1023 - Generic.exponent h)%Z with (- Generic.exponent h + 1023)%Z in Hv by ring.
+pose proof (unscale h l y Fh Fl Hrn Hh Hy) as U. cbv zeta in U.
+destruct U as (F1 & F2 & R1 & H1 & HE & Herr).
+pose proof (FastSign.round_dir_signed_branch_correct _ _ _ _ _ _ F1 F2 R1 H1 HE Herr Hv) as H.
+replace (y * bpow radix2 (- Generic.exponent h) * bpow radix2 (Generic.exponent h)) with y
+  in H by (rewrite Rmult_assoc, <- bpow_plus, Z.add_opp_diag_l; symmetry; apply Rmult_1_r).
+exact H.
+Qed.
+
 Theorem fast_round_near_correct :
   forall h l v y,
   is_finite h = true -> is_finite l = true -> B2R h = RN (B2R h + B2R l) ->
@@ -243,7 +266,7 @@ change (Z.land (Z.shiftr (to_bits h) 52) 2047 - 1023)%Z with (Generic.exponent h
 replace (1023 - Generic.exponent h)%Z with (- Generic.exponent h + 1023)%Z in Hv by ring.
 pose proof (unscale h l y Fh Fl Hrn Hh Hy) as U. cbv zeta in U.
 destruct U as (F1 & F2 & R1 & H1 & HE & Herr).
-pose proof (FastSign.round_near_signed_correct _ _ _ _ _ F1 F2 R1 H1 HE Herr Hv) as H.
+pose proof (FastSign.round_near_signed_branch_correct _ _ _ _ _ F1 F2 R1 H1 HE Herr Hv) as H.
 replace (y * bpow radix2 (- Generic.exponent h) * bpow radix2 (Generic.exponent h)) with y
   in H by (rewrite Rmult_assoc, <- bpow_plus, Z.add_opp_diag_l; symmetry; apply Rmult_1_r).
 exact H.

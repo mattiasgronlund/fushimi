@@ -87,8 +87,10 @@
 //
 // sin, cos and tan try a fast path in double-double after their rules and before `ziv` and
 // `ziv_near` (`fast_sin`, `fast_cos` and `fast_tan`), with the rounding tests for an h of either
-// sign, `round_dir_signed` and `round_near_signed` of `src/dyadic/fast.rs`, after a scaling by a
-// power of 2 (`fast_round_dir` and `fast_round_near`). Where a test fails, other than where
+// sign of `src/dyadic/fast.rs`, `round_dir_signed` for cos and tan rounded down or up, and
+// `round_dir_signed_branch` and `round_near_signed_branch` for sin rounded down or up and for
+// the three to nearest, after a scaling by a power of 2 (`fast_round_dir`,
+// `fast_round_dir_branch` and `fast_round_near`). Where a test fails, other than where
 // `fast_one_dir` decides sin or cos rounded down or up (below), or the fast path declines the
 // argument, the function calls `ziv` or `ziv_near` as before. The fast path
 // reduces a finite x to n u + ρ for u = π/4096 and |ρ| <= u/2 (1 + 2^-24): for |x| < 2^16
@@ -155,7 +157,9 @@
 use super::{
     consts::PI,
     exp::{away, near_one, toward_zero, TINY_HYP, TINY_NEAR},
-    fast::{fast_two_sum, round_dir_signed, round_near_signed, two_sum},
+    fast::{
+        fast_two_sum, round_dir_signed, round_dir_signed_branch, round_near_signed_branch, two_sum,
+    },
     level::level_entry,
     round, ziv, ziv_near, Dyadic, Encl, Eval,
 };
@@ -1181,16 +1185,48 @@ fn fast_unscale(h: f64, l: f64) -> (f64, f64, i64) {
 // The rounding of y toward +∞ if `up` and toward -∞ otherwise, for h = RN(h + l) with
 // 2^-1000 <= |h| <= 2^1000, as the fast paths give it, and h + l within 3 2^-71 |y| of y, or
 // `None` where the test of `round_dir_signed`, which takes the sign, fails.
+// For cos and tan. In a crate that links `cr`, built for Haswell, taking the sign from the bits
+// of h (`round_dir_signed`) in place of a branch on it (`round_dir_signed_branch`) made cos and
+// tan rounded down or up take one conditional branch and 4.4 to 5.7 instructions fewer per
+// call on sets of 4,096 calls in [0.1, 10), [-10, 10) and [-π/4, π/4) (3.0 fewer for cos in
+// [-π/4, π/4)), log-uniform of random sign from 2^-30 or from 2^60 up, and nearest to
+// multiples of π/2, with 0.25 to 0.52 fewer mispredicted ones on those below 2^30; 0.82 to
+// 0.86 branches and 4.1 to 5.1 instructions fewer on the hard cases; and half as many on a set
+// log-uniform over every exponent, half of whose calls take the fast path (cachegrind,
+// row 192).
 fn fast_round_dir(h: f64, l: f64, up: bool) -> Option<f64> {
     let (h, l, e) = fast_unscale(h, l);
     round_dir_signed(h, l, e, up)
 }
 
-// The rounding of y to nearest, as `fast_round_dir`. `rocq/theories/FastTrigRound.v` proves
-// both (`fast_round_dir_correct` and `fast_round_near_correct`).
+// `fast_round_dir` with `round_dir_signed_branch`, which branches on the sign of h, for sin.
+// In a crate that links `cr`, built for Haswell, `round_dir_signed` saved sin rounded down or up
+// about as many instructions and branches per call as cos and tan, 4.1 to 5.6 instructions on
+// the sets of `fast_round_dir` other than the one over every exponent. But built for x86-64,
+// on a CPU with FMA, sin rounded up took 4.48 fewer instructions and one branch fewer per call
+// on [0.1, 10), and 0.031 more mispredicted ones, at each of four pairings of two code layouts
+// of each form, with the stack started at two offsets (cachegrind, row 192). The counts cannot
+// weigh that rise against the instructions saved, so sin keeps the branch until a timing
+// decides.
+fn fast_round_dir_branch(h: f64, l: f64, up: bool) -> Option<f64> {
+    let (h, l, e) = fast_unscale(h, l);
+    round_dir_signed_branch(h, l, e, up)
+}
+
+// The rounding of y to nearest, as `fast_round_dir`, with `round_near_signed_branch`.
+// The three keep the branch: in a crate that links `cr`, built for Haswell, `round_near_signed`
+// made sin, cos and tan to nearest take up to one conditional branch fewer per call, and 0.23
+// to 0.52 fewer mispredicted ones near multiples of π/2 below 2^30 (0.50 for sin and tan at
+// x = ±2^-26), but 1.22 to 2.00 more instructions on every set counted (0.76 to 0.79 on the
+// one over every exponent) (cachegrind, row 192).
+// Its 5 instructions, `vandpd` for |h| and `vmovmskpd`, `shl`, `vmovq` and `vxorpd` for -l
+// where h < 0 and l otherwise, take the place of the branch's 3 (`vxorpd`, `vucomisd` and
+// `jbe`, which compare h with 0 and jump on it), and of a fourth, which negates l, where h < 0.
+// `rocq/theories/FastTrigRound.v` proves the three (`fast_round_dir_correct`,
+// `fast_round_dir_branch_correct` and `fast_round_near_correct`).
 fn fast_round_near(h: f64, l: f64) -> Option<f64> {
     let (h, l, e) = fast_unscale(h, l);
-    round_near_signed(h, l, e)
+    round_near_signed_branch(h, l, e)
 }
 
 // sin x, cos t and tan x rounded toward +∞ if `up` and toward -∞ otherwise, and to nearest, by
@@ -1209,7 +1245,7 @@ fn fast_round_near(h: f64, l: f64) -> Option<f64> {
 #[inline(always)]
 fn fast_sin_dir<const FMA: bool>(x: f64, up: bool) -> Option<f64> {
     let (h, l) = fast_sin::<FMA>(x)?;
-    fast_round_dir(h, l, up).or_else(|| fast_one_dir(h, up))
+    fast_round_dir_branch(h, l, up).or_else(|| fast_one_dir(h, up))
 }
 
 #[inline(always)]

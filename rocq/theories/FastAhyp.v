@@ -21,8 +21,11 @@
       within [2^-68] of the result scaled by [2^-k], with [1/2 < |h| < 2].
       [DyadicLog.fast_asinh] and [DyadicLog.fast_atanh] negate [h] and [l]
       for [x < 0] ([fast_asinh_correct], [fast_atanh_correct]), and
-      [Fast.round_dir_signed] and [Fast.round_near_signed] of [FastSign.v]
-      apply.
+      [Fast.round_dir_signed_branch], [Fast.round_near_signed_branch] and,
+      for [atanh] to nearest, [Fast.round_near_signed] of [FastSign.v]
+      apply; [acosh] to nearest also takes [Fast.round_near_signed_branch].
+      For [acosh] rounded down or up, [h] is positive, as [acosh >= 0]
+      ([pos_h]), and [Fast.round_dir] of [FastRound.v] applies directly.
     The theorems [fast_asinh_dir_correct] and the others prove the fast
     paths of the three functions in all three roundings, and
     [fast_asinh_dir_fma] and the others that an FMA gives the same
@@ -279,6 +282,45 @@ Proof. exact FastAhypOdd.atanh_odd_correct. Qed.
 Local Lemma arcsinh_odd' : forall r, -1 < r < 1 -> arcsinh (- r) = - arcsinh r.
 Proof. intros r _. apply DyLogRules.arcsinh_odd. Qed.
 
+(** [acosh] is nonnegative on its domain, as [r + sqrt (r^2 - 1) >= 1]
+    there. *)
+Local Lemma acosh_nonneg : forall r, 1 <= r -> 0 <= Racosh r.
+Proof.
+intros r Hr. unfold Racosh.
+pose proof (sqrt_pos (r * r - 1)) as S.
+rewrite <- ln_1.
+destruct (Rle_lt_or_eq_dec 1 (r + sqrt (r * r - 1))) as [L | E]; [lra | |].
+- left. apply ln_increasing; lra.
+- right. rewrite <- E. reflexivity.
+Qed.
+
+(** An [h] with [h = RN (h + l)] and [|h| > 1/2], within [2^-68] of a
+    nonnegative [y], is above [1/2]: where [h < 0], [h + l] would lie
+    below [0] and above [-2^-68], and its rounding [h] above [-1/2]. *)
+Local Lemma pos_h :
+  forall (h l : f64) (y : R),
+  is_finite h = true -> B2R h = RN (B2R h + B2R l) -> / 2 < Rabs (B2R h) < 2 -> 0 <= y ->
+  Rabs (y - (B2R h + B2R l)) <= bpow radix2 (-68) ->
+  / 2 < B2R h < 2.
+Proof.
+intros h l y _ Hrn Hh Hy Hb.
+destruct (Rlt_or_le (B2R h) 0) as [N | P].
+- exfalso. rewrite Rabs_left in Hh by exact N.
+  (* [h + l >= y - 2^-68 >= -2^-68], and [-2^-68] is a binary64 number,
+     so [h], the rounding of [h + l], is at least [-2^-68] (rounding is
+     monotone), above [-1/2]. *)
+  assert (Hs : - bpow radix2 (-68) <= B2R h + B2R l).
+  { pose proof (Rabs_le_inv _ _ Hb). lra. }
+  assert (Hg : generic_format radix2 fexp64 (- bpow radix2 (-68))).
+  { apply generic_format_opp, generic_format_bpow. unfold FLT_exp. lia. }
+  assert (R : - bpow radix2 (-68) <= B2R h).
+  { rewrite Hrn, <- (round_generic radix2 fexp64 ZnearestE _ Hg).
+    exact (round_le radix2 fexp64 ZnearestE _ _ Hs). }
+  assert (HM : bpow radix2 (-68) < / 2) by (cbn [bpow radix_val radix2]; lra).
+  lra.
+- rewrite Rabs_pos_eq in Hh by exact P. exact Hh.
+Qed.
+
 (** ** The three roundings *)
 
 Theorem fast_asinh_dir_correct :
@@ -292,7 +334,7 @@ destruct (lt (fabs x) DyadicLog.ahyp_near).
 - exact (odd_dir arcsinh DyadicLog.ASINH_ODD x up v asinh_odd arcsinh_odd' Fx (conj Hx T) H).
 - destruct (DyadicLog.fast_asinh fma x) as [[[h l] k]|] eqn:E; [| discriminate H].
   destruct (fast_asinh_correct fma x h l k Fx T E) as (Fh & Fl & Hrn & Hh & Hk & Hy).
-  pose proof (round_dir_signed_correct h l k up v _ Fh Fl Hrn Hh Hk Hy H) as R.
+  pose proof (round_dir_signed_branch_correct h l k up v _ Fh Fl Hrn Hh Hk Hy H) as R.
   rewrite unscale in R. exact R.
 Qed.
 
@@ -307,7 +349,7 @@ destruct (lt (fabs x) DyadicLog.ahyp_near).
 - exact (odd_near arcsinh DyadicLog.ASINH_ODD x v asinh_odd arcsinh_odd' Fx (conj Hx T) H).
 - destruct (DyadicLog.fast_asinh fma x) as [[[h l] k]|] eqn:E; [| discriminate H].
   destruct (fast_asinh_correct fma x h l k Fx T E) as (Fh & Fl & Hrn & Hh & Hk & Hy).
-  pose proof (round_near_signed_correct h l k v _ Fh Fl Hrn Hh Hk Hy H) as R.
+  pose proof (round_near_signed_branch_correct h l k v _ Fh Fl Hrn Hh Hk Hy H) as R.
   rewrite unscale in R. exact R.
 Qed.
 
@@ -327,7 +369,10 @@ destruct (lt x DyadicLog.acosh_near1).
   rewrite unscale in R. exact R.
 - destruct (DyadicLog.fast_acosh fma x) as [[[h l] k]|] eqn:E; [| discriminate H].
   destruct (fast_acosh_correct fma x h l k Fx T E) as (Fh & Fl & Hrn & Hh & Hk & Hy).
-  pose proof (round_dir_signed_correct h l k up v _ Fh Fl Hrn Hh Hk Hy H) as R.
+  (* [acosh x >= 0], so [h > 0], and [Fast.round_dir] applies. *)
+  pose proof (pos_h h l (Racosh (B2R x) * bpow radix2 (- k)) Fh Hrn Hh
+    (Rmult_le_pos _ _ (acosh_nonneg _ Hx) (bpow_ge_0 _ _)) Hy) as Hp.
+  pose proof (FastRound.round_dir_correct h l k up v _ Fh Fl Hrn Hp Hk Hy H) as R.
   rewrite unscale in R. exact R.
 Qed.
 
@@ -347,7 +392,7 @@ destruct (lt x DyadicLog.acosh_near1).
   rewrite unscale in R. exact R.
 - destruct (DyadicLog.fast_acosh fma x) as [[[h l] k]|] eqn:E; [| discriminate H].
   destruct (fast_acosh_correct fma x h l k Fx T E) as (Fh & Fl & Hrn & Hh & Hk & Hy).
-  pose proof (round_near_signed_correct h l k v _ Fh Fl Hrn Hh Hk Hy H) as R.
+  pose proof (round_near_signed_branch_correct h l k v _ Fh Fl Hrn Hh Hk Hy H) as R.
   rewrite unscale in R. exact R.
 Qed.
 
@@ -364,7 +409,7 @@ destruct (lt (fabs x) DyadicLog.ahyp_near).
 - destruct (DyadicLog.fast_atanh fma x) as [[[h l] k]|] eqn:E; [| discriminate H].
   destruct (fast_atanh_correct fma x h l k Fx (conj T (proj2 Hx)) E)
     as (Fh & Fl & Hrn & Hh & Hk & Hy).
-  pose proof (round_dir_signed_correct h l k up v _ Fh Fl Hrn Hh Hk Hy H) as R.
+  pose proof (round_dir_signed_branch_correct h l k up v _ Fh Fl Hrn Hh Hk Hy H) as R.
   rewrite unscale in R. exact R.
 Qed.
 

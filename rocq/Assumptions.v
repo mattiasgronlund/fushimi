@@ -411,6 +411,8 @@ Print Assumptions FastHyp.fast_tanh_dir_fma.
 Print Assumptions FastHyp.fast_tanh_near_fma.
 Print Assumptions FastSign.round_dir_signed_correct.
 Print Assumptions FastSign.round_near_signed_correct.
+Print Assumptions FastSign.round_dir_signed_branch_correct.
+Print Assumptions FastSign.round_near_signed_branch_correct.
 Print Assumptions FastLogTables.ln2h_exact.
 Print Assumptions FastLogTables.ln2_split_correct.
 Print Assumptions FastLogTables.lg2h_exact.
@@ -466,6 +468,7 @@ Print Assumptions FastTrigEval.fast_cos0_correct.
 Print Assumptions FastTrigDiv.fast_div_correct.
 Print Assumptions FastTrigDiv.fast_div_fma.
 Print Assumptions FastTrigRound.fast_round_dir_correct.
+Print Assumptions FastTrigRound.fast_round_dir_branch_correct.
 Print Assumptions FastTrigRound.fast_round_near_correct.
 Print Assumptions FastTrigCore.fast_sin_correct.
 Print Assumptions FastTrigCore.fast_cos_correct.

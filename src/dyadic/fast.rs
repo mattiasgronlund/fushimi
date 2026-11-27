@@ -7,9 +7,12 @@
 // negative (`round_dir_signed`, `round_near_signed`), `src/dyadic/trig.rs` for sin, cos and tan,
 // with the same tests, `src/dyadic/pow.rs` for x^y and x^n, `src/dyadic/atan.rs` for atan,
 // atan2, asin and acos, which put the sign back themselves, and `src/dyadic/root.rs` for cbrt,
-// which puts the sign back itself too, and hypot. sinh and tanh, and asinh and atanh near 0,
-// round f(|x|) and put the sign of x back on the result with `xor_sign`, rounded down, up or to
-// nearest.
+// which puts the sign back itself too, and hypot. `round_dir_signed` and `round_near_signed`
+// decide from the bits of h, its sign bit included, with no branch on the sign of h. log.rs and
+// trig.rs also call `round_dir_signed_branch` and `round_near_signed_branch`, which branch on
+// the sign of h. They do so where the forms without the branch cost more; the callers' comments
+// say which. sinh and tanh, and asinh and atanh near 0, round f(|x|) and put the sign of x back
+// on the result with `xor_sign`, rounded down, up or to nearest.
 //
 // A fast path computes a scaled result y = f(x) 2^-e, for an integer e in [-1021, 1022], as an
 // unevaluated sum h + l of two `f64`s with h = RN(h + l), 1/2 < h < 2, and a proved bound
@@ -54,9 +57,9 @@
 // `rocq/theories/FastRound.v` proves `round_dir` and `round_near` correct,
 // `rocq/theories/FastRoundErr.v` `two_sum`, `normalize`, `round_dir_err` and `round_near_err`,
 // `rocq/theories/FastDiv.v` `dd_div`, `rocq/theories/FastDdSqrt.v` `dd_sqrt`,
-// `rocq/theories/FastSign.v` `round_dir_signed` and `round_near_signed`,
-// `rocq/theories/Encoding.v` that `xor_sign` negates r where s has its sign bit set
-// (`xor_sign_eq`),
+// `rocq/theories/FastSign.v` `round_dir_signed`, `round_near_signed`, `round_dir_signed_branch`
+// and `round_near_signed_branch`, `rocq/theories/Encoding.v` that `xor_sign` negates r where s
+// has its sign bit set (`xor_sign_eq`),
 // `rocq/theories/FastRoundSub.v` `round_dir_sub` and `round_near_sub`, and
 // `rocq/theories/FastRoundWide.v` `round_dir_wide` and `round_near_wide`, and `round_dir_err`
 // and `round_near_err` at e = 1023 and at e = -1022 with h > 1.
@@ -533,6 +536,68 @@ pub(crate) fn xor_sign(r: f64, s: f64) -> f64 {
 /// is the negative of the rounding of -y 2^e in the other direction, which `round_dir` decides
 /// from -h and -l.
 pub(crate) fn round_dir_signed(h: f64, l: f64, e: i64, up: bool) -> Option<f64> {
+    #[cfg(test)]
+    if !fast_enabled() {
+        return None;
+    }
+    // As in `round_dir`, from the bits of h and the sign bits, with no branch on the sign of h.
+    // That branch is unpredictable where the results are of mixed signs. Its callers outside
+    // the tests are ln x, log2 x and log10 x rounded down or up (log.rs), and cos x and tan x
+    // rounded down or up (`fast_round_dir` in trig.rs). In a crate that links `cr`, built for
+    // Haswell, ln, log2 and log10 rounded down or up take 3.28 to 6.55 fewer instructions per
+    // call with this form than with `round_dir_signed_branch`, and one conditional branch fewer,
+    // on random x; on x log-uniform or near 1, 0.50 fewer branches are mispredicted (cachegrind,
+    // row 192).
+    // For h < 0, -`round_dir`(-h, -l, e, !up) has the bits of |h|, plus 1 if !up, less 1 if
+    // -l < 0, with the sign bit set: those of h, plus the sign bit of l, less 1 if `up`. Both
+    // signs are then the bits of h, plus 1 if `up` differs from the sign bit of h, less 1 if the
+    // sign bits of l and h differ; `scale` keeps the sign. The sum stays within `u64` for
+    // 1/2 < |h| < 2.
+    let passed = l.abs() > ERR;
+    #[cfg(test)]
+    record_fast(passed);
+    if passed {
+        let b = h.to_bits();
+        Some(scale(
+            f64::from_bits(b + (up != h.is_sign_negative()) as u64 - ((l.to_bits() ^ b) >> 63)),
+            e,
+        ))
+    } else {
+        None
+    }
+}
+
+/// `round_near` for an h of either sign, with 1/2 < |h| < 2: where h < 0, the rounding of y 2^e
+/// to nearest is the negative of that of -y 2^e.
+pub(crate) fn round_near_signed(h: f64, l: f64, e: i64) -> Option<f64> {
+    #[cfg(test)]
+    if !fast_enabled() {
+        return None;
+    }
+    // `round_near`'s test of -l against the gaps of -h where h < 0, which returns h 2^e
+    // itself: the result keeps the sign of h, with no branch on it. Its one caller outside the
+    // tests is atanh rounded to nearest, away from 0 (log.rs). In a crate that links `cr`, built
+    // for Haswell, that takes about as many instructions per call as with
+    // `round_near_signed_branch`, one conditional branch fewer and 0.50 fewer mispredicted ones,
+    // on sets of x of random sign whose calls reach it (cachegrind, row 192).
+    let t = h.abs();
+    let m = xor_sign(l, h);
+    let above = if t >= 1.0 { NEAR1 } else { NEAR0 };
+    let below = if t > 1.0 { NEAR1 } else { NEAR0 };
+    let passed = m < above && m > -below;
+    #[cfg(test)]
+    record_fast(passed);
+    if passed {
+        Some(scale(h, e))
+    } else {
+        None
+    }
+}
+
+/// `round_dir_signed`'s old form, with a branch on the sign of h, kept for the callers where a
+/// form without that branch cost more: asinh and atanh away from 0, and sin, rounded down or up
+/// (see their comments).
+pub(crate) fn round_dir_signed_branch(h: f64, l: f64, e: i64, up: bool) -> Option<f64> {
     if h < 0.0 {
         round_dir(-h, -l, e, !up).map(|r| -r)
     } else {
@@ -540,9 +605,10 @@ pub(crate) fn round_dir_signed(h: f64, l: f64, e: i64, up: bool) -> Option<f64> 
     }
 }
 
-/// `round_near` for an h of either sign, with 1/2 < |h| < 2: where h < 0, the rounding of y 2^e
-/// to nearest is the negative of that of -y 2^e.
-pub(crate) fn round_near_signed(h: f64, l: f64, e: i64) -> Option<f64> {
+/// `round_near_signed`'s old form, with a branch on the sign of h, kept for the callers where a
+/// form without that branch cost more: ln, log2, log10, asinh away from 0, acosh away from 1, sin,
+/// cos and tan, rounded to nearest (see their comments).
+pub(crate) fn round_near_signed_branch(h: f64, l: f64, e: i64) -> Option<f64> {
     if h < 0.0 {
         round_near(-h, -l, e).map(|r| -r)
     } else {
@@ -916,6 +982,70 @@ mod tests {
                     "xor_sign({r:e}, {s:e})"
                 );
             }
+        }
+    }
+
+    // Checks `round_dir_signed` and `round_near_signed` against their forms with a branch on
+    // h < 0, `round_dir_signed_branch` and `round_near_signed_branch`, at (h, l) and (-h, l), in
+    // both directions and at both ends of the range of e, by the bits of the results.
+    fn check_signed(h: f64, l: f64) {
+        for h in [h, -h] {
+            for e in [-1021, 0, 1022] {
+                for up in [false, true] {
+                    assert_eq!(
+                        round_dir_signed(h, l, e, up).map(f64::to_bits),
+                        round_dir_signed_branch(h, l, e, up).map(f64::to_bits),
+                        "round_dir_signed({h:e}, {l:e}, {e}, {up})"
+                    );
+                }
+                assert_eq!(
+                    round_near_signed(h, l, e).map(f64::to_bits),
+                    round_near_signed_branch(h, l, e).map(f64::to_bits),
+                    "round_near_signed({h:e}, {l:e}, {e})"
+                );
+            }
+        }
+    }
+
+    // The signed tests from the sign bits are the branches on the sign of h: at the h of
+    // `h_grid` of either sign, at l of either sign on and next to the bounds of both tests, on
+    // ±0, ±∞ and NaNs of either sign, and on random h in (1/2, 2) and l of either sign with
+    // |l| in [2^-110, 2^-49).
+    #[test]
+    fn signed_by_sign_bits() {
+        set_fast_path(true);
+        let next = |x: f64| f64::from_bits(x.to_bits() + 1);
+        let prev = |x: f64| f64::from_bits(x.to_bits() - 1);
+        let ls = [
+            0.0,
+            ERR,
+            prev(ERR),
+            next(ERR),
+            NEAR0,
+            prev(NEAR0),
+            next(NEAR0),
+            NEAR1,
+            prev(NEAR1),
+            next(NEAR1),
+            2f64.powi(-60),
+            2f64.powi(-54),
+            f64::MIN_POSITIVE,
+            f64::from_bits(1),
+            f64::INFINITY,
+        ];
+        let neg_nan = f64::from_bits(f64::NAN.to_bits() | 1 << 63);
+        for h in h_grid() {
+            for l in ls {
+                check_signed(h, l);
+                check_signed(h, -l);
+            }
+            check_signed(h, f64::NAN);
+            check_signed(h, neg_nan);
+        }
+        let mut rng = Rng(4192);
+        for _ in 0..100_000 {
+            let (h, l) = random_hl(&mut rng);
+            check_signed(h, l);
         }
     }
 }

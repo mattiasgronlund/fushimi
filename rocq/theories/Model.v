@@ -2213,13 +2213,32 @@ Definition xor_sign (r s : f64) : f64 :=
 
 (** [pub(crate) fn round_dir_signed(h: f64, l: f64, e: i64, up: bool) ->
     Option<f64>] and [pub(crate) fn round_near_signed(h: f64, l: f64, e:
-    i64) -> Option<f64>], where [.map(|r| -r)] is the [match].
+    i64) -> Option<f64>], with the bits as in [round_dir], where
+    [h.is_sign_negative()] is [Bsign h], as [h] is not NaN here, [a != b]
+    of [bool]s is [xorb a b], [(l.to_bits() ^ b) >> 63] is [Z.shiftr
+    (Z.lxor (to_bits l) (to_bits h)) 63], and [h.abs()] is [fabs h].
     [FastSign.v] proves them. *)
 Definition round_dir_signed (h l : f64) (e : Z) (up : bool) : option f64 :=
+  if gt (fabs l) err
+  then Some (scale (from_bits (to_bits h + Z.b2z (xorb up (Bsign h))
+                               - Z.shiftr (Z.lxor (to_bits l) (to_bits h)) 63)) e)
+  else None.
+Definition round_near_signed (h l : f64) (e : Z) : option f64 :=
+  let t := fabs h in
+  let m := xor_sign l h in
+  let above := if ge t one then near1 else near0 in
+  let below := if gt t one then near1 else near0 in
+  if lt m above && gt m (opp below) then Some (scale h e) else None.
+
+(** [pub(crate) fn round_dir_signed_branch(h: f64, l: f64, e: i64, up:
+    bool) -> Option<f64>] and [pub(crate) fn round_near_signed_branch(h:
+    f64, l: f64, e: i64) -> Option<f64>], where [.map(|r| -r)] is the
+    [match]. [FastSign.v] proves them. *)
+Definition round_dir_signed_branch (h l : f64) (e : Z) (up : bool) : option f64 :=
   if lt h zero then
     match round_dir (opp h) (opp l) e (negb up) with Some r => Some (opp r) | None => None end
   else round_dir h l e up.
-Definition round_near_signed (h l : f64) (e : Z) : option f64 :=
+Definition round_near_signed_branch (h l : f64) (e : Z) : option f64 :=
   if lt h zero then
     match round_near (opp h) (opp l) e with Some r => Some (opp r) | None => None end
   else round_near h l e.
@@ -3994,12 +4013,15 @@ Definition fast_log10_dir (fma : bool) (x : f64) (up : bool) : option f64 :=
   | None => None
   end.
 Definition fast_ln_near (fma : bool) (x : f64) : option f64 :=
-  match fast_ln fma x with Some (h, l, k) => Fast.round_near_signed h l k | None => None end.
+  match fast_ln fma x with Some (h, l, k) => Fast.round_near_signed_branch h l k | None => None end.
 Definition fast_log2_near (fma : bool) (x : f64) : option f64 :=
-  match fast_log_by fma x C2 ONE with Some (h, l, k) => Fast.round_near_signed h l k | None => None end.
+  match fast_log_by fma x C2 ONE with
+  | Some (h, l, k) => Fast.round_near_signed_branch h l k
+  | None => None
+  end.
 Definition fast_log10_near (fma : bool) (x : f64) : option f64 :=
   match fast_log_by fma x C10 LG2 with
-  | Some (h, l, k) => Fast.round_near_signed h l k
+  | Some (h, l, k) => Fast.round_near_signed_branch h l k
   | None => None
   end.
 
@@ -4143,7 +4165,10 @@ Definition fast_asinh_dir (fma : bool) (x : f64) (up : bool) : option f64 :=
     | None => None
     end
   else
-    match fast_asinh fma x with Some (h, l, k) => Fast.round_dir_signed h l k up | None => None end.
+    match fast_asinh fma x with
+    | Some (h, l, k) => Fast.round_dir_signed_branch h l k up
+    | None => None
+    end.
 Definition fast_acosh_dir (fma : bool) (x : f64) (up : bool) : option f64 :=
   if lt x acosh_near1 then
     match fast_acosh_near1 fma x with
@@ -4151,7 +4176,7 @@ Definition fast_acosh_dir (fma : bool) (x : f64) (up : bool) : option f64 :=
     | None => None
     end
   else
-    match fast_acosh fma x with Some (h, l, k) => Fast.round_dir_signed h l k up | None => None end.
+    match fast_acosh fma x with Some (h, l, k) => Fast.round_dir h l k up | None => None end.
 Definition fast_atanh_dir (fma : bool) (x : f64) (up : bool) : option f64 :=
   let t := fabs x in
   if lt t ahyp_near then
@@ -4161,7 +4186,10 @@ Definition fast_atanh_dir (fma : bool) (x : f64) (up : bool) : option f64 :=
     | None => None
     end
   else
-    match fast_atanh fma x with Some (h, l, k) => Fast.round_dir_signed h l k up | None => None end.
+    match fast_atanh fma x with
+    | Some (h, l, k) => Fast.round_dir_signed_branch h l k up
+    | None => None
+    end.
 Definition fast_asinh_near (fma : bool) (x : f64) : option f64 :=
   let t := fabs x in
   if lt t ahyp_near then
@@ -4171,7 +4199,10 @@ Definition fast_asinh_near (fma : bool) (x : f64) : option f64 :=
     | None => None
     end
   else
-    match fast_asinh fma x with Some (h, l, k) => Fast.round_near_signed h l k | None => None end.
+    match fast_asinh fma x with
+    | Some (h, l, k) => Fast.round_near_signed_branch h l k
+    | None => None
+    end.
 Definition fast_acosh_near (fma : bool) (x : f64) : option f64 :=
   if lt x acosh_near1 then
     match fast_acosh_near1 fma x with
@@ -4179,7 +4210,10 @@ Definition fast_acosh_near (fma : bool) (x : f64) : option f64 :=
     | None => None
     end
   else
-    match fast_acosh fma x with Some (h, l, k) => Fast.round_near_signed h l k | None => None end.
+    match fast_acosh fma x with
+    | Some (h, l, k) => Fast.round_near_signed_branch h l k
+    | None => None
+    end.
 Definition fast_atanh_near (fma : bool) (x : f64) : option f64 :=
   let t := fabs x in
   if lt t ahyp_near then
@@ -5974,14 +6008,18 @@ Definition fast_unscale (h l : f64) : f64 * f64 * Z :=
   let s := from_bits (Z.shiftl ((1023 - e) mod 2^64) 52 mod 2^64) in
   (mul h s, mul l s, e).
 
-(** [fn fast_round_dir(h: f64, l: f64, up: bool) -> Option<f64>] and [fn
-    fast_round_near(h: f64, l: f64) -> Option<f64>]. [FastTrigRound.v]
+(** [fn fast_round_dir(h: f64, l: f64, up: bool) -> Option<f64>], [fn
+    fast_round_dir_branch(h: f64, l: f64, up: bool) -> Option<f64>] and
+    [fn fast_round_near(h: f64, l: f64) -> Option<f64>]. [FastTrigRound.v]
     proves them. *)
 Definition fast_round_dir (h l : f64) (up : bool) : option f64 :=
   let '(h, l, e) := fast_unscale h l in Fast.round_dir_signed h l e up.
 
+Definition fast_round_dir_branch (h l : f64) (up : bool) : option f64 :=
+  let '(h, l, e) := fast_unscale h l in Fast.round_dir_signed_branch h l e up.
+
 Definition fast_round_near (h l : f64) : option f64 :=
-  let '(h, l, e) := fast_unscale h l in Fast.round_near_signed h l e.
+  let '(h, l, e) := fast_unscale h l in Fast.round_near_signed_branch h l e.
 
 (** [fn fast_one_dir(h: f64, up: bool) -> Option<f64>], which follows
     [fn fast_cos_dir] in Rust, where [h.abs() != 1.0] is [negb (eq (fabs
@@ -6001,7 +6039,7 @@ Definition fast_one_dir (h : f64) (up : bool) : option f64 :=
 Definition fast_sin_dir (fma : bool) (x : f64) (up : bool) : option f64 :=
   match fast_sin fma x with
   | Some (h, l) =>
-    match fast_round_dir h l up with Some v => Some v | None => fast_one_dir h up end
+    match fast_round_dir_branch h l up with Some v => Some v | None => fast_one_dir h up end
   | None => None
   end.
 Definition fast_cos_dir (fma : bool) (t : f64) (up : bool) : option f64 :=
