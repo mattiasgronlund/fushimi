@@ -158,6 +158,8 @@ theories/ExpSeries.v
 theories/ConstPi.v
 theories/ConstInv.v
 theories/ConstLn.v
+theories/RatPow5.v
+theories/RatOrd.v
 theories/ConstLog.v
 theories/ValidMake.v
 theories/ValidSetOp.v

@@ -6,7 +6,7 @@ Items marked with ⚠️ are breaking changes.
 
 ### Added
 
-- Added Rocq proofs that `Nat::from_dec` and `Nat::from_hex`, with which `FromStr` of intervals and decorated intervals reads the numbers of a literal, return the numbers that their decimal and hexadecimal digits spell, that `-` of `Nat`s returns their difference and panics where it would be negative, and that each returns a `Nat` with no zero limb at the top, which the proofs of `FromStr` had taken as given, and that `Nat::to_dec`, with which `Display` and `LowerExp` of intervals and decorated intervals write the decimal digits of a bound, writes those of its number with no zero in front, its division by 10^19 by Algorithm 4 of Möller and Granlund included. The code is unchanged.
+- Added Rocq proofs that `Nat::from_dec` and `Nat::from_hex`, with which `FromStr` of intervals and decorated intervals reads the numbers of a literal, return the numbers that their decimal and hexadecimal digits spell, that `-` of `Nat`s returns their difference and panics where it would be negative, and that each returns a `Nat` with no zero limb at the top, which the proofs of `FromStr` had taken as given, and that `Nat::to_dec`, with which `Display` and `LowerExp` of intervals and decorated intervals write the decimal digits of a bound, writes those of its number with no zero in front, its division by 10^19 by Algorithm 4 of Möller and Granlund included. They also show that `impl Ord for Rat`, with which `FromStr` compares the bounds of a literal, compares their values, for numerators and denominators of at most 2^61 bits, 2^58 bytes, which the proofs of `FromStr` had taken as given. The code is unchanged.
 
 ### Changed
 

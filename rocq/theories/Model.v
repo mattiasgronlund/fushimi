@@ -7879,7 +7879,9 @@ Definition rat_R (x : Rat) : R :=
 (** What the grammar guarantees of each [Rat] that it makes, which is not
     proved: [den > 0], as the comment of [Rat] says, and [e2] and [e5] are
     [i32]s. [num] and [den] have at most [2^63] bits, which is
-    [2^60] bytes, more memory than any machine has. *)
+    [2^60] bytes, more memory than any machine has. [rat_cmp_correct] in
+    [RatOrd.v] takes them below [2 ^ 2 ^ 61], at most [2^61] bits, which is
+    [2^58] bytes, also more memory than any machine has. *)
 Definition rat_ok (x : Rat) : Prop :=
   0 <= rat_num x < 2 ^ 2 ^ 63 /\ 0 < rat_den x < 2 ^ 2 ^ 63 /\
   - 2 ^ 31 <= rat_e2 x < 2 ^ 31 /\ - 2 ^ 31 <= rat_e5 x < 2 ^ 31.
@@ -7887,6 +7889,158 @@ Definition rat_ok (x : Rat) : Prop :=
 (** The number of bits of an integer [n >= 0], 0 for 0, which
     [n.bits()] of a [Nat] computes ([NatOps.v]). *)
 Definition nat_bits (n : Z) : Z := if n =? 0 then 0 else Z.log2 n + 1.
+
+(** The functions of [src/parse/rat.rs] through which [impl Ord for Rat]
+    compares two [Rat]s. As in [scale] below, the [i128] operations are
+    checked, [i128::from] keeps the value, and the operations of [Nat]s are
+    the wrappers of [NatLimbs] on [Z]s, with [Nat::from_u64(x)] as
+    [NatLimbs.from_u64_z x]. *)
+
+(** [fn sign(&self) -> i32] of [Rat] *)
+Definition rat_sign (x : Rat) : Z :=
+  if NatLimbs.is_zero_z (rat_num x) then 0 else if rat_neg x then -1 else 1.
+
+(** [const LOG2_5_LO: u128] and [const LOG2_5_HI: u128], with the literal
+    as the Rust writes it. *)
+Definition LOG2_5_LO : Z := 0x2_5269_e12f_346e_2bf9.
+Definition LOG2_5_HI : Z := LOG2_5_LO + 1.
+
+(** [fn log2_5_bounds(m: u32) -> (i128, i128)], where
+    [u128::from(u64::MAX)] is [2 ^ 64 - 1], each [u128] product is checked
+    as one with its sum, and [as i128] keeps the low 128 bits as a two's
+    complement [i128]. *)
+Definition rat_log2_5_bounds (m : Z) : option (Z * Z) :=
+  let* p := checked_u 128 (m * LOG2_5_LO) in
+  let* q := checked_u 128 (m * LOG2_5_HI + (2 ^ 64 - 1)) in
+  let lo := Z.shiftr p 64 in
+  let hi := Z.shiftr q 64 in
+  Some ((lo + 2 ^ 127) mod 2 ^ 128 - 2 ^ 127, (hi + 2 ^ 127) mod 2 ^ 128 - 2 ^ 127).
+
+(** [fn cmp_shifted(x: &Nat, e: i128, y: &Nat) -> Ordering], where
+    [bx.cmp(&by)] is [Z.compare], and [e as u64] and [(-e) as u64] keep the
+    low 64 bits. *)
+Definition rat_cmp_shifted (x e y : Z) : option comparison :=
+  let* bx := checked_i 128 (NatLimbs.bits_z x + e) in
+  match Z.compare bx (NatLimbs.bits_z y) with
+  | Eq =>
+      if 0 <=? e then Some (NatLimbs.cmp_z (NatLimbs.shl_z x (e mod 2 ^ 64)) y)
+      else
+        let* ne := checked_i 128 (- e) in
+        Some (NatLimbs.cmp_z x (NatLimbs.shl_z y (ne mod 2 ^ 64)))
+  | o => Some o
+  end.
+
+(** One pass of the [for] loop of [pow5_bound] below, for the bit [i] of
+    [a], on [(m, k, exact)], where [saturating_sub] of [u64]s is [Z.max 0]
+    of the difference. *)
+Definition rat_pow5_bound_step (a p : Z) (up : bool) (i : Z) (st : Z * Z * bool)
+  : option (Z * Z * bool) :=
+  let '(m, k, exact) := st in
+  let* m := NatLimbs.mul_z m m in
+  let* k := checked_i 128 (k * 2) in
+  let* ai := shr 32 a i in
+  let* m := if Z.land ai 1 =? 1 then NatLimbs.mul_z m (NatLimbs.from_u64_z 5) else Some m in
+  let s := Z.max 0 (NatLimbs.bits_z m - p) in
+  if 0 <? s then
+    let* (q, r) := NatLimbs.div_rem_z m (NatLimbs.shl_z (NatLimbs.from_u64_z 1) s) in
+    let exact := exact && NatLimbs.is_zero_z r in
+    let m := if up && negb (NatLimbs.is_zero_z r) then NatLimbs.add_z q (NatLimbs.from_u64_z 1) else q in
+    let* k := checked_i 128 (k + s) in
+    Some (m, k, exact)
+  else Some (m, k, exact).
+
+(** The [for] loop of [pow5_bound], for [i] from [j - 1] down to 0. *)
+Fixpoint rat_pow5_bound_loop (j : nat) (a p : Z) (up : bool) (st : Z * Z * bool)
+  : option (Z * Z * bool) :=
+  match j with
+  | O => Some st
+  | S j' =>
+      let* st' := rat_pow5_bound_step a p up (Z.of_nat j') st in
+      rat_pow5_bound_loop j' a p up st'
+  end.
+
+(** [fn pow5_bound(a: u32, p: u64, up: bool) -> (Nat, i128, bool)] *)
+Definition rat_pow5_bound (a p : Z) (up : bool) : option (Z * Z * bool) :=
+  rat_pow5_bound_loop (Z.to_nat (32 - leading_zeros 32 a)) a p up (NatLimbs.from_u64_z 1, 0, true).
+
+(** The [loop] of [cmp_pow5] below, with fuel: [RatPow5.v] proves that 64
+    passes are enough, as it returns at the latest once [p] reaches the
+    number of bits of [5 ^ a]. [p *= 2] of a [u64] is checked. *)
+Fixpoint rat_cmp_pow5_loop (fuel : nat) (x a b y p : Z) : option comparison :=
+  match fuel with
+  | O => None
+  | S f =>
+      let* (lo, k, exact) := rat_pow5_bound a p false in
+      let* xl := NatLimbs.mul_z x lo in
+      let* bk := checked_i 128 (b + k) in
+      let* o := rat_cmp_shifted xl bk y in
+      if exact || (match o with Gt => true | _ => false end) then Some o else
+      let* (hi, k', _) := rat_pow5_bound a p true in
+      let* xh := NatLimbs.mul_z x hi in
+      let* bk' := checked_i 128 (b + k') in
+      let* o' := rat_cmp_shifted xh bk' y in
+      if (match o' with Lt => true | _ => false end) then Some Lt else
+      let* p' := checked_u 64 (p * 2) in
+      rat_cmp_pow5_loop f x a b y p'
+  end.
+
+(** [fn cmp_pow5(x: &Nat, a: u32, b: i128, y: &Nat, loop_only: bool) -> Ordering],
+    where the [u64] sum [x.bits() + y.bits() + 4096] is checked. *)
+Definition rat_cmp_pow5 (x a b y : Z) (loop_only : bool) : option comparison :=
+  let* limit :=
+    if loop_only then Some 0
+    else
+      let* t := checked_u 64 (NatLimbs.bits_z x + NatLimbs.bits_z y) in
+      checked_u 64 (t + 4096) in
+  if a <=? limit then
+    let* p := NatLimbs.pow5_z a in
+    let* xp := NatLimbs.mul_z x p in
+    rat_cmp_shifted xp b y
+  else rat_cmp_pow5_loop 64 x a b y 128.
+
+(** [fn cmp_abs_with(x: &Rat, y: &Rat, loop_only: bool) -> Ordering],
+    where [x.e5.abs_diff(y.e5)] is [Z.abs (rat_e5 x - rat_e5 y)], [c] is
+    summed from the left, and [.reverse()] is [CompOpp]. *)
+Definition rat_cmp_abs_with (x y : Rat) (loop_only : bool) : option comparison :=
+  let* c1 := checked_i 128 (NatLimbs.bits_z (rat_num x) - NatLimbs.bits_z (rat_den x)) in
+  let* c2 := checked_i 128 (c1 - NatLimbs.bits_z (rat_num y)) in
+  let* c3 := checked_i 128 (c2 + NatLimbs.bits_z (rat_den y)) in
+  let* c4 := checked_i 128 (c3 + rat_e2 x) in
+  let* c := checked_i 128 (c4 - rat_e2 y) in
+  let a := Z.abs (rat_e5 x - rat_e5 y) in
+  let* (lo, hi) := rat_log2_5_bounds a in
+  let* (lo5, hi5) :=
+    if rat_e5 y <=? rat_e5 x then Some (lo, hi)
+    else
+      let* nhi := checked_i 128 (- hi) in
+      let* nlo := checked_i 128 (- lo) in
+      Some (nhi, nlo) in
+  let* g1 := checked_i 128 (c - 2) in
+  let* g := checked_i 128 (g1 + lo5) in
+  if 0 <=? g then Some Gt else
+  let* l1 := checked_i 128 (c + 2) in
+  let* l := checked_i 128 (l1 + hi5) in
+  if l <=? 0 then Some Lt else
+  let* xx := NatLimbs.mul_z (rat_num x) (rat_den y) in
+  let* yy := NatLimbs.mul_z (rat_num y) (rat_den x) in
+  let* b := checked_i 128 (rat_e2 x - rat_e2 y) in
+  if rat_e5 y <=? rat_e5 x then rat_cmp_pow5 xx a b yy loop_only
+  else
+    let* nb := checked_i 128 (- b) in
+    let* o := rat_cmp_pow5 yy a nb xx loop_only in
+    Some (CompOpp o).
+
+(** [fn cmp_abs(x: &Rat, y: &Rat) -> Ordering] *)
+Definition rat_cmp_abs (x y : Rat) : option comparison := rat_cmp_abs_with x y false.
+
+(** [fn cmp(&self, other: &Self) -> Ordering] of [impl Ord for Rat], where
+    [s.cmp(&t)] of [i32]s is [Z.compare s t]. *)
+Definition rat_cmp (x y : Rat) : option comparison :=
+  let s := rat_sign x in
+  let t := rat_sign y in
+  if negb (s =? t) || (s =? 0) then Some (Z.compare s t)
+  else if 0 <? s then rat_cmp_abs x y
+  else rat_cmp_abs y x.
 
 (** [enum Number { NegInfinity, Rational(Rat), Infinity }], and
     [fn neg(self) -> Self] of [impl Neg for Number], which negates a [Rat]
@@ -7904,8 +8058,11 @@ Definition number_neg (n : Number) : Number :=
 
 (** [a <= b] for [Number]s, by the derived [PartialOrd], which compares
     the variants in the order of their declaration, and two [Rational]s by
-    [impl Ord for Rat], which compares their values. That [impl Ord for
-    Rat] compares the values is tested, not proved. *)
+    [impl Ord for Rat], which compares their values: [rat_cmp_correct] in
+    [RatOrd.v] shows that [rat_cmp], its model, gives the [Rcompare] of
+    the values of two [Rat]s with [rat_ok] whose [num] and [den] are below
+    [2 ^ 2 ^ 61], so that [a <= b], whether [a.partial_cmp(&b)] is not
+    [Greater], is [Rle] of the values. *)
 Definition number_le (a b : Number) : Prop :=
   match a, b with
   | NegInfinity, _ => True

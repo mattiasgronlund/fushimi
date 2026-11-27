@@ -50,8 +50,9 @@ enum Number {
     // compared by value, for the proofs of the conversions of this file in
     // `rocq/theories/ParseRound.v`, `rocq/theories/ParseHull.v`,
     // `rocq/theories/ParseExact.v` and `rocq/theories/ParseDec.v`, so it has to be
-    // updated along with them. That `impl Ord for Rat` compares by value is tested, not
-    // proved.
+    // updated along with them. `rat_cmp_correct` in `rocq/theories/RatOrd.v` shows that
+    // `impl Ord for Rat` compares by value, for numerators and denominators of at most 2^61
+    // bits.
     NegInfinity,
     Rational(Rat),
     Infinity,

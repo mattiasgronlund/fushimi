@@ -6,7 +6,9 @@
 // `cmp_abs` first decides from the numbers of bits and the exponents alone. Only when the two
 // magnitudes are within a factor of 2^6 of each other does it need the power of 5 of the
 // difference of the exponents, which it computes exactly where the two can be equal, and bounds
-// with more and more bits of otherwise.
+// with more and more bits of otherwise. `rocq/theories/RatOrd.v` and `rocq/theories/RatPow5.v`
+// prove that `impl Ord for Rat` compares the values of two `Rat`s whose numerators and
+// denominators have at most 2^61 bits.
 
 use crate::nat::Nat;
 use std::cmp::Ordering;
@@ -46,6 +48,8 @@ impl Rat {
 
     /// -1, 0 or 1 as `self` is negative, zero or positive.
     fn sign(&self) -> i32 {
+        // `rocq/theories/Model.v` transcribes this function as `rat_sign`, so it has to be
+        // updated along with it.
         if self.num.is_zero() {
             0
         } else if self.neg {
@@ -70,12 +74,16 @@ impl std::ops::Neg for Rat {
 }
 
 // `floor(log2(5) * 2^64)`, which `log2_5_constants` below checks with MPFR. log2(5) is
-// irrational, so `LOG2_5_LO < log2(5) * 2^64 < LOG2_5_HI`.
+// irrational, so `LOG2_5_LO < log2(5) * 2^64 < LOG2_5_HI`. `rocq/theories/Model.v` transcribes
+// both, so they have to be updated along with it.
 const LOG2_5_LO: u128 = 0x2_5269_e12f_346e_2bf9;
 const LOG2_5_HI: u128 = LOG2_5_LO + 1;
 
 // Integers `lo` and `hi` with `lo <= m * log2(5) <= hi` and `hi - lo <= 2`.
 fn log2_5_bounds(m: u32) -> (i128, i128) {
+    // `rocq/theories/Model.v` transcribes this function as `rat_log2_5_bounds`, and
+    // `log2_5_bounds_correct` in `rocq/theories/RatOrd.v` shows that it returns such bounds,
+    // so it has to be updated along with them.
     let m = u128::from(m);
     // m * LOG2_5_HI + 2^64 - 1 < 2^32 * 2^66 + 2^64 fits a `u128`. `>> 64` rounds down, and
     // adding 2^64 - 1 first rounds up. As m * (LOG2_5_HI - LOG2_5_LO) = m < 2^64, the two
@@ -88,12 +96,18 @@ fn log2_5_bounds(m: u32) -> (i128, i128) {
 
 /// `|x|` against `|y|`, for nonzero `x` and `y`.
 fn cmp_abs(x: &Rat, y: &Rat) -> Ordering {
+    // `rocq/theories/Model.v` transcribes this function as `rat_cmp_abs`, so it has to be
+    // updated along with it.
     cmp_abs_with(x, y, false)
 }
 
 // `cmp_abs(x, y)`. If `loop_only`, `cmp_pow5` bounds every power of 5 but 5^0 with its loop,
 // which lets the tests reach the loop with small numbers.
 fn cmp_abs_with(x: &Rat, y: &Rat, loop_only: bool) -> Ordering {
+    // `rocq/theories/Model.v` transcribes this function as `rat_cmp_abs_with`, and
+    // `cmp_abs_with_correct` in `rocq/theories/RatOrd.v` shows that it compares `|x|` with
+    // `|y|` where their numerators and denominators have at most 2^61 bits, so it has to be
+    // updated along with them.
     let bits = |n: &Nat| i128::from(n.bits());
     // A nonzero `n` of `b` bits has b - 1 <= log2(n) < b, so log2(num / den) is in
     // (bits(num) - bits(den) - 1, bits(num) - bits(den) + 1), and log2|x| - log2|y| is in
@@ -124,6 +138,11 @@ fn cmp_abs_with(x: &Rat, y: &Rat, loop_only: bool) -> Ordering {
 
 // `x * 5^a * 2^b` against `y`, for nonzero `x` and `y`.
 fn cmp_pow5(x: &Nat, a: u32, b: i128, y: &Nat, loop_only: bool) -> Ordering {
+    // `rocq/theories/Model.v` transcribes this function as `rat_cmp_pow5`, and its `loop` as
+    // `rat_cmp_pow5_loop`, and `cmp_pow5_correct` in `rocq/theories/RatPow5.v` shows that it
+    // compares `x * 5^a * 2^b` with `y` for `x` and `y` of at most 2^62 bits and
+    // `|b| < 2^32`, so it has to be updated along with them.
+    //
     // If the two are equal, 5^a divides `y`, as 5 and 2 are coprime, so 5^a <= y < 2^bits(y)
     // and a < bits(y). Up to this limit, which is above that, 5^a is computed exactly, in time
     // quadratic in the bits of `x` and `y`.
@@ -156,6 +175,11 @@ fn cmp_pow5(x: &Nat, a: u32, b: i128, y: &Nat, loop_only: bool) -> Ordering {
 // `(m, k, exact)` with `m * 2^k <= 5^a`, or `m * 2^k >= 5^a` if `up`, where `m` has at most
 // `p + 1` bits, and `exact` is true exactly when `m * 2^k = 5^a`.
 fn pow5_bound(a: u32, p: u64, up: bool) -> (Nat, i128, bool) {
+    // `rocq/theories/Model.v` transcribes this function as `rat_pow5_bound`, and its `for`
+    // loop as `rat_pow5_bound_loop`, and `pow5_bound_correct` in `rocq/theories/RatPow5.v`
+    // shows that it returns such bounds for `1 <= p <= 2^34`, so it has to be updated along
+    // with them.
+    //
     // Binary powering from the top bit of `a` down, where each step cuts `m` to its top `p`
     // bits, rounded down, or up if `up`. Squares and products of lower (upper) bounds of
     // positive numbers are lower (upper) bounds of theirs.
@@ -172,7 +196,8 @@ fn pow5_bound(a: u32, p: u64, up: bool) -> (Nat, i128, bool) {
         }
         let s = m.bits().saturating_sub(p);
         if s > 0 {
-            // `Nat` has no right shift: m = q * 2^s + r with 0 <= r < 2^s.
+            // m = q * 2^s + r with 0 <= r < 2^s, by one `div_rem`, which also gives the
+            // remainder that `exact` and `up` need.
             let (q, r) = m.div_rem(&(&one << s));
             exact &= r.is_zero();
             m = if up && !r.is_zero() { &q + &one } else { q };
@@ -184,6 +209,11 @@ fn pow5_bound(a: u32, p: u64, up: bool) -> (Nat, i128, bool) {
 
 // `x * 2^e` against `y`, for nonzero `x` and `y`.
 fn cmp_shifted(x: &Nat, e: i128, y: &Nat) -> Ordering {
+    // `rocq/theories/Model.v` transcribes this function as `rat_cmp_shifted`, and
+    // `cmp_shifted_correct` in `rocq/theories/RatPow5.v` shows that it compares `x * 2^e` with
+    // `y` for `x` and `y` of fewer than 2^64 bits and `|e| < 2^126`, so it has to be updated
+    // along with them.
+    //
     // 2^(bits(n) - 1) <= n < 2^bits(n) for a nonzero `n`, so different numbers of bits
     // decide. Otherwise, `e = bits(y) - bits(x)`, and the shift is at most as wide as `x` or
     // `y`.
@@ -198,6 +228,10 @@ fn cmp_shifted(x: &Nat, e: i128, y: &Nat) -> Ordering {
 
 impl Ord for Rat {
     fn cmp(&self, other: &Self) -> Ordering {
+        // `rocq/theories/Model.v` transcribes this function as `rat_cmp`, and `rat_cmp_correct`
+        // in `rocq/theories/RatOrd.v` shows that it compares the values of `self` and `other`
+        // where their numerators and denominators have at most 2^61 bits, so it has to be
+        // updated along with them.
         let (s, t) = (self.sign(), other.sign());
         if s != t || s == 0 {
             s.cmp(&t)

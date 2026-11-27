@@ -29,12 +29,12 @@
     [SideTheorems.v] and [DyPointSide.v], and those about the exact
     results of the kernel's functions, from [ExpQuadratic.v] to
     [DyAtanExact.v], are required the same way, and so are [FormatCut.v]
-    and [FormatLead.v], on which [FormatDec.v] builds, and the files about
-    the digits that [Nat] reads and writes, from [NatDigits.v] to
-    [NatToDec.v]. [exp_not_quadratic] of [ExpQuadratic.v] is a
-    definition, a premise of the four theorems for [sinh], [cosh],
-    [asinh] and [acosh] and of their forms with a driver, so the lines
-    below do not print it. *)
+    and [FormatLead.v], on which [FormatDec.v] builds, the files about the
+    digits that [Nat] reads and writes, from [NatDigits.v] to
+    [NatToDec.v], and [RatOrd.v], about [impl Ord for Rat].
+    [exp_not_quadratic] of [ExpQuadratic.v] is a definition, a premise of
+    the four theorems for [sinh], [cosh], [asinh] and [acosh] and of their
+    forms with a driver, so the lines below do not print it. *)
 
 From Fushimi Require Import Encoding AddRu SubRu TwoProduct MulRu DivRu SqrtRdRu AddOdd
   EmulatedFma MulAddRuSlow MulAddRu Integer IntegerDec RoundTiesEven Trunc Round Sign Abs MaxMin
@@ -76,7 +76,7 @@ From Fushimi Require KahanMcDonald DyTrigPos SideTight SideTheorems DyPointSide.
 From Fushimi Require ExpQuadratic PowFactor ExpIrrational CosNiven CosIrrational DyExactDriver
   DyExactPoint DyTrigExact DyExpPoint DyExpExact DyLogSeries DyLogPoint DyLogExact DyAtanExact.
 From Fushimi Require FormatCut FormatLead.
-From Fushimi Require NatDigits NatFromDec NatDivTen19 NatToDec.
+From Fushimi Require NatDigits NatFromDec NatDivTen19 NatToDec RatOrd.
 
 Print Assumptions add1_ru_fast_correct.
 Print Assumptions add_ru_correct.
@@ -291,6 +291,8 @@ Print Assumptions NatFromDec.from_dec_correct.
 Print Assumptions NatDivTen19.div_ten19_correct.
 Print Assumptions NatToDec.div_rem_ten19_correct.
 Print Assumptions NatToDec.to_dec_correct.
+Print Assumptions RatOrd.log2_5_bounds_correct.
+Print Assumptions RatOrd.rat_cmp_correct.
 Print Assumptions DyRound.dround_width.
 Print Assumptions DyRound.encl_round_width.
 Print Assumptions DyRound.round_correct.
