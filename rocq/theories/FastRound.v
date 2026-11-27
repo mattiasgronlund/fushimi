@@ -536,7 +536,7 @@ Qed.
 (** For a finite [err >= 0], the three outcomes of the comparisons in
     [dir_step_eq]: [l > err] with the sign bit of [l] clear, [l < -err]
     with it set, or [|l| <= err] and neither. *)
-Local Lemma dir_step_cases :
+Lemma dir_step_cases :
   forall l err : f64, is_finite err = true -> 0 <= B2R err ->
   (gt (fabs l) err = true /\ gt l err = true /\ Z.shiftr (to_bits l) 63 = 0%Z) \/
   (gt (fabs l) err = true /\ gt l err = false /\ lt l (opp err) = true /\
@@ -587,7 +587,7 @@ destruct (is_finite l) eqn:Fl.
       repeat match goal with |- _ /\ _ => split end; vm_compute; reflexivity.
 Qed.
 
-(** For [err >= 0], the step from [h] that [Fast.round_dir] and
+(** For a finite [err >= 0], the step from [h] that [Fast.round_dir] and
     [Fast.round_dir_err] take where [|l| > err], to the bits of [h] plus
     [up] less the sign bit of [l], is the one that the comparisons
     [l > err] and [l < -err] choose, and both fail on the same [l]. *)

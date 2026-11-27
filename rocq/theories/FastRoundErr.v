@@ -232,7 +232,7 @@ intros (HR & HF & _).
 split; [exact HF | exact HR].
 Qed.
 
-(** For an [err >= 0], [Fast.round_dir_err] is the test by the
+(** For a finite [err >= 0], [Fast.round_dir_err] is the test by the
     comparisons [l > err] and [l < -err] after its check of [h]. *)
 Lemma round_dir_err_eq :
   forall h l e err up,
