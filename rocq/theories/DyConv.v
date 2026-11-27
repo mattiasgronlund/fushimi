@@ -12,60 +12,6 @@ Open Scope Z_scope.
 
 (** ** [from_f64] *)
 
-(** [Dyadic.round] of [(-1)^s m 2^e], for an [f64] with [m < 2^53] and
-    [e] in the exponent range of [f64], is exact, as [m] fits in [64 n]
-    bits, and its exponent is within [64 n + 54] of [e]. *)
-Lemma from_f64_round :
-  forall n s m e (x : f64),
-  level_ok n -> 0 <= m < 2 ^ 53 -> -1074 <= e <= 971 ->
-  B2R x = cond_Ropp s (IZR m * bpow radix2 e)%R ->
-  exists d,
-  Dyadic.round n s (m :: nil) e false false = Some d /\ dy_ok n d /\ exp_small d /\
-  Dyadic.dy_R d = B2R x.
-Proof.
-intros n s m e x Hn Hm He Hx.
-pose proof (dprec_bounds n Hn) as Hp.
-assert (Hok : limbs_ok (m :: nil)).
-{ apply limbs_ok_cons. split; [lia | constructor]. }
-assert (Hv : Limbs.val (m :: nil) = m) by (cbn [Limbs.val]; ring).
-assert (Hbits : 0 <= nat_bits m <= 53).
-{ unfold nat_bits. destruct (Z.eqb_spec m 0) as [H0 | H0]; [lia |].
-  pose proof (Z.log2_nonneg m).
-  assert (Z.log2 m < 53) by (apply Z.log2_lt_pow2; lia). lia. }
-destruct (round_correct n s (m :: nil) e false false 0%R Hn Hok eq_refl)
-  as (d & Hd & Hdok & HdR).
-{ right. rewrite Hv. lia. }
-assert (HR : Dyadic.dy_R d = B2R x).
-{ rewrite HdR, Hv, Rplus_0_r, Hx. apply dround_id; [exact Hn |].
-  unfold cond_Ropp. apply format_int; [exact Hn |].
-  rewrite Z.abs_eq by lia.
-  apply Z.lt_le_trans with (2 ^ 53); [lia | apply Z.pow_le_mono_r; lia]. }
-exists d. split; [exact Hd |]. split; [exact Hdok |]. split; [| exact HR].
-unfold exp_small.
-destruct (dy_cases n d Hn Hdok) as [(_ & _ & _ & He0 & _) | (_ & _ & Hb1 & Hb2)];
-  [lia |].
-rewrite HR, Hx, abs_cond_Ropp in Hb1, Hb2.
-assert (H0 : (0 <= IZR m * bpow radix2 e)%R).
-{ apply Rmult_le_pos; [apply IZR_le; lia | apply bpow_ge_0]. }
-rewrite Rabs_pos_eq in Hb1, Hb2 by exact H0.
-(* [2^e <= m 2^e < 2^(e + 53)], as [m] is not 0. *)
-assert (Hm1 : 1 <= m).
-{ destruct (Z.eq_dec m 0) as [E | E]; [| lia].
-  rewrite E, Rmult_0_l in Hb1.
-  pose proof (bpow_gt_0 radix2 (Dyadic.dy_exp d + dprec n - 1)). lra. }
-assert (Hlo : (bpow radix2 e <= IZR m * bpow radix2 e)%R).
-{ rewrite <- (Rmult_1_l (bpow radix2 e)) at 1.
-  apply Rmult_le_compat_r; [apply bpow_ge_0 | apply IZR_le; lia]. }
-assert (Hhi : (IZR m * bpow radix2 e < bpow radix2 (53 + e))%R).
-{ rewrite bpow_plus, <- (IZR_pow2 53) by lia.
-  apply Rmult_lt_compat_r; [apply bpow_gt_0 | apply IZR_lt; lia]. }
-assert (H1 : Dyadic.dy_exp d + dprec n - 1 < 53 + e).
-{ apply (lt_bpow radix2). lra. }
-assert (H2 : e < Dyadic.dy_exp d + dprec n).
-{ apply (lt_bpow radix2). lra. }
-lia.
-Qed.
-
 (** The [Dyadic] that [from_f64] builds from [(-1)^s m 2^e], for an [f64]
     with [m < 2^53] and [e] in the exponent range of [f64]: [m] shifted up to
     the top bit of the top limb, or the zero of [n] limbs for [m = 0], which
