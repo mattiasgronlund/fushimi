@@ -93,8 +93,11 @@ thread_local! {
         const { std::cell::Cell::new((true, 0, 0)) };
 }
 
-/// Enables or disables the fast paths on this thread. Disabled, `round_dir` and `round_near`
-/// return `None`, so that every function computes its result with the kernel.
+/// Enables or disables the fast paths on this thread. Disabled, the rounding tests of this file
+/// (`round_dir`, `round_near` and the others) return `None`, as do the rules that test
+/// `fast_enabled`, so that every function computes with the kernel each result that one of them
+/// would have given. A function's own arms that return before its fast path still return, such
+/// as `away(x, UP)` in `asin_dir_with` at |x| < 2^-27.
 #[cfg(test)]
 pub(crate) fn set_fast_path(enabled: bool) {
     FAST.with(|f| {
