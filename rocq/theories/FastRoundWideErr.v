@@ -313,7 +313,7 @@ Theorem round_dir_sub_err_correct :
   rounds up (y * bpow radix2 e) v.
 Proof.
 intros h l e err p up v y Fh Fl Hrn Hh He Hp Herr Hy Hv.
-destruct (sub_unit_spec e He) as (Fc & Bc & _).
+destruct (sub_unit_spec e He) as (Fc & _ & _).
 destruct (sub_consts e He) as (F2c & R2c & _ & _ & _ & _).
 destruct (sub_err_consts e err p He Hp Herr) as (Fb & Rb & _ & _).
 destruct (sub_common_err h l e p y Fh Fl Hrn Hh He Hp Hy) as (Fs & Hk).
@@ -328,19 +328,42 @@ destruct (ge s (mul Fast.two c)) eqn:G0; [discriminate Hv|].
 pose proof (FastRound.ge_false _ _ Fs F2c G0) as Hs2. rewrite R2c in Hs2.
 destruct (Hk Hs2) as (Fu & Hy0 & N & HN & Hbits & HD1 & HD2).
 apply Rabs_le_inv in HD1. apply Rabs_def2 in HD2.
+(* The field of [s], its bits less those of [C], is [N]. *)
+assert (HL : (Z.land (to_bits s) (Z.shiftl 1 52 - 1) = N)%Z).
+{ change (Z.shiftl 1 52 - 1)%Z with (Z.ones 52).
+  rewrite Z.land_ones, Hbits by lia.
+  rewrite Z.add_comm, Z.mod_add, Z.mod_small by lia. reflexivity. }
+(* The step [N + up - sign] by the sign bit of [u], where [|u| > b], is the
+   one that the comparisons [u > b] and [u < -b] choose, and both fail on
+   the same [u], as [b >= 0] ([FastRound.dir_step_cases]), as in
+   [FastRoundSub.round_dir_sub_correct]. *)
+assert (Pb : 0 <= B2R b).
+{ rewrite Rb. apply Rmult_le_pos; [apply Rmult_le_pos; [lra | apply bpow_ge_0] | apply bpow_ge_0]. }
+assert (E : (if gt (fabs u) b
+             then Some (Z.land (to_bits s) (Z.shiftl 1 52 - 1) + Z.b2z up
+                        - Z.shiftr (to_bits u) 63)%Z
+             else None) =
+            (if gt u b then Some (if up then (N + 1)%Z else N)
+             else if lt u (opp b) then Some (if up then (N - 1 + 1)%Z else (N - 1)%Z)
+             else None)).
+{ rewrite HL.
+  destruct (FastRound.dir_step_cases u b Fb Pb)
+    as [(A & B & C) | [(A & B & C & D) | (A & B & C)]].
+  - rewrite A, B, C. cbv beta iota. destruct up; cbn [Z.b2z]; f_equal; ring.
+  - rewrite A, B, C, D. cbv beta iota. destruct up; cbn [Z.b2z]; f_equal; ring.
+  - rewrite A, B, C. reflexivity. }
+rewrite E in Hv. clear E.
 destruct (gt u b) eqn:G1.
 - (* [u > b]: [y - N g >= u - b > 0], so [y] is in [(N g, (N + 1) g)],
-     whose ends are [s - C] and its successor, the bits of [s] and [s + 1]
-     less those of [C]. *)
+     whose ends are [s - C] and its successor, the [f64]s of bits [N] and
+     [N + 1]. *)
   pose proof (FastRound.gt_true _ _ Fu Fb G1) as Hub. rewrite Rb in Hub.
   injection Hv as <-.
-  replace (to_bits (if up then from_bits (to_bits s + 1) else s) - to_bits c)%Z
-    with (if up then (N + 1)%Z else N).
-  2: { destruct up; [rewrite to_from_bits by lia|]; rewrite Hbits, Bc; ring. }
   apply (sub_bracket e N up y); [lia | fold g; lra].
 - destruct (lt u (opp b)) eqn:G2; [|discriminate Hv].
   (* [u < -b]: [y - N g <= u + b < 0], so [y] is in [((N - 1) g, N g)],
-     the bits of [s - 1] and [s] less those of [C]; [N >= 1] as [y > 0]. *)
+     whose ends are the [f64]s of bits [N - 1] and [N]; [N >= 1] as
+     [y > 0]. *)
   assert (Fob : is_finite (opp b) = true) by (unfold opp; rewrite is_finite_Bopp; exact Fb).
   pose proof (DyExpRules.lt_R _ _ Fu Fob G2) as Hub.
   unfold opp in Hub. rewrite B2R_Bopp, Rb in Hub.
@@ -349,9 +372,6 @@ destruct (gt u b) eqn:G1.
   { destruct (Z_lt_le_dec 0 N) as [HN0|HN0]; [lia|]. exfalso.
     apply IZR_le in HN0. nra. }
   injection Hv as <-.
-  replace (to_bits (if up then s else from_bits (to_bits s - 1)) - to_bits c)%Z
-    with (if up then (N - 1 + 1)%Z else (N - 1)%Z).
-  2: { destruct up; [|rewrite to_from_bits by lia]; rewrite Hbits, Bc; ring. }
   apply (sub_bracket e (N - 1) up y); [lia|]. fold g. rewrite minus_IZR. lra.
 Qed.
 

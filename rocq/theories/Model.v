@@ -2158,18 +2158,27 @@ Definition round_near_wide (h l : f64) (e : Z) : option f64 :=
   else round_near h l e.
 
 (** [fn round_dir_sub_err(h: f64, l: f64, e: i64, err: f64, up: bool) ->
-    Option<f64>] and [fn round_near_sub_err(h: f64, l: f64, e: i64, err:
-    f64) -> Option<f64>], with the bits as in [round_near_sub]. *)
+    Option<f64>], where [r] is the bits of the result, [s.to_bits() &
+    ((1 << 52) - 1)] is [Z.land (to_bits s) (Z.shiftl 1 52 - 1)], [up as
+    u64] and [u.to_bits() >> 63] are as in [round_dir_sub], and the sum
+    [(s.to_bits() & ((1 << 52) - 1)) + up as u64 - (u.to_bits() >> 63)]
+    is the same sum of integers: it stays within [u64] for the arguments
+    that [FastRoundWideErr.round_dir_sub_err_correct] assumes. As in
+    [round_dir_sub], the step by the sign bit of [u] is the one that the
+    comparisons [u > b] and [u < -b] choose. *)
 Definition round_dir_sub_err (h l : f64) (e : Z) (err : f64) (up : bool) : option f64 :=
   let c := sub_unit e in
   let '(s, t) := fast_two_sum c h in
   let u := add t l in
   let b := mul c (mul two err) in
   let r := if ge s (mul two c) then None
-    else if gt u b then Some (if up then from_bits (to_bits s + 1) else s)
-    else if lt u (opp b) then Some (if up then s else from_bits (to_bits s - 1))
+    else if gt (fabs u) b
+    then Some (Z.land (to_bits s) (Z.shiftl 1 52 - 1) + Z.b2z up - Z.shiftr (to_bits u) 63)
     else None in
-  match r with Some r => Some (from_bits (to_bits r - to_bits c)) | None => None end.
+  match r with Some r => Some (from_bits r) | None => None end.
+
+(** [fn round_near_sub_err(h: f64, l: f64, e: i64, err: f64) ->
+    Option<f64>], with the bits as in [round_near_sub]. *)
 Definition round_near_sub_err (h l : f64) (e : Z) (err : f64) : option f64 :=
   let c := sub_unit e in
   let '(s, t) := fast_two_sum c h in
