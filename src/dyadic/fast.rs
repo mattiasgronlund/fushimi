@@ -7,7 +7,8 @@
 // negative (`round_dir_signed`, `round_near_signed`), `src/dyadic/trig.rs` for sin, cos and tan,
 // with the same tests, `src/dyadic/pow.rs` for x^y and x^n, `src/dyadic/atan.rs` for atan,
 // atan2, asin and acos, which put the sign back themselves, and `src/dyadic/root.rs` for cbrt,
-// which puts the sign back itself too, and hypot.
+// which puts the sign back itself too, and hypot. sinh and tanh round f(|x|) and put the sign
+// of x back on the result with `xor_sign`, rounded down, up or to nearest.
 //
 // A fast path computes a scaled result y = f(x) 2^-e, for an integer e in [-1021, 1022], as an
 // unevaluated sum h + l of two `f64`s with h = RN(h + l), 1/2 < h < 2, and a proved bound
@@ -53,6 +54,8 @@
 // `rocq/theories/FastRoundErr.v` `two_sum`, `normalize`, `round_dir_err` and `round_near_err`,
 // `rocq/theories/FastDiv.v` `dd_div`, `rocq/theories/FastDdSqrt.v` `dd_sqrt`,
 // `rocq/theories/FastSign.v` `round_dir_signed` and `round_near_signed`,
+// `rocq/theories/Encoding.v` that `xor_sign` negates r where s has its sign bit set
+// (`xor_sign_eq`),
 // `rocq/theories/FastRoundSub.v` `round_dir_sub` and `round_near_sub`, and
 // `rocq/theories/FastRoundWide.v` `round_dir_wide` and `round_near_wide`, and `round_dir_err`
 // and `round_near_err` at e = 1023 and at e = -1022 with h > 1.
@@ -505,6 +508,24 @@ pub(crate) fn round_near_wide_err(h: f64, l: f64, e: i64, err: f64) -> Option<f6
     }
 }
 
+/// r with its sign bit xored with that of s: -r where s has its sign bit set, and r otherwise,
+/// for every r, NaNs and infinities included.
+// sinh and tanh (the top of this file) round f(|x|) and put the sign of x back with this, rather
+// than with `if x < 0.0 { -r } else { r }`.
+// Rounded down or up, there the compare x < 0 also chose the direction of the rounding, and
+// with its two uses LLVM lowered the select to a jump on the sign of x, which is unpredictable
+// on arguments of mixed signs (row 117).
+// Built for Haswell, with the direction `up != x.is_sign_negative()`, that direction and this
+// mask share one test of the sign bit of x, and the restore takes no jump. In a crate that
+// links `cr`, built for Haswell, sinh and tanh rounded down or up then take one conditional
+// branch fewer per call on x uniform in [-10, 10), 0.50 fewer mispredicted ones, and 0.51
+// (sinh) and 1.51 (tanh) fewer instructions. Rounded to nearest, both take 1.00 fewer
+// instructions per call there, and as many branches (cachegrind, row 192).
+#[inline(always)]
+pub(crate) fn xor_sign(r: f64, s: f64) -> f64 {
+    f64::from_bits(r.to_bits() ^ (s.to_bits() & (1 << 63)))
+}
+
 /// `round_dir` for an h of either sign, with 1/2 < |h| < 2: where h < 0, the rounding of y 2^e
 /// is the negative of the rounding of -y 2^e in the other direction, which `round_dir` decides
 /// from -h and -l.
@@ -840,6 +861,58 @@ mod tests {
         for _ in 0..100_000 {
             let (h, l) = random_hl(&mut rng);
             check_sub_err(h, l, errs[rng.below(4) as usize]);
+        }
+    }
+
+    // `xor_sign` is the negation of r where s has its sign bit set, by the bits of the results:
+    // at r = ±0, ±∞, NaNs of either sign, the extremes and random r, and s of either sign,
+    // ±0, ±∞ and NaNs included.
+    #[test]
+    fn xor_sign_is_neg_by_sign_of_s() {
+        let neg_nan = f64::from_bits(f64::NAN.to_bits() | 1 << 63);
+        let special = [
+            0.0,
+            f64::INFINITY,
+            f64::NAN,
+            f64::MAX,
+            f64::MIN_POSITIVE,
+            f64::from_bits(1),
+            1.0,
+            1.5,
+        ];
+        let mut rs = Vec::new();
+        for r in special {
+            rs.push(r);
+            rs.push(-r);
+        }
+        rs.push(neg_nan);
+        let mut rng = Rng(3192);
+        for _ in 0..10_000 {
+            rs.push(f64::from_bits(rng.next()));
+        }
+        let ss = [
+            0.0,
+            -0.0,
+            1.0,
+            -1.0,
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+            f64::NAN,
+            neg_nan,
+            f64::from_bits(1),
+            -f64::from_bits(1),
+            f64::MAX,
+            f64::MIN,
+        ];
+        for r in rs {
+            for s in ss {
+                let want = if s.is_sign_negative() { -r } else { r };
+                assert_eq!(
+                    xor_sign(r, s).to_bits(),
+                    want.to_bits(),
+                    "xor_sign({r:e}, {s:e})"
+                );
+            }
         }
     }
 }

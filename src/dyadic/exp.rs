@@ -123,7 +123,7 @@ use super::{
     consts::{ln10, ln2},
     fast::{
         dd_div, fast_two_sum, normalize, round_dir, round_dir_err, round_dir_wide, round_near,
-        round_near_err, round_near_wide, two_sum,
+        round_near_err, round_near_wide, two_sum, xor_sign,
     },
     level::level_entry,
     ziv, ziv_near, Dyadic, Encl, Eval,
@@ -817,11 +817,24 @@ fn fast_tanh_pos<const FMA: bool>(t: f64) -> Option<(f64, f64, i64, f64)> {
 // sinh x, cosh t for t = |x| and tanh x rounded toward +∞ if `up` and toward -∞ otherwise, and
 // to nearest, by the fast paths, or `None` where the rounding test fails or the argument is
 // out of their range. sinh and tanh are odd: for x < 0, f(x) rounded up is -f(-x) rounded down.
+// The direction and the sign of the result come from the sign bit of x, with no jump on it
+// (`xor_sign`). That differs from x < 0 only at x = -0, which the rules for a tiny |x| take
+// before the fast paths, and at a NaN with its sign bit set, which fails the test of |x| in
+// front of them.
+// In a crate that links `cr`, built for Haswell, sinh and tanh rounded down or up then took one
+// conditional branch fewer per call than with a jump on x < 0, on sets of 4,096 calls that take
+// the fast path (0.95 fewer for tanh in [-20, 20)). sinh took as many instructions per call on
+// x > 0, in [0.1, 10) and [709, 710.47), 1.00 fewer in [-710.47, -709), and 0.51 fewer, with
+// half a mispredicted branch fewer, in [-10, 10) and [-710.47, 710.47), of mixed signs. tanh
+// took 1.00 fewer in [0.1, 10), and 1.51 and 1.43 fewer, with 0.50 and 0.47 fewer mispredicted
+// ones, in [-10, 10) and [-20, 20). sinh and tanh to nearest took 1.00 fewer instructions per
+// call on each of those sets, as the restore takes 3 where the select it replaces, a blend with
+// no jump either, took 4 (cachegrind, row 192).
 #[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 fn fast_sinh_dir<const FMA: bool>(x: f64, up: bool) -> Option<f64> {
     let (h, l, e, err) = fast_sinh_pos::<FMA>(x.abs())?;
-    let r = round_dir_err(h, l, e, err, up != (x < 0.0))?;
-    Some(if x < 0.0 { -r } else { r })
+    let r = round_dir_err(h, l, e, err, up != x.is_sign_negative())?;
+    Some(xor_sign(r, x))
 }
 
 #[cfg_attr(fushimi_kernel_dispatch, inline(always))]
@@ -838,8 +851,8 @@ fn fast_cosh_dir<const FMA: bool>(t: f64, up: bool) -> Option<f64> {
 #[inline(always)]
 fn fast_tanh_dir<const FMA: bool>(x: f64, up: bool) -> Option<f64> {
     let (h, l, e, err) = fast_tanh_pos::<FMA>(x.abs())?;
-    let r = round_dir_err(h, l, e, err, up != (x < 0.0))?;
-    Some(if x < 0.0 { -r } else { r })
+    let r = round_dir_err(h, l, e, err, up != x.is_sign_negative())?;
+    Some(xor_sign(r, x))
 }
 
 // Always inlined, also in a build without the dispatch, where `sinh_near` is inlined in
@@ -850,7 +863,7 @@ fn fast_tanh_dir<const FMA: bool>(x: f64, up: bool) -> Option<f64> {
 fn fast_sinh_near<const FMA: bool>(x: f64) -> Option<f64> {
     let (h, l, e, err) = fast_sinh_pos::<FMA>(x.abs())?;
     let r = round_near_err(h, l, e, err)?;
-    Some(if x < 0.0 { -r } else { r })
+    Some(xor_sign(r, x))
 }
 
 #[cfg_attr(fushimi_kernel_dispatch, inline(always))]
@@ -864,7 +877,7 @@ fn fast_cosh_near<const FMA: bool>(t: f64) -> Option<f64> {
 fn fast_tanh_near<const FMA: bool>(x: f64) -> Option<f64> {
     let (h, l, e, err) = fast_tanh_pos::<FMA>(x.abs())?;
     let r = round_near_err(h, l, e, err)?;
-    Some(if x < 0.0 { -r } else { r })
+    Some(xor_sign(r, x))
 }
 
 // The first level of `ziv` and `ziv_near` at the arguments that the rules and the fast path

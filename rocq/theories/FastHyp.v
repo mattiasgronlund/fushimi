@@ -16,7 +16,7 @@ From Stdlib Require Import ZArith Reals Lra Lia.
 From Flocq Require Import Core.Core IEEE754.BinarySingleNaN.
 From Fushimi Require Import Model Mpfr Elementary ExpReal TwoSum DyDriver NearF64 NearCells
   FastRound FastRoundErr FastDiv FastHypPos FastCoshPos FastTanhPos.
-From Fushimi Require DyExp DyPown FastRoundWide.
+From Fushimi Require DyExp DyPown FastRoundWide Encoding.
 
 Open Scope R_scope.
 
@@ -99,18 +99,20 @@ exact (FastRoundWide.round_near_err_wide_correct h l e err p v _ Fh Fl Eh He Hp 
 Qed.
 
 (** An odd [f] at [x < 0] is [-f(|x|)]: rounding [f(|x|)] in the other
-    direction and negating it rounds [f(x)] ([DyPown.rounds_odd]). [x =
-    -0] is not below [0] and takes the branch of [x >= 0]. [f(|x|)] is
-    rounded as in [pos_dir] and [pos_near], from [odd_bound] at [|x| >=
-    2^-27]. *)
+    direction and negating it rounds [f(x)] ([DyPown.rounds_odd]). The
+    direction and the negation take the sign bit of [x], which is the test
+    [x < 0] as [x <> 0] here ([Encoding.Bsign_lt_zero]), and
+    [Fast.xor_sign r x] negates [r] where it is set
+    ([Encoding.xor_sign_eq]). [f(|x|)] is rounded as in [pos_dir] and
+    [pos_near], from [odd_bound] at [|x| >= 2^-27]. *)
 Local Lemma odd_dir :
   forall f pos x up v,
   odd_bound f pos -> (forall r, f (- r) = - f r) -> is_finite x = true ->
   bpow radix2 (-27) <= Rabs (B2R x) ->
   match pos (fabs x) with
   | Some (h, l, e, err) =>
-    match Fast.round_dir_err h l e err (xorb up (lt x zero)) with
-    | Some r => Some (if lt x zero then opp r else r)
+    match Fast.round_dir_err h l e err (xorb up (Bsign x)) with
+    | Some r => Some (Fast.xor_sign r x)
     | None => None
     end
   | None => None
@@ -118,9 +120,14 @@ Local Lemma odd_dir :
   rounds up (f (B2R x)) v.
 Proof.
 intros f pos x up v P O Fx Hx H.
+assert (Hs : Bsign x = lt x zero).
+{ apply Encoding.Bsign_lt_zero; [exact Fx |]. intros Hz.
+  rewrite Hz, Rabs_R0 in Hx. pose proof (bpow_gt_0 radix2 (-27)). lra. }
 destruct (fabs_facts x Fx) as (Ft & Et & Ht). rewrite <- Et in Hx.
 destruct (pos (fabs x)) as [[[[h l] e] err]|] eqn:E; [|discriminate H].
+rewrite Hs in H.
 destruct (Fast.round_dir_err h l e err (xorb up (lt x zero))) as [r|] eqn:R; [|discriminate H].
+rewrite Encoding.xor_sign_eq, Hs in H.
 injection H as <-.
 assert (Hr : rounds (xorb up (lt x zero)) (f (B2R (fabs x))) r).
 { destruct (P (fabs x) h l e err Ft Ht Hx E) as (Fh & Fl & Eh & He & p & Hp & Herr & Hb).
@@ -143,7 +150,7 @@ Local Lemma odd_near :
   match pos (fabs x) with
   | Some (h, l, e, err) =>
     match Fast.round_near_err h l e err with
-    | Some r => Some (if lt x zero then opp r else r)
+    | Some r => Some (Fast.xor_sign r x)
     | None => None
     end
   | None => None
@@ -151,9 +158,13 @@ Local Lemma odd_near :
   near_round (f (B2R x)) v.
 Proof.
 intros f pos x v P O Fx Hx H.
+assert (Hs : Bsign x = lt x zero).
+{ apply Encoding.Bsign_lt_zero; [exact Fx |]. intros Hz.
+  rewrite Hz, Rabs_R0 in Hx. pose proof (bpow_gt_0 radix2 (-27)). lra. }
 destruct (fabs_facts x Fx) as (Ft & Et & Ht). rewrite <- Et in Hx.
 destruct (pos (fabs x)) as [[[[h l] e] err]|] eqn:E; [|discriminate H].
 destruct (Fast.round_near_err h l e err) as [r|] eqn:R; [|discriminate H].
+rewrite Encoding.xor_sign_eq, Hs in H.
 injection H as <-.
 assert (Hr : near_round (f (B2R (fabs x))) r).
 { destruct (P (fabs x) h l e err Ft Ht Hx E) as (Fh & Fl & Eh & He & p & Hp & Herr & Hb).

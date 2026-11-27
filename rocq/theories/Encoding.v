@@ -303,6 +303,88 @@ destruct x as [s|s| |s m e H]; try discriminate; cbn [Bsign];
     unfold sign_bit; destruct s; cbv beta iota in Hj; zlia.
 Qed.
 
+(** ** The sign bit *)
+
+(** [Fast.xor_sign r s], [r] with its sign bit xored with that of [s], is
+    [opp r] where [Bsign s] and [r] otherwise, for every [r] and [s]: the
+    model's NaN encodes with its sign bit clear, and its [opp] is
+    itself. *)
+Lemma xor_sign_eq :
+  forall r s, Fast.xor_sign r s = if Bsign s then opp r else r.
+Proof.
+intros r s.
+unfold Fast.xor_sign.
+change (Z.shiftl 1 63) with (2^63).
+(* [c < 2^63] has no bit in common with [2^63], as [c = c & (2^63 - 1)]. *)
+assert (Hc63 : forall c, 0 <= c < 2^63 -> Z.land c (2^63) = 0).
+{ intros c Hc.
+  replace c with (Z.land c (Z.ones 63))
+    by (rewrite Z.land_ones by easy; apply Z.mod_small; zlia).
+  rewrite <- Z.land_assoc.
+  change (Z.land (Z.ones 63) (2^63)) with 0.
+  apply Z.land_0_r. }
+(* The mask keeps the sign bit of [s]: that of [sign_bit b + c] for a
+   finite [s], and a closed computation for the infinities and the NaN. *)
+assert (Hs : Z.land (to_bits s) (2^63) = sign_bit (Bsign s)).
+{ destruct (is_finite s) eqn:Fs.
+  - destruct (to_bits_finite s Fs) as (c & Hc & Hb).
+    rewrite Hb.
+    assert (H0 : Z.land c (2^63) = 0) by (apply Hc63; zlia).
+    destruct (Bsign s); unfold sign_bit.
+    + rewrite Z.land_comm in H0.
+      rewrite (Z.add_nocarry_lxor (2^63) c), Z.lxor_lor by exact H0.
+      rewrite Z.land_lor_distr_l, Z.land_diag, Z.land_comm, H0.
+      apply Z.lor_0_r.
+    + rewrite Z.add_0_l. exact H0.
+  - destruct s as [b|b| |b m e H]; try discriminate Fs.
+    + destruct b; vm_compute; reflexivity.
+    + vm_compute; reflexivity. }
+rewrite Hs.
+destruct (Bsign s); unfold sign_bit.
+2: { rewrite Z.lxor_0_r. apply from_to_bits. }
+destruct (is_finite r) eqn:Fr.
+2: { destruct r as [b|b| |b m e H]; try discriminate Fr.
+     - destruct b; apply B2SF_inj; vm_compute; reflexivity.
+     - apply B2SF_inj; vm_compute; reflexivity. }
+(* Xoring [2^63] into the pattern [sign_bit b + c] of a finite [r] flips
+   [b], which gives a finite float with the value [- B2R r]. *)
+destruct (to_bits_finite r Fr) as (c & Hc & Hb).
+destruct (from_bits_finite (Bsign r) c Hc) as (_ & _ & Er).
+rewrite <- Hb, from_to_bits in Er.
+assert (H0 : Z.land c (2^63) = 0) by (apply Hc63; zlia).
+assert (Hx : Z.lxor (to_bits r) (2^63) = sign_bit (negb (Bsign r)) + c).
+{ rewrite Hb. destruct (Bsign r); cbn [negb]; unfold sign_bit.
+  - rewrite (Z.add_comm (2^63) c), (Z.add_nocarry_lxor c (2^63)) by exact H0.
+    rewrite Z.lxor_assoc, Z.lxor_nilpotent, Z.lxor_0_r.
+    ring.
+  - rewrite Z.add_0_l, <- (Z.add_nocarry_lxor c (2^63)) by exact H0.
+    ring. }
+rewrite Hx.
+destruct (from_bits_finite (negb (Bsign r)) c Hc) as (F1 & S1 & E1).
+unfold opp. apply B2R_Bsign_inj.
+- exact F1.
+- rewrite is_finite_Bopp. exact Fr.
+- rewrite B2R_Bopp, E1, Er.
+  destruct (Bsign r); cbn [negb]; ring.
+- rewrite Bsign_Bopp, S1 by (revert Fr; destruct r; easy).
+  reflexivity.
+Qed.
+
+(** The sign of a finite nonzero [x] is the test [x < 0]. *)
+Lemma Bsign_lt_zero :
+  forall x, is_finite x = true -> B2R x <> 0%R -> Bsign x = lt x zero.
+Proof.
+(* As [StepUp.Bsign_B2R], which this file cannot import. *)
+intros x Fx Hx.
+unfold lt. rewrite Bltb_correct by easy.
+change (B2R zero) with 0%R.
+destruct x as [s|s| |s m e H]; try discriminate Fx.
+- exfalso. now apply Hx.
+- cbn [B2R Bsign]. destruct s.
+  + symmetry. apply Rlt_bool_true. apply F2R_lt_0. cbn [Fnum SpecFloat.cond_Zopp]. lia.
+  + symmetry. apply Rlt_bool_false. apply F2R_ge_0. cbn [Fnum SpecFloat.cond_Zopp]. lia.
+Qed.
+
 (** ** [exponent] and [is_finite] *)
 
 Lemma exponent_to_bits :

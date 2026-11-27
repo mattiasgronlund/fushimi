@@ -2204,6 +2204,13 @@ Definition round_near_wide_err (h l : f64) (e : Z) (err : f64) : option f64 :=
   else if (e <? -1022)%Z || ((e =? -1022)%Z && le h one) then round_near_sub_err h l e err
   else round_near_err h l e err.
 
+(** [pub(crate) fn xor_sign(r: f64, s: f64) -> f64], where [1 << 63] is
+    [Z.shiftl 1 63], and [^] and [&] of [u64]s are [Z.lxor] and [Z.land]
+    of the nonnegative integers. [Encoding.xor_sign_eq] shows that it is
+    [opp r] where [Bsign s] and [r] otherwise. *)
+Definition xor_sign (r s : f64) : f64 :=
+  from_bits (Z.lxor (to_bits r) (Z.land (to_bits s) (Z.shiftl 1 63))).
+
 (** [pub(crate) fn round_dir_signed(h: f64, l: f64, e: i64, up: bool) ->
     Option<f64>] and [pub(crate) fn round_near_signed(h: f64, l: f64, e:
     i64) -> Option<f64>], where [.map(|r| -r)] is the [match].
@@ -2886,13 +2893,14 @@ Definition fast_tanh_pos (fma : bool) (t : f64) : option (f64 * f64 * Z * f64) :
 
 (** [fn fast_sinh_dir(x: f64, up: bool) -> Option<f64>], the same for
     [cosh] and [tanh], and [fn fast_sinh_near(x: f64) -> Option<f64>] and
-    the others, where [x.abs()] is [fabs x], and [up != (x < 0.0)] is
-    [xorb up (lt x zero)]. [FastHyp.v] proves them. *)
+    the others, where [x.abs()] is [fabs x], and [up != x.is_sign_negative()]
+    is [xorb up (Bsign x)], as [x] is not NaN here. [FastHyp.v] proves
+    them. *)
 Definition fast_sinh_dir (fma : bool) (x : f64) (up : bool) : option f64 :=
   match fast_sinh_pos fma (fabs x) with
   | Some (h, l, e, err) =>
-    match Fast.round_dir_err h l e err (xorb up (lt x zero)) with
-    | Some r => Some (if lt x zero then opp r else r)
+    match Fast.round_dir_err h l e err (xorb up (Bsign x)) with
+    | Some r => Some (Fast.xor_sign r x)
     | None => None
     end
   | None => None
@@ -2905,8 +2913,8 @@ Definition fast_cosh_dir (fma : bool) (t : f64) (up : bool) : option f64 :=
 Definition fast_tanh_dir (fma : bool) (x : f64) (up : bool) : option f64 :=
   match fast_tanh_pos fma (fabs x) with
   | Some (h, l, e, err) =>
-    match Fast.round_dir_err h l e err (xorb up (lt x zero)) with
-    | Some r => Some (if lt x zero then opp r else r)
+    match Fast.round_dir_err h l e err (xorb up (Bsign x)) with
+    | Some r => Some (Fast.xor_sign r x)
     | None => None
     end
   | None => None
@@ -2915,7 +2923,7 @@ Definition fast_sinh_near (fma : bool) (x : f64) : option f64 :=
   match fast_sinh_pos fma (fabs x) with
   | Some (h, l, e, err) =>
     match Fast.round_near_err h l e err with
-    | Some r => Some (if lt x zero then opp r else r)
+    | Some r => Some (Fast.xor_sign r x)
     | None => None
     end
   | None => None
@@ -2929,7 +2937,7 @@ Definition fast_tanh_near (fma : bool) (x : f64) : option f64 :=
   match fast_tanh_pos fma (fabs x) with
   | Some (h, l, e, err) =>
     match Fast.round_near_err h l e err with
-    | Some r => Some (if lt x zero then opp r else r)
+    | Some r => Some (Fast.xor_sign r x)
     | None => None
     end
   | None => None
