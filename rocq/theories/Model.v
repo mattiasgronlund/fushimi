@@ -4975,14 +4975,16 @@ Definition fast_acos_val0 (fma : bool) (x : f64) : option (f64 * f64 * Z * f64) 
 (** [fn fast_atan_dir2(x: f64, up: bool) -> Option<f64>], the same for
     [asin], [acos] and [atan2], and [fn fast_atan_near2(x: f64) ->
     Option<f64>] and the others, as [DyadicExp.fast_sinh_dir], where
-    [x.abs()] is [fabs x], and [up != (x < 0.0)] is [xorb up (lt x
-    zero)]. [FastAtan.v] proves those of [atan] and [atan2], and
+    [x.abs()] is [fabs x]. In those of [atan], [up != x.is_sign_negative()]
+    is [xorb up (Bsign x)], as [x] is not NaN here. In those of [asin] and
+    [atan2], [up != (x < 0.0)] is [xorb up (lt x zero)], and the same of
+    [y] in [atan2]. [FastAtan.v] proves those of [atan] and [atan2], and
     [FastAsin.v] those of [asin] and [acos]. *)
 Definition fast_atan_dir2 (fma : bool) (x : f64) (up : bool) : option f64 :=
   match fast_atan_pos fma (fabs x) with
   | Some (h, l, e, err) =>
-    match Fast.round_dir_err h l e err (xorb up (lt x zero)) with
-    | Some r => Some (if lt x zero then opp r else r)
+    match Fast.round_dir_err h l e err (xorb up (Bsign x)) with
+    | Some r => Some (Fast.xor_sign r x)
     | None => None
     end
   | None => None
@@ -5014,7 +5016,7 @@ Definition fast_atan_near2 (fma : bool) (x : f64) : option f64 :=
   match fast_atan_pos fma (fabs x) with
   | Some (h, l, e, err) =>
     match Fast.round_near_err h l e err with
-    | Some r => Some (if lt x zero then opp r else r)
+    | Some r => Some (Fast.xor_sign r x)
     | None => None
     end
   | None => None
@@ -5052,8 +5054,8 @@ Definition fast_atan2_near2 (fma : bool) (y x : f64) : option f64 :=
 Definition fast_atan_dir1 (fma : bool) (x : f64) (up : bool) : option f64 :=
   match fast_atan_pos1 fma (fabs x) with
   | Some (h, l, e, err) =>
-    match Fast.round_dir_err h l e err (xorb up (lt x zero)) with
-    | Some r => Some (if lt x zero then opp r else r)
+    match Fast.round_dir_err h l e err (xorb up (Bsign x)) with
+    | Some r => Some (Fast.xor_sign r x)
     | None => None
     end
   | None => None
@@ -5072,7 +5074,7 @@ Definition fast_atan_near1 (fma : bool) (x : f64) : option f64 :=
   match fast_atan_pos1 fma (fabs x) with
   | Some (h, l, e, err) =>
     match Fast.round_near_err h l e err with
-    | Some r => Some (if lt x zero then opp r else r)
+    | Some r => Some (Fast.xor_sign r x)
     | None => None
     end
   | None => None
@@ -5090,8 +5092,10 @@ Definition fast_atan2_near1 (fma : bool) (y x : f64) : option (option f64) :=
 
 (** [fn fast_asin_dir0(x: f64, up: bool) -> Option<f64>], the same for
     [acos], and [fn fast_asin_near0(x: f64) -> Option<f64>] and the
-    other, as the first stages of [atan] above, where [let (h, l, e, err) =
-    fast_asin_pos0(..)] is the [let]. [FastAsin.v] proves them. *)
+    other, as the first stages above, where [let (h, l, e, err) =
+    fast_asin_pos0(..)] is the [let], and [up != (x < 0.0)] is [xorb up
+    (lt x zero)] as in [asin]'s second stages. [FastAsin.v] proves
+    them. *)
 Definition fast_asin_dir0 (fma : bool) (x : f64) (up : bool) : option f64 :=
   let '(h, l, e, err) := fast_asin_pos0 fma (fabs x) in
   match Fast.round_dir_err h l e err (xorb up (lt x zero)) with

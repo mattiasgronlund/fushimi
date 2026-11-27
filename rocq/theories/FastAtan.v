@@ -994,6 +994,62 @@ assert (Hr : near_round r w).
 destruct s; [exact (near_opp r w Hr) | exact Hr].
 Qed.
 
+(** [signed_dir] and [signed_near] with the direction and the negation
+    taken from the sign bit of an [f64] [s], as in [atan]'s stages. That
+    bit is the test [s < 0] for a finite [s <> 0]
+    ([Encoding.Bsign_lt_zero]), and [Fast.xor_sign w s] negates [w] where
+    it is set ([Encoding.xor_sign_eq]). *)
+Local Lemma signed_dir_bit :
+  forall r o (s : f64) up v,
+  is_finite s = true -> B2R s <> 0 ->
+  res_bound r o ->
+  match o with
+  | Some (h, l, e, err) =>
+    match Fast.round_dir_err h l e err (xorb up (Bsign s)) with
+    | Some w => Some (Fast.xor_sign w s)
+    | None => None
+    end
+  | None => None
+  end = Some v ->
+  rounds up (if lt s zero then - r else r) v.
+Proof.
+intros r o s up v Fs Hz B H.
+apply (signed_dir r o (lt s zero) up v B).
+rewrite <- (Encoding.Bsign_lt_zero s Fs Hz).
+destruct o as [[[[h l] e] err]|]; [|discriminate H].
+destruct (Fast.round_dir_err h l e err (xorb up (Bsign s))) as [w|]; [|discriminate H].
+rewrite Encoding.xor_sign_eq in H. exact H.
+Qed.
+
+Local Lemma signed_near_bit :
+  forall r o (s : f64) v,
+  is_finite s = true -> B2R s <> 0 ->
+  res_bound r o ->
+  match o with
+  | Some (h, l, e, err) =>
+    match Fast.round_near_err h l e err with
+    | Some w => Some (Fast.xor_sign w s)
+    | None => None
+    end
+  | None => None
+  end = Some v ->
+  near_round (if lt s zero then - r else r) v.
+Proof.
+intros r o s v Fs Hz B H.
+apply (signed_near r o (lt s zero) v B).
+rewrite <- (Encoding.Bsign_lt_zero s Fs Hz).
+destruct o as [[[[h l] e] err]|]; [|discriminate H].
+destruct (Fast.round_near_err h l e err) as [w|]; [|discriminate H].
+rewrite Encoding.xor_sign_eq in H. exact H.
+Qed.
+
+(** [x <> 0] where [2^-27 <= |x|], the range of [atan]'s theorems. *)
+Local Lemma atan_nonzero :
+  forall x : f64, bpow radix2 (-27) <= Rabs (B2R x) -> B2R x <> 0.
+Proof.
+intros x Hx Hz. rewrite Hz, Rabs_R0 in Hx. pose proof (bpow_gt_0 radix2 (-27)). lra.
+Qed.
+
 (** [atan] is odd: for [x < 0], [atan x = - atan |x|]. [x = -0] is not
     below [0] and takes the branch of [x >= 0]. *)
 Local Lemma atan_sign :
@@ -1148,11 +1204,12 @@ Theorem fast_atan_dir_correct :
   rounds up (atan (B2R x)) v.
 Proof.
 intros fma x up v Fx Hx H.
+pose proof (atan_nonzero x (proj1 Hx)) as Hz.
 rewrite <- atan_sign.
 unfold DyadicAtan.fast_atan_dir in H.
 destruct (DyadicAtan.fast_atan_dir1 fma x up) as [w|] eqn:E1; cbv beta iota in H.
-- injection H as <-. exact (signed_dir _ _ (lt x zero) up w (atan_res1 fma x Fx Hx) E1).
-- exact (signed_dir _ _ (lt x zero) up v (atan_res fma x Fx Hx) H).
+- injection H as <-. exact (signed_dir_bit _ _ x up w Fx Hz (atan_res1 fma x Fx Hx) E1).
+- exact (signed_dir_bit _ _ x up v Fx Hz (atan_res fma x Fx Hx) H).
 Qed.
 
 Theorem fast_atan2_dir_correct :
@@ -1180,11 +1237,12 @@ Theorem fast_atan_near_correct :
   near_round (atan (B2R x)) v.
 Proof.
 intros fma x v Fx Hx H.
+pose proof (atan_nonzero x (proj1 Hx)) as Hz.
 rewrite <- atan_sign.
 unfold DyadicAtan.fast_atan_near in H.
 destruct (DyadicAtan.fast_atan_near1 fma x) as [w|] eqn:E1; cbv beta iota in H.
-- injection H as <-. exact (signed_near _ _ (lt x zero) w (atan_res1 fma x Fx Hx) E1).
-- exact (signed_near _ _ (lt x zero) v (atan_res fma x Fx Hx) H).
+- injection H as <-. exact (signed_near_bit _ _ x w Fx Hz (atan_res1 fma x Fx Hx) E1).
+- exact (signed_near_bit _ _ x v Fx Hz (atan_res fma x Fx Hx) H).
 Qed.
 
 Theorem fast_atan2_near_correct :

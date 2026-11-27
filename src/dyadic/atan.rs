@@ -141,7 +141,9 @@
 use super::{
     consts::pi,
     exp::{away, toward_zero, two_pow, SHIFTER, TINY_HYP, TINY_NEAR},
-    fast::{dd_div, dd_sqrt, fast_two_sum, normalize, round_dir_err, round_near_err, two_sum},
+    fast::{
+        dd_div, dd_sqrt, fast_two_sum, normalize, round_dir_err, round_near_err, two_sum, xor_sign,
+    },
     level::level_entry,
     ziv, ziv_near, Dyadic, Encl, Eval,
 };
@@ -1158,7 +1160,29 @@ fn stage1_enabled() -> bool {
 // atan x, asin x, acos x and atan2(y, x) rounded toward +∞ if `up` and toward -∞ otherwise, and
 // to nearest, by the fast paths, or `None` where the rounding test fails or the fast path does
 // not apply. atan and asin are odd, and atan2 has the sign of y: for x < 0, f(x) rounded up is
-// -f(-x) rounded down. `rocq/theories/FastAtan.v` and `rocq/theories/FastAsin.v` prove that they
+// -f(-x) rounded down. atan's direction and the sign of its result come from the sign bit of x,
+// with no jump on it (`xor_sign`). That differs from x < 0 only at x = -0, which the rule for a
+// tiny |x| takes before the fast paths, and at a NaN, which the rules take first.
+// In a crate that links `cr`, built for Haswell, atan rounded down or up then took one
+// conditional branch, about half a mispredicted branch and 1.51 instructions fewer per call than
+// with a jump on x < 0, on sets of 4,096 calls of random sign in [-10, 10) and [-1, 1) and
+// log-uniform in [2^-26, 2^-8) and (1, 2^54), and 0.93 branches, 0.46 mispredicted ones and 1.41
+// instructions fewer of random sign log-uniform in [2^-30, 2^30). On x in [0, 10) it took one
+// branch and 1.00 instruction fewer. atan to nearest took 2.00 fewer instructions per call on
+// each of those sets (1.90 on the last of random sign), with as many branches, as the select it
+// replaced took no jump either. Built for x86-64 with the dispatch, rounded down or up went the
+// same in its copies with and without FMA, and to nearest took 1.00 fewer with FMA and 4.00
+// fewer without, where Haswell took 2.00 fewer (cachegrind, row 193).
+// asin and atan2 keep the comparison. With `xor_sign` there, in the FMA copy of the build for
+// x86-64 with the dispatch, LLVM moved the restore of asin's stage 0 into a tail it shares with
+// the case |x| = 1 (±π/2), which the fast path reaches by a jump, and asin to nearest took 1.97
+// more instructions per call on random x in [-1, 1), and up to 1.99 more on the other sets that
+// were counted. atan2, with the sign bit of y, built for Haswell, took one branch and about half
+// a mispredicted branch fewer per call rounded down or up on random y and x in [-10, 10), but
+// 2.17 to 4.25 more mispredicted branches per call on its hard cases rounded up: more than two
+// layouts of the same code differed by, in code that the change left as it was, which a timing
+// run is to decide (cachegrind, row 193).
+// `rocq/theories/FastAtan.v` and `rocq/theories/FastAsin.v` prove that they
 // return those roundings, for 2^-27 <= |x| < 2^54 for atan, finite y and x other than 0 for
 // atan2, 2^-27 <= |x| <= 1 for asin and |x| <= 1 for acos (`fast_atan_dir_correct` and the
 // others), and the same with and without an FMA (`fast_atan_dir_fma` and the others). Each
@@ -1239,7 +1263,8 @@ fn fast_acos_near<const FMA: bool>(x: f64) -> Option<f64> {
 }
 
 // Stage 0 of asin and acos, in place of a first stage: the same as `fast_atan_dir1` and
-// `fast_atan_near1` below, from `fast_asin_pos0` and `fast_acos_val0`.
+// `fast_atan_near1` below, from `fast_asin_pos0` and `fast_acos_val0`, but for how asin takes
+// the sign of x (the comment above `fast_atan_dir`).
 #[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 fn fast_asin_dir0<const FMA: bool>(x: f64, up: bool) -> Option<f64> {
     #[cfg(test)]
@@ -1304,8 +1329,8 @@ fn fast_atan_dir1<const FMA: bool>(x: f64, up: bool) -> Option<f64> {
         return None;
     }
     let (h, l, e, err) = fast_atan_pos1::<FMA>(x.abs())?;
-    let r = round_dir_err(h, l, e, err, up != (x < 0.0))?;
-    Some(if x < 0.0 { -r } else { r })
+    let r = round_dir_err(h, l, e, err, up != x.is_sign_negative())?;
+    Some(xor_sign(r, x))
 }
 
 // `Some(r)` is the answer of the fast path, where r = `None` sends atan2 to the kernel, and
@@ -1332,7 +1357,7 @@ fn fast_atan_near1<const FMA: bool>(x: f64) -> Option<f64> {
     }
     let (h, l, e, err) = fast_atan_pos1::<FMA>(x.abs())?;
     let r = round_near_err(h, l, e, err)?;
-    Some(if x < 0.0 { -r } else { r })
+    Some(xor_sign(r, x))
 }
 
 #[cfg_attr(fushimi_kernel_dispatch, inline(always))]
@@ -1371,8 +1396,8 @@ fn fast_atan2_near1<const FMA: bool>(y: f64, x: f64) -> Option<Option<f64>> {
 #[cfg_attr(fushimi_kernel_dispatch, inline(always))]
 fn fast_atan_dir2<const FMA: bool>(x: f64, up: bool) -> Option<f64> {
     let (h, l, e, err) = fast_atan_pos::<FMA>(x.abs())?;
-    let r = round_dir_err(h, l, e, err, up != (x < 0.0))?;
-    Some(if x < 0.0 { -r } else { r })
+    let r = round_dir_err(h, l, e, err, up != x.is_sign_negative())?;
+    Some(xor_sign(r, x))
 }
 
 #[cfg_attr(fushimi_kernel_dispatch, inline(always))]
@@ -1401,7 +1426,7 @@ fn fast_atan2_dir2<const FMA: bool>(y: f64, x: f64, up: bool) -> Option<f64> {
 fn fast_atan_near2<const FMA: bool>(x: f64) -> Option<f64> {
     let (h, l, e, err) = fast_atan_pos::<FMA>(x.abs())?;
     let r = round_near_err(h, l, e, err)?;
-    Some(if x < 0.0 { -r } else { r })
+    Some(xor_sign(r, x))
 }
 
 #[cfg_attr(fushimi_kernel_dispatch, inline(always))]
